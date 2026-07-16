@@ -9,3 +9,4 @@ export * from './dedup.js';
 export * from './fingerprint.js';
 export * from './csv.js';
 export * from './pipeline.js';
+export * from './record-key.js';

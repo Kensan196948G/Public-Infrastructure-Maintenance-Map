@@ -18,6 +18,13 @@ import type {
 import { GeometrySchema } from '@pimm/contracts';
 import { decodeCursor, encodeCursor } from './cursor.js';
 import { representativePoint } from './geo.js';
+import type {
+  AssetPublisher,
+  PublishableSourceDescriptor,
+  PublishInput,
+  PublishSummary,
+} from './publisher.js';
+import { decideRunStatus } from './publisher.js';
 import type { AssetQueryFilters, AssetRepository, AssetSearchInput } from './repository.js';
 import { InvalidCursorError } from './repository.js';
 
@@ -295,6 +302,206 @@ export class PostgresAssetRepository implements AssetRepository {
     }
 
     return rows.map((row) => rowToDetail(row, attrsByAsset.get(String(row['id'])) ?? []));
+  }
+}
+
+/**
+ * Write side of the Postgres port (see publisher.ts for the interface contract
+ * and the dependency-direction rationale). Two-phase because Neon's transaction()
+ * is non-interactive — it ships a fixed batch of queries in one HTTP round trip,
+ * so a query cannot branch on an earlier query's result within the same
+ * transaction. Asset ids for the upsert must therefore be resolved *before*
+ * the transaction starts, not derived from an ON CONFLICT RETURNING inside it.
+ */
+export class PostgresAssetPublisher implements AssetPublisher {
+  private readonly sql: Sql;
+
+  constructor(databaseUrl: string) {
+    this.sql = neon(databaseUrl);
+  }
+
+  async ensureDataSource(descriptor: PublishableSourceDescriptor): Promise<string> {
+    const rows = (await this.sql`
+      INSERT INTO data_sources
+        (slug, name, provider_name, source_url, access_type, format,
+         license_name, license_url, redistribution, attribution_text, enabled)
+      VALUES
+        (${descriptor.slug}, ${descriptor.name}, ${descriptor.providerName}, ${descriptor.sourceUrl},
+         ${descriptor.accessType}, ${descriptor.format}, ${descriptor.licenseName},
+         ${descriptor.licenseUrl}, ${descriptor.redistribution}, ${descriptor.attributionText}, true)
+      ON CONFLICT (slug) DO UPDATE SET
+        name = EXCLUDED.name,
+        provider_name = EXCLUDED.provider_name,
+        source_url = EXCLUDED.source_url,
+        access_type = EXCLUDED.access_type,
+        format = EXCLUDED.format,
+        license_name = EXCLUDED.license_name,
+        license_url = EXCLUDED.license_url,
+        redistribution = EXCLUDED.redistribution,
+        attribution_text = EXCLUDED.attribution_text,
+        enabled = true,
+        updated_at = now()
+      RETURNING id`) as Row[];
+    return String(rows[0]!['id']);
+  }
+
+  /** Records a run that never reached record processing (pipeline aborted, e.g. Q008). Nothing else is written. */
+  private async publishAborted(
+    input: PublishInput,
+    aborted: { ruleCode: string; message: string },
+  ): Promise<PublishSummary> {
+    const now = new Date().toISOString();
+    const ingestionRunId = crypto.randomUUID();
+    await this.sql`
+      INSERT INTO ingestion_runs
+        (id, source_id, started_at, finished_at, status,
+         fetched_count, accepted_count, rejected_count, warning_count,
+         error_code, error_summary, triggered_by, correlation_id)
+      VALUES
+        (${ingestionRunId}, ${input.sourceId}, ${now}, ${now}, 'failed',
+         ${input.fetchedCount}, 0, ${input.fetchedCount}, ${input.warningCount},
+         ${aborted.ruleCode}, ${aborted.message}, ${input.triggeredBy}, ${input.correlationId})`;
+    return {
+      ingestionRunId,
+      datasetVersionId: null,
+      publishedCount: 0,
+      hiddenCount: 0,
+      status: 'failed',
+    };
+  }
+
+  /** Records a run whose transaction threw (constraint violation, network error, etc). */
+  private async publishFailed(input: PublishInput, error: unknown): Promise<PublishSummary> {
+    const now = new Date().toISOString();
+    const ingestionRunId = crypto.randomUUID();
+    const message = error instanceof Error ? error.message : String(error);
+    await this.sql`
+      INSERT INTO ingestion_runs
+        (id, source_id, started_at, finished_at, status,
+         fetched_count, accepted_count, rejected_count, warning_count,
+         error_code, error_summary, triggered_by, correlation_id)
+      VALUES
+        (${ingestionRunId}, ${input.sourceId}, ${now}, ${now}, 'failed',
+         ${input.fetchedCount}, 0, ${input.fetchedCount}, ${input.warningCount},
+         'PUBLISH_FAILED', ${message}, ${input.triggeredBy}, ${input.correlationId})`;
+    return {
+      ingestionRunId,
+      datasetVersionId: null,
+      publishedCount: 0,
+      hiddenCount: 0,
+      status: 'failed',
+    };
+  }
+
+  async publish(input: PublishInput): Promise<PublishSummary> {
+    if (input.aborted) return this.publishAborted(input, input.aborted);
+
+    // Phase 1 (outside the transaction): resolve which assets already exist so
+    // the upsert below can target a stable id — new rows get a fresh uuid,
+    // existing ones keep theirs so joins from asset_attributes/quality_issues
+    // (built in the same batch) stay correct after the transaction commits.
+    const recordIds = input.assets.map((a) => a.sourceRecordId);
+    const existingRows =
+      recordIds.length > 0
+        ? ((await this.sql`
+            SELECT id, source_record_id FROM infrastructure_assets
+             WHERE source_id = ${input.sourceId} AND source_record_id = ANY(${recordIds})
+          `) as Row[])
+        : [];
+    const existingIdByRecordId = new Map(
+      existingRows.map((r) => [String(r['source_record_id']), String(r['id'])]),
+    );
+    const assetIds = input.assets.map(
+      (a) => existingIdByRecordId.get(a.sourceRecordId) ?? crypto.randomUUID(),
+    );
+
+    const now = new Date().toISOString();
+    const datasetVersionId = crypto.randomUUID();
+    const ingestionRunId = crypto.randomUUID();
+    const publishedCount = input.assets.filter((a) => a.qualityStatus !== 'hidden').length;
+    const hiddenCount = input.assets.length - publishedCount;
+    const status = decideRunStatus({ droppedCount: input.droppedCount, hiddenCount });
+
+    // Phase 2: one non-interactive transaction — every statement here is fixed
+    // up front (ids already resolved above), so no statement needs to see
+    // another's result.
+    const queries = [
+      this.sql`
+        INSERT INTO dataset_versions
+          (id, source_id, source_updated_at, fetched_at, content_hash, schema_fingerprint,
+           record_count, status)
+        VALUES
+          (${datasetVersionId}, ${input.sourceId}, ${input.sourceUpdatedAt}, ${now},
+           ${input.contentHash}, ${input.schemaFingerprint}, ${input.fetchedCount}, 'published')`,
+      ...input.assets.map(
+        (asset, i) => this.sql`
+        INSERT INTO infrastructure_assets
+          (id, source_id, source_record_id, asset_type, name, original_name, geometry,
+           prefecture_code, municipality_code, managing_authority, source_updated_at,
+           quality_status, publication_status, updated_at)
+        VALUES
+          (${assetIds[i]}, ${input.sourceId}, ${asset.sourceRecordId}, ${asset.assetType},
+           ${asset.name ?? asset.originalName ?? '(名称不明)'}, ${asset.originalName},
+           ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(asset.geometry)}), 4326),
+           ${asset.prefectureCode}, ${asset.municipalityCode}, ${asset.managingAuthority},
+           ${asset.sourceUpdatedAt}, ${asset.qualityStatus},
+           ${asset.qualityStatus === 'hidden' ? 'draft' : 'published'}, ${now})
+        ON CONFLICT (source_id, source_record_id) DO UPDATE SET
+          name = EXCLUDED.name,
+          original_name = EXCLUDED.original_name,
+          geometry = EXCLUDED.geometry,
+          prefecture_code = EXCLUDED.prefecture_code,
+          municipality_code = EXCLUDED.municipality_code,
+          managing_authority = EXCLUDED.managing_authority,
+          source_updated_at = EXCLUDED.source_updated_at,
+          quality_status = EXCLUDED.quality_status,
+          publication_status = EXCLUDED.publication_status,
+          updated_at = EXCLUDED.updated_at`,
+      ),
+      // Attributes are replaced wholesale per asset rather than diffed —
+      // simpler, and cheap at this data volume.
+      ...assetIds.map((id) => this.sql`DELETE FROM asset_attributes WHERE asset_id = ${id}`),
+      ...input.assets.flatMap((asset, i) =>
+        asset.attributes.map(
+          (attr) => this.sql`
+        INSERT INTO asset_attributes
+          (asset_id, key, value_text, value_number, unit, original_value, source_label)
+        VALUES
+          (${assetIds[i]}, ${attr.key}, ${attr.valueText}, ${attr.valueNumber}, ${attr.unit},
+           ${attr.originalValue}, ${attr.sourceLabel})`,
+        ),
+      ),
+      // Issues are appended per run, not reconciled against prior-run issues on
+      // the same asset — resolution-status lifecycle management (dismiss,
+      // accept, mark fixed) is the admin-console's job (Issue #4), not publish's.
+      ...input.assets.flatMap((asset, i) =>
+        asset.issues.map(
+          (issue) => this.sql`
+        INSERT INTO quality_issues
+          (run_id, asset_id, rule_code, severity, field_name, observed_value, message, resolution_status)
+        VALUES
+          (${ingestionRunId}, ${assetIds[i]}, ${issue.ruleCode}, ${issue.severity},
+           ${issue.fieldName}, ${issue.observedValue}, ${issue.message}, ${issue.resolutionStatus})`,
+        ),
+      ),
+      this.sql`
+        INSERT INTO ingestion_runs
+          (id, source_id, dataset_version_id, started_at, finished_at, status,
+           fetched_count, accepted_count, rejected_count, warning_count,
+           triggered_by, correlation_id)
+        VALUES
+          (${ingestionRunId}, ${input.sourceId}, ${datasetVersionId}, ${now}, ${now}, ${status},
+           ${input.fetchedCount}, ${publishedCount}, ${input.droppedCount + hiddenCount},
+           ${input.warningCount}, ${input.triggeredBy}, ${input.correlationId})`,
+    ];
+
+    try {
+      await this.sql.transaction(queries);
+    } catch (error) {
+      return this.publishFailed(input, error);
+    }
+
+    return { ingestionRunId, datasetVersionId, publishedCount, hiddenCount, status };
   }
 }
 

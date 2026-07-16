@@ -5,13 +5,8 @@
  * the same code paths production ingestion will use.
  */
 import type { AssetDetail, SourceInfo } from '@pimm/contracts';
-import type {
-  NormalizedAsset,
-  ProcessedAsset,
-  SourceAdapter,
-  SourceDescriptor,
-} from '@pimm/ingestion-core';
-import { runPipeline } from '@pimm/ingestion-core';
+import type { ProcessedAsset, SourceAdapter, SourceDescriptor } from '@pimm/ingestion-core';
+import { recordKey, runPipeline } from '@pimm/ingestion-core';
 import { representativePoint } from '@pimm/database';
 import { deterministicUuid } from './deterministic-id.js';
 import { createSampleBridgesAdapter } from './adapters/sample-bridges.js';
@@ -26,13 +21,6 @@ const FIXED_NOTICES = [
   '本システムは参考情報を提供するもので、構造物の健全性・安全性・通行可否を判定しません。',
   '最新かつ正式な情報は、必ず原典と管理主体へ確認してください。',
 ];
-
-function recordKey(asset: NormalizedAsset): string {
-  if (asset.sourceRecordId) return asset.sourceRecordId;
-  // Stable fallback for sources without provider ids (設計書 §5.1).
-  const point = asset.geometry ? JSON.stringify(asset.geometry).slice(0, 128) : 'nogeom';
-  return `${asset.name ?? 'noname'}:${point}`;
-}
 
 async function toDetail(
   processed: ProcessedAsset,
