@@ -32,7 +32,9 @@ export function parseDateToIso(raw: string | null | undefined): string | null {
   // ISO 8601 (date or datetime).
   const isoMatch = /^(\d{4})-(\d{2})-(\d{2})(?:[T ].*)?$/u.exec(input);
   if (isoMatch) {
-    const full = new Date(input.includes('T') || input.includes(' ') ? input : `${input}T00:00:00Z`);
+    const full = new Date(
+      input.includes('T') || input.includes(' ') ? input : `${input}T00:00:00Z`,
+    );
     return Number.isNaN(full.getTime()) ? null : full.toISOString();
   }
 

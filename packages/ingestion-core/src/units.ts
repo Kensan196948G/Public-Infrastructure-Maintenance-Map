@@ -10,8 +10,8 @@ const LENGTH_FACTORS: Record<string, number> = {
   cm: 0.01,
   m: 1,
   km: 1000,
-  'メートル': 1,
-  'キロメートル': 1000,
+  メートル: 1,
+  キロメートル: 1000,
 };
 
 /** Parses "1,234.5" style numerics. Returns null when not numeric. */

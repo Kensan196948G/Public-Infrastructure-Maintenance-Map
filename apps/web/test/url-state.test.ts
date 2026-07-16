@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MapUrlState } from '../src/lib/url-state.js';
-import {
-  DEFAULT_URL_STATE,
-  parseUrlState,
-  serializeUrlState,
-} from '../src/lib/url-state.js';
+import { DEFAULT_URL_STATE, parseUrlState, serializeUrlState } from '../src/lib/url-state.js';
 
 describe('parseUrlState', () => {
   it('returns defaults for an empty query string', () => {

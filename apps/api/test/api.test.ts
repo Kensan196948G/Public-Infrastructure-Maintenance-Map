@@ -98,7 +98,9 @@ describe('GET /api/v1/assets', () => {
 
 describe('GET /api/v1/assets/:id', () => {
   it('returns full detail with provenance and notices', async () => {
-    const list = (await (await get('/api/v1/assets?types=bridge&limit=1')).json()) as AssetSearchResponse;
+    const list = (await (
+      await get('/api/v1/assets?types=bridge&limit=1')
+    ).json()) as AssetSearchResponse;
     const id = list.items[0]!.id;
     const res = await get(`/api/v1/assets/${id}`);
     expect(res.status).toBe(200);
@@ -144,7 +146,7 @@ describe('GET /api/v1/export (license control, FR-08)', () => {
     const bytes = new Uint8Array(await res.arrayBuffer());
     expect([bytes[0], bytes[1], bytes[2]]).toEqual([0xef, 0xbb, 0xbf]);
     const text = new TextDecoder().decode(bytes.subarray(3));
-    
+
     expect(text).toContain('みらい大橋');
   });
 

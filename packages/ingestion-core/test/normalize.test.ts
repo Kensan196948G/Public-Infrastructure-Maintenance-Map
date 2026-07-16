@@ -95,9 +95,7 @@ describe('coords', () => {
   });
   it('keeps EPSG:4326 untouched and validates whole geometries', () => {
     expect(positionToWgs84([139.7, 35.7], 'EPSG:4326')).toEqual([139.7, 35.7]);
-    expect(
-      geometryWithinJapan({ type: 'Point', coordinates: [139.7, 35.7] }),
-    ).toBe(true);
+    expect(geometryWithinJapan({ type: 'Point', coordinates: [139.7, 35.7] })).toBe(true);
     expect(
       geometryWithinJapan({
         type: 'LineString',

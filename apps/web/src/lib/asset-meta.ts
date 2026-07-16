@@ -63,7 +63,11 @@ export const QUALITY_META: Record<QualityStatus, QualityMeta> = {
 };
 
 /** Quality statuses selectable in the filter panel and shown as badges. */
-export const VISIBLE_QUALITY_STATUSES: readonly QualityStatus[] = ['verified', 'review', 'reference'];
+export const VISIBLE_QUALITY_STATUSES: readonly QualityStatus[] = [
+  'verified',
+  'review',
+  'reference',
+];
 
 /** Value shown whenever a field is missing. The UI never guesses (設計書 §8.2). */
 export const UNKNOWN_LABEL = '不明';

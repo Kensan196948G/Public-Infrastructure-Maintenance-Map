@@ -78,10 +78,7 @@ function rowToSource(row: Row): SourceInfo {
 
 /** Builds the shared WHERE fragment. Every value is a bound parameter. */
 function buildConditions(sql: Sql, filters: AssetQueryFilters) {
-  const conditions = [
-    sql`a.publication_status = 'published'`,
-    sql`a.quality_status <> 'hidden'`,
-  ];
+  const conditions = [sql`a.publication_status = 'published'`, sql`a.quality_status <> 'hidden'`];
   if (filters.bbox) {
     const [minLon, minLat, maxLon, maxLat] = filters.bbox;
     conditions.push(

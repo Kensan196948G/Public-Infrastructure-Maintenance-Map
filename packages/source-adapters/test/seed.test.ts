@@ -98,11 +98,11 @@ describe('buildSampleSeed', () => {
 
 describe('registry', () => {
   it('lists three adapters and resolves by slug', () => {
-    expect(listAdapters().map((a) => a.descriptor.slug).sort()).toEqual([
-      'sample-bridges',
-      'sample-facilities',
-      'sample-rivers',
-    ]);
+    expect(
+      listAdapters()
+        .map((a) => a.descriptor.slug)
+        .sort(),
+    ).toEqual(['sample-bridges', 'sample-facilities', 'sample-rivers']);
     expect(getAdapterBySlug('sample-rivers')?.descriptor.redistribution).toBe('prohibited');
     expect(getAdapterBySlug('nope')).toBeNull();
   });

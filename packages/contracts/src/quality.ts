@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  QualityResolutionSchema,
-  QualityRuleCodeSchema,
-  QualitySeveritySchema,
-} from './enums.js';
+import { QualityResolutionSchema, QualityRuleCodeSchema, QualitySeveritySchema } from './enums.js';
 
 /** A quality issue detected by the ingestion pipeline (quality_issues row). */
 export const QualityIssueSchema = z.object({

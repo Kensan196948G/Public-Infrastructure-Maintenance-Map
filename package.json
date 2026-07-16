@@ -18,10 +18,12 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "db:migrate": "node scripts/db/migrate.mjs",
-    "ingest": "node scripts/ingest/run.mjs"
+    "ingest": "pnpm --filter @pimm/api ingest"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",

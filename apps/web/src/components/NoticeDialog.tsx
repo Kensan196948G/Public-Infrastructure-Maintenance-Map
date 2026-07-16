@@ -16,7 +16,8 @@ export function NoticeDialog({ onClose }: NoticeDialogProps) {
           通行可否などを判定するものではありません。
         </li>
         <li>
-          表示内容は原典の更新時点の情報です。<strong>最新かつ正式な情報は、必ず原典と管理主体へ</strong>
+          表示内容は原典の更新時点の情報です。
+          <strong>最新かつ正式な情報は、必ず原典と管理主体へ</strong>
           確認してください。
         </li>
         <li>

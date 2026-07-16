@@ -1,9 +1,5 @@
 import { useEffect, useRef } from 'react';
-import {
-  AttributionControl,
-  Map as MapLibreMap,
-  NavigationControl,
-} from 'maplibre-gl';
+import { AttributionControl, Map as MapLibreMap, NavigationControl } from 'maplibre-gl';
 import type { GeoJSONSource, MapMouseEvent, StyleSpecification } from 'maplibre-gl';
 import type { AssetSummary, AssetType, BBox } from '@pimm/contracts';
 import { ASSET_TYPE_LIST } from '../lib/asset-meta.js';
@@ -69,7 +65,10 @@ function toFeatureCollection(items: readonly AssetSummary[]): PointFeatureCollec
     features: items.map((a) => ({
       type: 'Feature',
       id: a.id,
-      geometry: { type: 'Point', coordinates: [a.representativePoint[0], a.representativePoint[1]] },
+      geometry: {
+        type: 'Point',
+        coordinates: [a.representativePoint[0], a.representativePoint[1]],
+      },
       properties: { id: a.id, assetType: a.type, name: a.name },
     })),
   };

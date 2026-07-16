@@ -62,7 +62,16 @@ describe('GeometrySchema', () => {
     expect(GeometrySchema.parse({ type: 'Point', coordinates: [139.7, 35.6] }).type).toBe('Point');
   });
   it('rejects a polygon ring with fewer than 4 positions', () => {
-    const bad = { type: 'Polygon', coordinates: [[[0, 0], [1, 1], [0, 0]]] };
+    const bad = {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
+    };
     expect(GeometrySchema.safeParse(bad).success).toBe(false);
   });
 });

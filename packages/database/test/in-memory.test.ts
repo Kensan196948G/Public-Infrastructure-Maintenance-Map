@@ -5,7 +5,10 @@ import { makeAsset, makeSource } from './helpers.js';
 function repoWith(assets: ReturnType<typeof makeAsset>[]) {
   return new InMemoryAssetRepository({
     assets,
-    sources: [makeSource({ slug: 'sample-bridges' }), makeSource({ slug: 'disabled', enabled: false })],
+    sources: [
+      makeSource({ slug: 'sample-bridges' }),
+      makeSource({ slug: 'disabled', enabled: false }),
+    ],
   });
 }
 
@@ -40,9 +43,7 @@ describe('InMemoryAssetRepository.searchAssets', () => {
     const res = await repo.searchAssets({ limit: 10 });
     expect(res.items.map((i) => i.name)).toEqual(['公開橋']);
     const [hidden] = (await Promise.all([
-      repo.getAssetById(
-        (await repo.searchAssets({ limit: 10 })).items[0]!.id,
-      ),
+      repo.getAssetById((await repo.searchAssets({ limit: 10 })).items[0]!.id),
     ])) as [unknown];
     expect(hidden).not.toBeNull();
   });

@@ -31,7 +31,12 @@ export type ProblemDetails = z.infer<typeof ProblemDetailsSchema>;
 export function problem(
   code: ErrorCode,
   title: string,
-  options: { detail?: string; requestId?: string; instance?: string; errors?: { path: string; message: string }[] } = {},
+  options: {
+    detail?: string;
+    requestId?: string;
+    instance?: string;
+    errors?: { path: string; message: string }[];
+  } = {},
 ): ProblemDetails {
   const p: ProblemDetails = {
     type: `https://pimm.example/errors/${code.toLowerCase()}`,

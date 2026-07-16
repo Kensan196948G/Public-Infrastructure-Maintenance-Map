@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/node.ts",
+    "ingest": "tsx src/ingest-cli.ts",
     "build": "esbuild src/worker.ts --bundle --format=esm --target=es2022 --outfile=dist/worker.js --external:cloudflare:*",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

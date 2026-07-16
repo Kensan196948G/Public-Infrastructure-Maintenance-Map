@@ -69,7 +69,8 @@ export function representativePoint(geometry: Geometry): [number, number] {
     }
     case 'Polygon':
     case 'MultiPolygon': {
-      const ring = geometry.type === 'Polygon' ? geometry.coordinates[0] : geometry.coordinates[0]?.[0];
+      const ring =
+        geometry.type === 'Polygon' ? geometry.coordinates[0] : geometry.coordinates[0]?.[0];
       if (!ring || ring.length === 0) return fallback;
       // Skip closing vertex (same as the first) so it is not double-weighted.
       const vertices = ring.slice(0, ring.length - 1);

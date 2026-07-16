@@ -4,11 +4,7 @@
  */
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type {
-  AssetSearchQuery,
-  ErrorCode,
-  ProblemDetails,
-} from '@pimm/contracts';
+import type { AssetSearchQuery, ErrorCode, ProblemDetails } from '@pimm/contracts';
 import {
   AssetSearchQuerySchema,
   AssetSummaryQuerySchema,
@@ -105,8 +101,12 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     return next();
   });
 
-  const fail = (c: { get(key: 'requestId'): string }, code: ErrorCode, title: string, extra?: Parameters<typeof problem>[2]) =>
-    problemResponse(problem(code, title, { ...extra, requestId: c.get('requestId') }));
+  const fail = (
+    c: { get(key: 'requestId'): string },
+    code: ErrorCode,
+    title: string,
+    extra?: Parameters<typeof problem>[2],
+  ) => problemResponse(problem(code, title, { ...extra, requestId: c.get('requestId') }));
 
   const v1 = new Hono<AppContext>();
 
@@ -191,10 +191,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
       });
     }
     const { format, ...filters } = parsed.data;
-    const [assets, sources] = await Promise.all([
-      repo.exportAssets(filters),
-      repo.listSources(),
-    ]);
+    const [assets, sources] = await Promise.all([repo.exportAssets(filters), repo.listSources()]);
     const { exportable, excludedSources, attributions } = partitionByLicense(assets, sources);
 
     c.header('Cache-Control', 'no-store');

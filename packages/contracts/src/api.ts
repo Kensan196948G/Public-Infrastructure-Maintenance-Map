@@ -37,8 +37,14 @@ export const AssetSearchQuerySchema = z.object({
   bbox: BBoxParamSchema.optional(),
   types: csv(AssetTypeSchema).optional(),
   q: z.string().trim().min(1).max(200).optional(),
-  prefectureCode: z.string().regex(/^\d{2}$/).optional(),
-  municipalityCode: z.string().regex(/^\d{5}$/).optional(),
+  prefectureCode: z
+    .string()
+    .regex(/^\d{2}$/)
+    .optional(),
+  municipalityCode: z
+    .string()
+    .regex(/^\d{5}$/)
+    .optional(),
   quality: csv(QualityStatusSchema).optional(),
   updatedSince: z.iso.datetime({ offset: true }).optional(),
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT),
@@ -76,8 +82,14 @@ export const ExportQuerySchema = z.object({
   bbox: BBoxParamSchema.optional(),
   types: csv(AssetTypeSchema).optional(),
   q: z.string().trim().min(1).max(200).optional(),
-  prefectureCode: z.string().regex(/^\d{2}$/).optional(),
-  municipalityCode: z.string().regex(/^\d{5}$/).optional(),
+  prefectureCode: z
+    .string()
+    .regex(/^\d{2}$/)
+    .optional(),
+  municipalityCode: z
+    .string()
+    .regex(/^\d{5}$/)
+    .optional(),
   quality: csv(QualityStatusSchema).optional(),
   limit: z.coerce.number().int().min(1).max(10000).default(1000),
 });

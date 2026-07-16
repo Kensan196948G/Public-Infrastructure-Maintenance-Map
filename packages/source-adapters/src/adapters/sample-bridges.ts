@@ -5,7 +5,12 @@ import type {
   SourceAdapter,
   SourceDescriptor,
 } from '@pimm/ingestion-core';
-import { normalizeText, parseDateToIso, parseLengthToMeters, parseNumeric } from '@pimm/ingestion-core';
+import {
+  normalizeText,
+  parseDateToIso,
+  parseLengthToMeters,
+  parseNumeric,
+} from '@pimm/ingestion-core';
 import { GeometrySchema, type AssetAttribute } from '@pimm/contracts';
 import { SAMPLE_BRIDGES_GEOJSON } from '../sample-data/bridges.js';
 

@@ -29,7 +29,8 @@ export function makeAsset(overrides: {
     representativePoint: [lon, lat],
     geometry: { type: 'Point', coordinates: [lon, lat] },
     prefectureCode: '13',
-    municipalityCode: overrides.municipalityCode === undefined ? '13101' : overrides.municipalityCode,
+    municipalityCode:
+      overrides.municipalityCode === undefined ? '13101' : overrides.municipalityCode,
     managingAuthority: 'サンプル県',
     quality: {
       status: overrides.quality ?? 'verified',
@@ -38,7 +39,9 @@ export function makeAsset(overrides: {
     },
     sourceSlug: overrides.sourceSlug ?? 'sample-bridges',
     sourceUpdatedAt:
-      overrides.sourceUpdatedAt === undefined ? '2026-01-01T00:00:00.000Z' : overrides.sourceUpdatedAt,
+      overrides.sourceUpdatedAt === undefined
+        ? '2026-01-01T00:00:00.000Z'
+        : overrides.sourceUpdatedAt,
     originalName: overrides.name,
     publicationStatus: overrides.published === false ? 'draft' : 'published',
     attributes: [],
@@ -50,7 +53,9 @@ export function makeAsset(overrides: {
       sourceRecordId: `rec-${seq}`,
       fetchedAt: '2026-07-01T00:00:00.000Z',
       sourceUpdatedAt:
-        overrides.sourceUpdatedAt === undefined ? '2026-01-01T00:00:00.000Z' : overrides.sourceUpdatedAt,
+        overrides.sourceUpdatedAt === undefined
+          ? '2026-01-01T00:00:00.000Z'
+          : overrides.sourceUpdatedAt,
       licenseName: 'CC-BY-4.0',
       licenseUrl: null,
       redistribution: 'allowed',

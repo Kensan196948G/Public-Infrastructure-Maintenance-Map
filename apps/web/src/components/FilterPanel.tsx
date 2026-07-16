@@ -78,8 +78,8 @@ export function FilterPanel({
 
       <section className="filter-group" aria-live="polite">
         <p className="result-count">
-          表示中: <strong>{resultCount === null ? '—' : resultCount.toLocaleString('ja-JP')}</strong>{' '}
-          件
+          表示中:{' '}
+          <strong>{resultCount === null ? '—' : resultCount.toLocaleString('ja-JP')}</strong> 件
         </p>
       </section>
 

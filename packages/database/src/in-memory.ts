@@ -64,8 +64,14 @@ export class InMemoryAssetRepository implements AssetRepository {
     const page = filtered.slice(offset, offset + input.limit);
     const nextOffset = offset + page.length;
     const summaries = page.map(
-      ({ originalName: _o, publicationStatus: _p, attributes: _a, source: _s, notices: _n, ...summary }) =>
-        summary,
+      ({
+        originalName: _o,
+        publicationStatus: _p,
+        attributes: _a,
+        source: _s,
+        notices: _n,
+        ...summary
+      }) => summary,
     );
     return {
       items: summaries,

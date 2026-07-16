@@ -103,9 +103,9 @@ describe('checkRecord', () => {
 
 describe('validateGeometry', () => {
   it('rejects a linestring with one position', () => {
-    expect(
-      validateGeometry({ type: 'LineString', coordinates: [[139.7, 35.7]] } as never).ok,
-    ).toBe(false);
+    expect(validateGeometry({ type: 'LineString', coordinates: [[139.7, 35.7]] } as never).ok).toBe(
+      false,
+    );
   });
 });
 

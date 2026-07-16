@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  AccessTypeSchema,
-  RedistributionPolicySchema,
-  SourceFormatSchema,
-} from './enums.js';
+import { AccessTypeSchema, RedistributionPolicySchema, SourceFormatSchema } from './enums.js';
 
 /** Public representation of a data source (GET /sources, 画面 UI-03). */
 export const SourceInfoSchema = z.object({
@@ -29,6 +25,8 @@ export const SourceInfoSchema = z.object({
 export type SourceInfo = z.infer<typeof SourceInfoSchema>;
 
 /** Whether asset data from this source may be exported (FR-08, 要件 §9). */
-export function isExportAllowed(redistribution: z.infer<typeof RedistributionPolicySchema>): boolean {
+export function isExportAllowed(
+  redistribution: z.infer<typeof RedistributionPolicySchema>,
+): boolean {
   return redistribution === 'allowed' || redistribution === 'restricted';
 }

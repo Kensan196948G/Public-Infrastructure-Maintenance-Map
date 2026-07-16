@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { FetchResult, NormalizedAsset, SourceAdapter, SourceDescriptor } from '../src/index.js';
+import type {
+  FetchResult,
+  NormalizedAsset,
+  SourceAdapter,
+  SourceDescriptor,
+} from '../src/index.js';
 import { csvToObjects, parseCsv, runPipeline } from '../src/index.js';
 
 interface RawRow {
@@ -40,7 +45,8 @@ function makeAdapter(
       assetType: 'bridge',
       name: r.name,
       originalName: r.name,
-      geometry: r.lon !== null && r.lat !== null ? { type: 'Point', coordinates: [r.lon, r.lat] } : null,
+      geometry:
+        r.lon !== null && r.lat !== null ? { type: 'Point', coordinates: [r.lon, r.lat] } : null,
       prefectureCode: null,
       municipalityCode: null,
       managingAuthority: null,
@@ -82,14 +88,18 @@ describe('runPipeline', () => {
     const result = await runPipeline(
       makeAdapter([
         { id: 'a', name: '双子橋', lon: 139.7, lat: 35.7, updated: '2026-01-01T00:00:00.000Z' },
-        { id: 'b', name: '双子橋', lon: 139.7003, lat: 35.7003, updated: '2026-01-01T00:00:00.000Z' },
+        {
+          id: 'b',
+          name: '双子橋',
+          lon: 139.7003,
+          lat: 35.7003,
+          updated: '2026-01-01T00:00:00.000Z',
+        },
       ]),
       CTX,
     );
     expect(result.accepted.every((p) => p.qualityStatus === 'review')).toBe(true);
-    expect(
-      result.accepted.every((p) => p.issues.some((i) => i.ruleCode === 'Q005')),
-    ).toBe(true);
+    expect(result.accepted.every((p) => p.issues.some((i) => i.ruleCode === 'Q005'))).toBe(true);
   });
 
   it('hides everything when the source license is unknown (Q007)', async () => {

@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: 🧪 Lint / Type / Test / Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # version is taken from packageManager in package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: 📦 Install
+        run: pnpm install --frozen-lockfile
+
+      - name: 🔍 Lint
+        run: pnpm lint
+
+      - name: 🧾 Format check
+        run: pnpm format:check
+
+      - name: 🔧 Typecheck
+        run: pnpm typecheck
+
+      - name: 🧪 Test
+        run: pnpm test
+
+      - name: 🏗️ Build
+        run: pnpm build
+
+  secret-scan:
+    name: 🔐 Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

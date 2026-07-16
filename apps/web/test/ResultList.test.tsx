@@ -78,13 +78,7 @@ describe('ResultList', () => {
 
   it('renders an error state', () => {
     render(
-      <ResultList
-        items={[]}
-        selectedId={null}
-        isLoading={false}
-        isError
-        onSelect={() => {}}
-      />,
+      <ResultList items={[]} selectedId={null} isLoading={false} isError onSelect={() => {}} />,
     );
     expect(screen.getByRole('alert')).toHaveTextContent(/取得に失敗/);
   });
