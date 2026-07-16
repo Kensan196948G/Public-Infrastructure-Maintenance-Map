@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@pimm/contracts": "workspace:*",
+    "@pimm/database": "workspace:*",
     "@pimm/ingestion-core": "workspace:*"
   },
   "devDependencies": {
