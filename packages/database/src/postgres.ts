@@ -1,0 +1,536 @@
+/**
+ * Neon PostgreSQL + PostGIS repository.
+ *
+ * ⚠️ Compile-checked but NOT yet integration-tested against a live database
+ * (no local PostGIS in the build environment). Tracked as a known limitation;
+ * run the integration suite against a Neon branch before first production use.
+ */
+import { neon } from '@neondatabase/serverless';
+import type {
+  AssetCountSummary,
+  AssetDetail,
+  AssetSearchResponse,
+  AssetSummary,
+  AssetType,
+  Geometry,
+  SourceInfo,
+} from '@pimm/contracts';
+import { GeometrySchema } from '@pimm/contracts';
+import { decodeCursor, encodeCursor } from './cursor.js';
+import { representativePoint } from './geo.js';
+import type {
+  AssetPublisher,
+  PublishableSourceDescriptor,
+  PublishInput,
+  PublishSummary,
+} from './publisher.js';
+import { decideRunStatus, dedupeBySourceRecordId } from './publisher.js';
+import type { AssetQueryFilters, AssetRepository, AssetSearchInput } from './repository.js';
+import { InvalidCursorError } from './repository.js';
+
+type Row = Record<string, unknown>;
+type Sql = ReturnType<typeof neon>;
+
+const FIXED_NOTICES = [
+  '本データは公開情報を機械的に整形した参考情報です。',
+  '構造物の健全性・安全性・通行可否は判定していません。',
+  '最新かつ正式な情報は原典および管理主体へ確認してください。',
+];
+
+/** Escapes %, _ and backslash so user input in ILIKE cannot inject wildcards. */
+export function escapeLikePattern(value: string): string {
+  return value.replaceAll('\\', '\\\\').replace(/[%_]/g, (ch) => `\\${ch}`);
+}
+
+function toIso(value: unknown): string | null {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'string' && value.length > 0) return new Date(value).toISOString();
+  return null;
+}
+
+function rowToSummary(row: Row): AssetSummary {
+  const geometry = GeometrySchema.parse(JSON.parse(String(row['geometry_geojson'])));
+  return {
+    id: String(row['id']),
+    type: row['asset_type'] as AssetSummary['type'],
+    name: String(row['name']),
+    representativePoint: representativePoint(geometry),
+    geometry,
+    prefectureCode: (row['prefecture_code'] as string | null) ?? null,
+    municipalityCode: (row['municipality_code'] as string | null) ?? null,
+    managingAuthority: (row['managing_authority'] as string | null) ?? null,
+    quality: {
+      status: row['quality_status'] as AssetSummary['quality']['status'],
+      updatedAtKnown: row['source_updated_at'] != null,
+      openIssueCodes: (row['open_issue_codes'] as string[] | null) ?? [],
+    },
+    sourceSlug: String(row['source_slug']),
+    sourceUpdatedAt: toIso(row['source_updated_at']),
+  };
+}
+
+function mapAttributeRows(attrRows: readonly Row[]): AssetDetail['attributes'] {
+  return attrRows.map((r) => ({
+    key: String(r['key']),
+    valueText: (r['value_text'] as string | null) ?? null,
+    valueNumber: r['value_number'] == null ? null : Number(r['value_number']),
+    unit: (r['unit'] as string | null) ?? null,
+    originalValue: (r['original_value'] as string | null) ?? null,
+    sourceLabel: (r['source_label'] as string | null) ?? null,
+  }));
+}
+
+/** Shared detail assembly for getAssetById and exportAssets (avoids drift between the two). */
+function rowToDetail(row: Row, attrRows: readonly Row[]): AssetDetail {
+  const summary = rowToSummary(row);
+  return {
+    ...summary,
+    originalName: (row['original_name'] as string | null) ?? null,
+    publicationStatus: row['publication_status'] as AssetDetail['publicationStatus'],
+    attributes: mapAttributeRows(attrRows),
+    source: {
+      slug: String(row['source_slug']),
+      provider: String(row['provider_name']),
+      dataset: String(row['dataset_name']),
+      sourceUrl: String(row['source_url']),
+      sourceRecordId: (row['source_record_id'] as string | null) ?? null,
+      fetchedAt: toIso(row['fetched_at']) ?? new Date(0).toISOString(),
+      sourceUpdatedAt: toIso(row['source_updated_at']),
+      licenseName: String(row['license_name']),
+      licenseUrl: (row['license_url'] as string | null) ?? null,
+      redistribution: row['redistribution'] as AssetDetail['source']['redistribution'],
+    },
+    notices: FIXED_NOTICES,
+  };
+}
+
+function rowToSource(row: Row): SourceInfo {
+  return {
+    slug: String(row['slug']),
+    name: String(row['name']),
+    providerName: String(row['provider_name']),
+    sourceUrl: String(row['source_url']),
+    accessType: row['access_type'] as SourceInfo['accessType'],
+    format: row['format'] as SourceInfo['format'],
+    licenseName: String(row['license_name']),
+    licenseUrl: (row['license_url'] as string | null) ?? null,
+    redistribution: row['redistribution'] as SourceInfo['redistribution'],
+    attributionText: (row['attribution_text'] as string | null) ?? null,
+    enabled: Boolean(row['enabled']),
+    lastFetchedAt: toIso(row['last_fetched_at']),
+    sourceUpdatedAt: toIso(row['source_updated_at']),
+    publishedAssetCount: Number(row['published_asset_count'] ?? 0),
+  };
+}
+
+/** Builds the shared WHERE fragment. Every value is a bound parameter. */
+function buildConditions(sql: Sql, filters: AssetQueryFilters) {
+  const conditions = [sql`a.publication_status = 'published'`, sql`a.quality_status <> 'hidden'`];
+  if (filters.bbox) {
+    const [minLon, minLat, maxLon, maxLat] = filters.bbox;
+    conditions.push(
+      sql`ST_Intersects(a.geometry, ST_MakeEnvelope(${minLon}, ${minLat}, ${maxLon}, ${maxLat}, 4326))`,
+    );
+  }
+  if (filters.types && filters.types.length > 0) {
+    conditions.push(sql`a.asset_type = ANY(${filters.types})`);
+  }
+  if (filters.quality && filters.quality.length > 0) {
+    conditions.push(sql`a.quality_status = ANY(${filters.quality})`);
+  }
+  if (filters.prefectureCode) conditions.push(sql`a.prefecture_code = ${filters.prefectureCode}`);
+  if (filters.municipalityCode)
+    conditions.push(sql`a.municipality_code = ${filters.municipalityCode}`);
+  if (filters.updatedSince) conditions.push(sql`a.source_updated_at >= ${filters.updatedSince}`);
+  if (filters.q) {
+    // Same fields as InMemoryAssetRepository.matches — keep search behavior
+    // consistent across sample mode and the Postgres-backed production path.
+    const pattern = '%' + escapeLikePattern(filters.q) + '%';
+    conditions.push(sql`(
+      a.name ILIKE ${pattern}
+      OR a.original_name ILIKE ${pattern}
+      OR a.managing_authority ILIKE ${pattern}
+      OR a.municipality_code ILIKE ${pattern}
+    )`);
+  }
+  return conditions.reduce((acc, c) => sql`${acc} AND ${c}`);
+}
+
+export class PostgresAssetRepository implements AssetRepository {
+  private readonly sql: Sql;
+
+  constructor(databaseUrl: string) {
+    this.sql = neon(databaseUrl);
+  }
+
+  private summarySelect(filters: AssetQueryFilters) {
+    const where = buildConditions(this.sql, filters);
+    return this.sql`
+      SELECT a.id, a.asset_type, a.name, a.prefecture_code, a.municipality_code,
+             a.managing_authority, a.quality_status, a.source_updated_at,
+             ST_AsGeoJSON(a.geometry) AS geometry_geojson,
+             s.slug AS source_slug,
+             COALESCE(
+               (SELECT array_agg(DISTINCT qi.rule_code)
+                  FROM quality_issues qi
+                 WHERE qi.asset_id = a.id AND qi.resolution_status = 'open'),
+               '{}'
+             ) AS open_issue_codes
+        FROM infrastructure_assets a
+        JOIN data_sources s ON s.id = a.source_id
+       WHERE ${where}
+       ORDER BY a.name, a.id`;
+  }
+
+  /** Full detail columns (asset + source + provenance), shared by getAssetById and exportAssets. */
+  private detailSelect(filters: AssetQueryFilters) {
+    const where = buildConditions(this.sql, filters);
+    return this.sql`
+      SELECT a.*, ST_AsGeoJSON(a.geometry) AS geometry_geojson,
+             s.slug AS source_slug, s.provider_name, s.name AS dataset_name,
+             s.source_url, s.license_name, s.license_url, s.redistribution,
+             (SELECT max(v.fetched_at) FROM dataset_versions v WHERE v.source_id = s.id) AS fetched_at,
+             COALESCE(
+               (SELECT array_agg(DISTINCT qi.rule_code)
+                  FROM quality_issues qi
+                 WHERE qi.asset_id = a.id AND qi.resolution_status = 'open'),
+               '{}'
+             ) AS open_issue_codes
+        FROM infrastructure_assets a
+        JOIN data_sources s ON s.id = a.source_id
+       WHERE ${where}
+       ORDER BY a.name, a.id`;
+  }
+
+  async searchAssets(input: AssetSearchInput): Promise<AssetSearchResponse> {
+    const offset = input.cursor === undefined ? 0 : decodeCursor(input.cursor)?.offset;
+    if (offset === undefined) throw new InvalidCursorError();
+    const rows = (await this.sql`
+      ${this.summarySelect(input)}
+      LIMIT ${input.limit + 1} OFFSET ${offset}`) as Row[];
+    const hasMore = rows.length > input.limit;
+    const items = rows.slice(0, input.limit).map(rowToSummary);
+    return {
+      items,
+      nextCursor: hasMore ? encodeCursor({ offset: offset + input.limit }) : null,
+    };
+  }
+
+  async getAssetById(id: string): Promise<AssetDetail | null> {
+    const rows = (await this.sql`
+      SELECT a.*, ST_AsGeoJSON(a.geometry) AS geometry_geojson,
+             s.slug AS source_slug, s.provider_name, s.name AS dataset_name,
+             s.source_url, s.license_name, s.license_url, s.redistribution,
+             (SELECT max(v.fetched_at) FROM dataset_versions v WHERE v.source_id = s.id) AS fetched_at,
+             COALESCE(
+               (SELECT array_agg(DISTINCT qi.rule_code)
+                  FROM quality_issues qi
+                 WHERE qi.asset_id = a.id AND qi.resolution_status = 'open'),
+               '{}'
+             ) AS open_issue_codes
+        FROM infrastructure_assets a
+        JOIN data_sources s ON s.id = a.source_id
+       WHERE a.id = ${id}
+         AND a.publication_status = 'published'
+         AND a.quality_status <> 'hidden'`) as Row[];
+    const row = rows[0];
+    if (!row) return null;
+
+    const attrs = (await this.sql`
+      SELECT key, value_text, value_number, unit, original_value, source_label
+        FROM asset_attributes WHERE asset_id = ${id} ORDER BY key`) as Row[];
+
+    return rowToDetail(row, attrs);
+  }
+
+  async countByType(
+    filters: Pick<AssetQueryFilters, 'bbox' | 'types'>,
+  ): Promise<AssetCountSummary> {
+    const where = buildConditions(this.sql, filters);
+    const rows = (await this.sql`
+      SELECT a.asset_type, count(*)::int AS n
+        FROM infrastructure_assets a
+       WHERE ${where}
+       GROUP BY a.asset_type`) as Row[];
+    const byType: Partial<Record<AssetType, number>> = {};
+    let total = 0;
+    for (const r of rows) {
+      const n = Number(r['n']);
+      byType[r['asset_type'] as AssetType] = n;
+      total += n;
+    }
+    return { total, byType };
+  }
+
+  async listSources(): Promise<SourceInfo[]> {
+    const rows = (await this.sql`
+      SELECT s.*,
+             (SELECT max(v.fetched_at) FROM dataset_versions v WHERE v.source_id = s.id) AS last_fetched_at,
+             (SELECT max(v.source_updated_at) FROM dataset_versions v WHERE v.source_id = s.id) AS source_updated_at,
+             (SELECT count(*)::int FROM infrastructure_assets a
+               WHERE a.source_id = s.id AND a.publication_status = 'published'
+                 AND a.quality_status <> 'hidden') AS published_asset_count
+        FROM data_sources s
+       WHERE s.enabled
+       ORDER BY s.slug`) as Row[];
+    return rows.map(rowToSource);
+  }
+
+  async getSourceBySlug(slug: string): Promise<SourceInfo | null> {
+    const sources = await this.listSources();
+    return sources.find((s) => s.slug === slug) ?? null;
+  }
+
+  async exportAssets(input: AssetSearchInput): Promise<AssetDetail[]> {
+    // Bulk detail + bulk attributes: 2 queries total regardless of row count,
+    // instead of 2*N round-trips (each row previously called getAssetById).
+    const rows = (await this.sql`
+      ${this.detailSelect(input)}
+      LIMIT ${input.limit}`) as Row[];
+    if (rows.length === 0) return [];
+
+    const ids = rows.map((r) => String(r['id']));
+    const attrRows = (await this.sql`
+      SELECT asset_id, key, value_text, value_number, unit, original_value, source_label
+        FROM asset_attributes WHERE asset_id = ANY(${ids}) ORDER BY asset_id, key`) as Row[];
+    const attrsByAsset = new Map<string, Row[]>();
+    for (const r of attrRows) {
+      const assetId = String(r['asset_id']);
+      const list = attrsByAsset.get(assetId);
+      if (list) list.push(r);
+      else attrsByAsset.set(assetId, [r]);
+    }
+
+    return rows.map((row) => rowToDetail(row, attrsByAsset.get(String(row['id'])) ?? []));
+  }
+}
+
+/**
+ * Write side of the Postgres port (see publisher.ts for the interface contract
+ * and the dependency-direction rationale). Two-phase because Neon's transaction()
+ * is non-interactive — it ships a fixed batch of queries in one HTTP round trip,
+ * so a query cannot branch on an earlier query's result within the same
+ * transaction. Asset ids for the upsert must therefore be resolved *before*
+ * the transaction starts, not derived from an ON CONFLICT RETURNING inside it.
+ */
+export class PostgresAssetPublisher implements AssetPublisher {
+  private readonly sql: Sql;
+
+  constructor(databaseUrl: string) {
+    this.sql = neon(databaseUrl);
+  }
+
+  async ensureDataSource(descriptor: PublishableSourceDescriptor): Promise<string> {
+    const rows = (await this.sql`
+      INSERT INTO data_sources
+        (slug, name, provider_name, source_url, access_type, format,
+         license_name, license_url, redistribution, attribution_text, enabled)
+      VALUES
+        (${descriptor.slug}, ${descriptor.name}, ${descriptor.providerName}, ${descriptor.sourceUrl},
+         ${descriptor.accessType}, ${descriptor.format}, ${descriptor.licenseName},
+         ${descriptor.licenseUrl}, ${descriptor.redistribution}, ${descriptor.attributionText}, true)
+      ON CONFLICT (slug) DO UPDATE SET
+        name = EXCLUDED.name,
+        provider_name = EXCLUDED.provider_name,
+        source_url = EXCLUDED.source_url,
+        access_type = EXCLUDED.access_type,
+        format = EXCLUDED.format,
+        license_name = EXCLUDED.license_name,
+        license_url = EXCLUDED.license_url,
+        redistribution = EXCLUDED.redistribution,
+        attribution_text = EXCLUDED.attribution_text,
+        updated_at = now()
+      RETURNING id`) as Row[];
+    return String(rows[0]!['id']);
+  }
+
+  /** Records a run that never reached record processing (pipeline aborted, e.g. Q008). Nothing else is written. */
+  private async publishAborted(
+    input: PublishInput,
+    aborted: { ruleCode: string; message: string },
+  ): Promise<PublishSummary> {
+    const now = new Date().toISOString();
+    const ingestionRunId = crypto.randomUUID();
+    await this.sql`
+      INSERT INTO ingestion_runs
+        (id, source_id, started_at, finished_at, status,
+         fetched_count, accepted_count, rejected_count, warning_count,
+         error_code, error_summary, triggered_by, correlation_id)
+      VALUES
+        (${ingestionRunId}, ${input.sourceId}, ${now}, ${now}, 'failed',
+         ${input.fetchedCount}, 0, ${input.fetchedCount}, ${input.warningCount},
+         ${aborted.ruleCode}, ${aborted.message}, ${input.triggeredBy}, ${input.correlationId})`;
+    return {
+      ingestionRunId,
+      datasetVersionId: null,
+      publishedCount: 0,
+      hiddenCount: 0,
+      status: 'failed',
+    };
+  }
+
+  /** Records a run whose transaction threw (constraint violation, network error, etc). */
+  private async publishFailed(input: PublishInput, error: unknown): Promise<PublishSummary> {
+    const now = new Date().toISOString();
+    const ingestionRunId = crypto.randomUUID();
+    const message = error instanceof Error ? error.message : String(error);
+    await this.sql`
+      INSERT INTO ingestion_runs
+        (id, source_id, started_at, finished_at, status,
+         fetched_count, accepted_count, rejected_count, warning_count,
+         error_code, error_summary, triggered_by, correlation_id)
+      VALUES
+        (${ingestionRunId}, ${input.sourceId}, ${now}, ${now}, 'failed',
+         ${input.fetchedCount}, 0, ${input.fetchedCount}, ${input.warningCount},
+         'PUBLISH_FAILED', ${message}, ${input.triggeredBy}, ${input.correlationId})`;
+    return {
+      ingestionRunId,
+      datasetVersionId: null,
+      publishedCount: 0,
+      hiddenCount: 0,
+      status: 'failed',
+    };
+  }
+
+  async publish(input: PublishInput): Promise<PublishSummary> {
+    if (input.aborted) return this.publishAborted(input, input.aborted);
+
+    // Same-batch sourceRecordId collisions must be resolved before Phase 1
+    // resolves ids (see dedupeBySourceRecordId for why); the count folds into
+    // droppedCount so it stays visible in ingestion_runs instead of silently
+    // vanishing.
+    const { assets: dedupedAssets, duplicateCount: duplicateInBatchCount } = dedupeBySourceRecordId(
+      input.assets,
+    );
+
+    // Phase 1 (outside the transaction): resolve which assets already exist so
+    // the upsert below can target a stable id — new rows get a fresh uuid,
+    // existing ones keep theirs so joins from asset_attributes/quality_issues
+    // (built in the same batch) stay correct after the transaction commits.
+    const recordIds = dedupedAssets.map((a) => a.sourceRecordId);
+    const existingRows =
+      recordIds.length > 0
+        ? ((await this.sql`
+            SELECT id, source_record_id FROM infrastructure_assets
+             WHERE source_id = ${input.sourceId} AND source_record_id = ANY(${recordIds})
+          `) as Row[])
+        : [];
+    const existingIdByRecordId = new Map(
+      existingRows.map((r) => [String(r['source_record_id']), String(r['id'])]),
+    );
+    const assetIds = dedupedAssets.map(
+      (a) => existingIdByRecordId.get(a.sourceRecordId) ?? crypto.randomUUID(),
+    );
+
+    const now = new Date().toISOString();
+    const datasetVersionId = crypto.randomUUID();
+    const ingestionRunId = crypto.randomUUID();
+    const publishedCount = dedupedAssets.filter((a) => a.qualityStatus !== 'hidden').length;
+    const hiddenCount = dedupedAssets.length - publishedCount;
+    const droppedCount = input.droppedCount + duplicateInBatchCount;
+    const status = decideRunStatus({ droppedCount, hiddenCount });
+
+    // Phase 2: one non-interactive transaction — every statement here is fixed
+    // up front (ids already resolved above), so no statement needs to see
+    // another's result.
+    const queries = [
+      this.sql`
+        INSERT INTO dataset_versions
+          (id, source_id, source_updated_at, fetched_at, content_hash, schema_fingerprint,
+           record_count, status)
+        VALUES
+          (${datasetVersionId}, ${input.sourceId}, ${input.sourceUpdatedAt}, ${now},
+           ${input.contentHash}, ${input.schemaFingerprint}, ${input.fetchedCount}, 'published')`,
+      ...dedupedAssets.map(
+        (asset, i) => this.sql`
+        INSERT INTO infrastructure_assets
+          (id, source_id, source_record_id, asset_type, name, original_name, geometry,
+           prefecture_code, municipality_code, managing_authority, source_updated_at,
+           quality_status, publication_status, updated_at)
+        VALUES
+          (${assetIds[i]}, ${input.sourceId}, ${asset.sourceRecordId}, ${asset.assetType},
+           ${asset.name ?? asset.originalName ?? '(名称不明)'}, ${asset.originalName},
+           ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(asset.geometry)}), 4326),
+           ${asset.prefectureCode}, ${asset.municipalityCode}, ${asset.managingAuthority},
+           ${asset.sourceUpdatedAt}, ${asset.qualityStatus},
+           ${asset.qualityStatus === 'hidden' ? 'draft' : 'published'}, ${now})
+        ON CONFLICT (source_id, source_record_id) DO UPDATE SET
+          asset_type = EXCLUDED.asset_type,
+          name = EXCLUDED.name,
+          original_name = EXCLUDED.original_name,
+          geometry = EXCLUDED.geometry,
+          prefecture_code = EXCLUDED.prefecture_code,
+          municipality_code = EXCLUDED.municipality_code,
+          managing_authority = EXCLUDED.managing_authority,
+          source_updated_at = EXCLUDED.source_updated_at,
+          quality_status = EXCLUDED.quality_status,
+          publication_status = EXCLUDED.publication_status,
+          updated_at = EXCLUDED.updated_at`,
+      ),
+      // Attributes are replaced wholesale per asset rather than diffed —
+      // simpler, and cheap at this data volume.
+      ...assetIds.map((id) => this.sql`DELETE FROM asset_attributes WHERE asset_id = ${id}`),
+      ...dedupedAssets.flatMap((asset, i) =>
+        asset.attributes.map(
+          (attr) => this.sql`
+        INSERT INTO asset_attributes
+          (asset_id, key, value_text, value_number, unit, original_value, source_label)
+        VALUES
+          (${assetIds[i]}, ${attr.key}, ${attr.valueText}, ${attr.valueNumber}, ${attr.unit},
+           ${attr.originalValue}, ${attr.sourceLabel})`,
+        ),
+      ),
+      // Issues are appended per run, not reconciled against prior-run issues on
+      // the same asset — resolution-status lifecycle management (dismiss,
+      // accept, mark fixed) is the admin-console's job (Issue #4), not publish's.
+      ...dedupedAssets.flatMap((asset, i) =>
+        asset.issues.map(
+          (issue) => this.sql`
+        INSERT INTO quality_issues
+          (run_id, asset_id, rule_code, severity, field_name, observed_value, message, resolution_status)
+        VALUES
+          (${ingestionRunId}, ${assetIds[i]}, ${issue.ruleCode}, ${issue.severity},
+           ${issue.fieldName}, ${issue.observedValue}, ${issue.message}, ${issue.resolutionStatus})`,
+        ),
+      ),
+      this.sql`
+        INSERT INTO ingestion_runs
+          (id, source_id, dataset_version_id, started_at, finished_at, status,
+           fetched_count, accepted_count, rejected_count, warning_count,
+           triggered_by, correlation_id)
+        VALUES
+          (${ingestionRunId}, ${input.sourceId}, ${datasetVersionId}, ${now}, ${now}, ${status},
+           ${input.fetchedCount}, ${publishedCount}, ${droppedCount + hiddenCount},
+           ${input.warningCount}, ${input.triggeredBy}, ${input.correlationId})`,
+    ];
+
+    try {
+      await this.sql.transaction(queries);
+    } catch (error) {
+      // A thrown error from Neon's HTTP transaction endpoint doesn't prove the
+      // batch never committed (the response can be lost after the server
+      // applied it) — check via the run id minted above before recording a
+      // failure that would otherwise misreport a successful publish.
+      const committed = (await this.sql`
+        SELECT 1 FROM ingestion_runs WHERE id = ${ingestionRunId}`) as Row[];
+      if (committed.length > 0) {
+        return { ingestionRunId, datasetVersionId, publishedCount, hiddenCount, status };
+      }
+      try {
+        return await this.publishFailed(input, error);
+      } catch (recordingError) {
+        console.error('publish: failed to record failed ingestion run', {
+          sourceId: input.sourceId,
+          correlationId: input.correlationId,
+          originalError: error,
+          recordingError,
+        });
+        throw error;
+      }
+    }
+
+    return { ingestionRunId, datasetVersionId, publishedCount, hiddenCount, status };
+  }
+}
+
+export type { Geometry };

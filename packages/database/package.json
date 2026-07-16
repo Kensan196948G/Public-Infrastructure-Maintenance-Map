@@ -1,0 +1,27 @@
+{
+  "name": "@pimm/database",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Repository interfaces, in-memory implementation, Drizzle schema and Neon PostGIS access",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.0",
+    "@pimm/contracts": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.0"
+  }
+}
