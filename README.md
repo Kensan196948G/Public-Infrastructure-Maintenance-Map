@@ -128,18 +128,17 @@ flowchart TD
 ```text
 Public-Infrastructure-Maintenance-Map/
 ├─ apps/
-│  ├─ web/                 # 地図Web UI
-│  └─ api/                 # Cloudflare Workers API
+│  ├─ web/                 # 地図Web UI (React + MapLibre)
+│  └─ api/                 # Cloudflare Workers API (Hono)
 ├─ packages/
-│  ├─ contracts/           # API・型定義
-│  ├─ database/            # DBアクセス
-│  ├─ ingestion-core/      # 共通取込処理
-│  ├─ source-adapters/     # 公開元ごとの変換処理
-│  └─ ui/                  # 共通UI
-├─ migrations/             # DB migration
-├─ tests/                  # 単体・統合・E2E
-├─ docs/                   # 設計・運用文書
-└─ README.md
+│  ├─ contracts/           # Zod スキーマ・型・エラー体系（単一の真実）
+│  ├─ database/            # リポジトリ抽象・in-memory・Neon/PostGIS
+│  ├─ ingestion-core/      # 正規化・品質ルール・重複検出・パイプライン
+│  └─ source-adapters/     # 公開元ごとの変換処理 + サンプルデータ
+├─ migrations/             # DB migration (SQL)
+├─ scripts/                # migration runner 等の運用スクリプト
+├─ .github/workflows/      # CI (lint/type/test/build/secret scan)
+└─ README.md               # ※テストは各パッケージの test/ に同居
 ```
 
 ## 🚀 開発環境の準備
@@ -230,9 +229,24 @@ flowchart LR
 | アイデア・目的整理 | ✅ 完了 |
 | 要件定義 | ✅ 初版作成 |
 | 詳細設計 | ✅ 初版作成 |
+| MVP基盤実装（Phase 1: サンプルデータ・地図・検索・詳細・出典表示） | ✅ 初版実装（テスト141件通過） |
 | 公開データソース選定 | ⏳ 未着手 |
-| MVP実装 | ⏳ 未着手 |
+| 実データ取込・管理画面（Phase 2） | ⏳ 未着手 |
 | UAT・公開判定 | ⏳ 未着手 |
+
+### 実装済みの内容（Phase 1）
+
+- 🗺️ 地図・検索・絞り込み・一覧・詳細・出典表示（サンプルデータ）
+- 🧹 取込パイプライン: 正規化（NFC/和暦→ISO 8601/SI単位/座標系→WGS 84）+ 品質ルール Q001〜Q008 + 重複検出
+- 🔌 REST API `/api/v1`: bbox検索・詳細・集計・ソース一覧・CSV/GeoJSONエクスポート（ライセンス制御付き）
+- 🔒 セキュリティ: レート制限・セキュリティヘッダ・CSV数式インジェクション対策・Problem Details（RFC 9457）
+- ⚙️ CI: lint / format / typecheck / test / build / secret scan（gitleaks）
+
+### 既知の制約（Phase 1 時点）
+
+- 🐘 `PostgresAssetRepository` は型検査のみ（実 Neon/PostGIS への統合テスト未実施）。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作
+- 📥 `pnpm ingest --source <slug>` は dry-run（品質レポートのみ。DB への公開反映は Phase 2）
+- 🛠️ 管理 API・管理画面（UI-05/06/07）、Playwright E2E は未着手
 
 ## 🗺️ ロードマップ
 
