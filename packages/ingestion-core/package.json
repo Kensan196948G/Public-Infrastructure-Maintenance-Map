@@ -1,0 +1,26 @@
+{
+  "name": "@pimm/ingestion-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Source adapter contract, normalization (NFC/ISO8601/SI/WGS84), quality rules Q001-Q008, dedup, pipeline",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@pimm/contracts": "workspace:*",
+    "proj4": "^2.19.0"
+  },
+  "devDependencies": {
+    "@types/proj4": "^2.5.6",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.0"
+  }
+}

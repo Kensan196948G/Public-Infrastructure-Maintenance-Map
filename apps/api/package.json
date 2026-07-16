@@ -1,0 +1,31 @@
+{
+  "name": "@pimm/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cloudflare Workers REST API (Hono) — /api/v1",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/node.ts",
+    "build": "esbuild src/worker.ts --bundle --format=esm --target=es2022 --outfile=dist/worker.js --external:cloudflare:*",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.0",
+    "@pimm/contracts": "workspace:*",
+    "@pimm/database": "workspace:*",
+    "@pimm/ingestion-core": "workspace:*",
+    "@pimm/source-adapters": "workspace:*",
+    "hono": "^4.8.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250700.0",
+    "@hono/node-server": "^1.15.0",
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.28.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.0"
+  }
+}
