@@ -2,12 +2,10 @@
 import { serve } from '@hono/node-server';
 import { configFromEnv } from './config.js';
 import { createApp } from './app.js';
+import { envBindingsFromProcessEnv } from './node-env.js';
 import { getRepository } from './repo.js';
 
-const config = configFromEnv({
-  ...(process.env['DATABASE_URL'] ? { DATABASE_URL: process.env['DATABASE_URL'] } : {}),
-  ...(process.env['ALLOWED_ORIGIN'] ? { ALLOWED_ORIGIN: process.env['ALLOWED_ORIGIN'] } : {}),
-});
+const config = configFromEnv(envBindingsFromProcessEnv(process.env));
 
 const repo = await getRepository(config);
 const app = createApp(repo, config);

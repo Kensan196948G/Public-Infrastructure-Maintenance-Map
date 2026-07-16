@@ -20,7 +20,13 @@ function getApp(env: EnvBindings): Promise<Hono<never>> {
     const config = configFromEnv(env);
     const repo = await getRepository(config);
     return createApp(repo, config) as unknown as Hono<never>;
-  })();
+  })().catch((err: unknown) => {
+    // Initialization failed — drop the cached promise so the next request
+    // (possibly on a fresh isolate boot or after a transient outage) retries
+    // instead of replaying this same rejection for the isolate's lifetime.
+    appPromise = null;
+    throw err;
+  });
   return appPromise;
 }
 

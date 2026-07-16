@@ -247,6 +247,7 @@ flowchart LR
 - 🐘 `PostgresAssetRepository` は型検査のみ（実 Neon/PostGIS への統合テスト未実施）。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作
 - 📥 `pnpm ingest --source <slug>` は dry-run（品質レポートのみ。DB への公開反映は Phase 2）
 - 🛠️ 管理 API・管理画面（UI-05/06/07）、Playwright E2E は未着手
+- 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。分散実行環境では isolate 数だけ実効上限が緩むため、本番環境の実効的な防御層は Cloudflare WAF が担う
 
 ## 🗺️ ロードマップ
 

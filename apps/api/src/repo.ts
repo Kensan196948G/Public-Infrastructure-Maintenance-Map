@@ -13,6 +13,11 @@ export function getRepository(config: ApiConfig): Promise<AssetRepository> {
   if (config.databaseUrl) {
     return Promise.resolve(new PostgresAssetRepository(config.databaseUrl));
   }
-  sampleRepoPromise ??= buildSampleSeed().then((seed) => new InMemoryAssetRepository(seed));
+  sampleRepoPromise ??= buildSampleSeed()
+    .then((seed) => new InMemoryAssetRepository(seed))
+    .catch((err: unknown) => {
+      sampleRepoPromise = null;
+      throw err;
+    });
   return sampleRepoPromise;
 }
