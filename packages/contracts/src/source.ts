@@ -9,11 +9,11 @@ export const SourceInfoSchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'slug must be URL-safe kebab-case'),
   name: z.string(),
   providerName: z.string(),
-  sourceUrl: z.url(),
+  sourceUrl: z.httpUrl(),
   accessType: AccessTypeSchema,
   format: SourceFormatSchema,
   licenseName: z.string(),
-  licenseUrl: z.url().nullable(),
+  licenseUrl: z.httpUrl().nullable(),
   redistribution: RedistributionPolicySchema,
   /** Attribution line to display when data from this source is shown/exported. */
   attributionText: z.string().nullable(),

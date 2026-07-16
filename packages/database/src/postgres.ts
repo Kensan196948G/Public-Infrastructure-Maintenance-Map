@@ -30,6 +30,11 @@ const FIXED_NOTICES = [
   '最新かつ正式な情報は原典および管理主体へ確認してください。',
 ];
 
+/** Escapes %, _ and backslash so user input in ILIKE cannot inject wildcards. */
+export function escapeLikePattern(value: string): string {
+  return value.replaceAll('\\', '\\\\').replace(/[%_]/g, (ch) => `\\${ch}`);
+}
+
 function toIso(value: unknown): string | null {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'string' && value.length > 0) return new Date(value).toISOString();
@@ -54,6 +59,41 @@ function rowToSummary(row: Row): AssetSummary {
     },
     sourceSlug: String(row['source_slug']),
     sourceUpdatedAt: toIso(row['source_updated_at']),
+  };
+}
+
+function mapAttributeRows(attrRows: readonly Row[]): AssetDetail['attributes'] {
+  return attrRows.map((r) => ({
+    key: String(r['key']),
+    valueText: (r['value_text'] as string | null) ?? null,
+    valueNumber: r['value_number'] == null ? null : Number(r['value_number']),
+    unit: (r['unit'] as string | null) ?? null,
+    originalValue: (r['original_value'] as string | null) ?? null,
+    sourceLabel: (r['source_label'] as string | null) ?? null,
+  }));
+}
+
+/** Shared detail assembly for getAssetById and exportAssets (avoids drift between the two). */
+function rowToDetail(row: Row, attrRows: readonly Row[]): AssetDetail {
+  const summary = rowToSummary(row);
+  return {
+    ...summary,
+    originalName: (row['original_name'] as string | null) ?? null,
+    publicationStatus: row['publication_status'] as AssetDetail['publicationStatus'],
+    attributes: mapAttributeRows(attrRows),
+    source: {
+      slug: String(row['source_slug']),
+      provider: String(row['provider_name']),
+      dataset: String(row['dataset_name']),
+      sourceUrl: String(row['source_url']),
+      sourceRecordId: (row['source_record_id'] as string | null) ?? null,
+      fetchedAt: toIso(row['fetched_at']) ?? new Date(0).toISOString(),
+      sourceUpdatedAt: toIso(row['source_updated_at']),
+      licenseName: String(row['license_name']),
+      licenseUrl: (row['license_url'] as string | null) ?? null,
+      redistribution: row['redistribution'] as AssetDetail['source']['redistribution'],
+    },
+    notices: FIXED_NOTICES,
   };
 }
 
@@ -95,7 +135,7 @@ function buildConditions(sql: Sql, filters: AssetQueryFilters) {
   if (filters.municipalityCode)
     conditions.push(sql`a.municipality_code = ${filters.municipalityCode}`);
   if (filters.updatedSince) conditions.push(sql`a.source_updated_at >= ${filters.updatedSince}`);
-  if (filters.q) conditions.push(sql`a.name ILIKE ${'%' + filters.q + '%'}`);
+  if (filters.q) conditions.push(sql`a.name ILIKE ${'%' + escapeLikePattern(filters.q) + '%'}`);
   return conditions.reduce((acc, c) => sql`${acc} AND ${c}`);
 }
 
@@ -113,6 +153,26 @@ export class PostgresAssetRepository implements AssetRepository {
              a.managing_authority, a.quality_status, a.source_updated_at,
              ST_AsGeoJSON(a.geometry) AS geometry_geojson,
              s.slug AS source_slug,
+             COALESCE(
+               (SELECT array_agg(DISTINCT qi.rule_code)
+                  FROM quality_issues qi
+                 WHERE qi.asset_id = a.id AND qi.resolution_status = 'open'),
+               '{}'
+             ) AS open_issue_codes
+        FROM infrastructure_assets a
+        JOIN data_sources s ON s.id = a.source_id
+       WHERE ${where}
+       ORDER BY a.name, a.id`;
+  }
+
+  /** Full detail columns (asset + source + provenance), shared by getAssetById and exportAssets. */
+  private detailSelect(filters: AssetQueryFilters) {
+    const where = buildConditions(this.sql, filters);
+    return this.sql`
+      SELECT a.*, ST_AsGeoJSON(a.geometry) AS geometry_geojson,
+             s.slug AS source_slug, s.provider_name, s.name AS dataset_name,
+             s.source_url, s.license_name, s.license_url, s.redistribution,
+             (SELECT max(v.fetched_at) FROM dataset_versions v WHERE v.source_id = s.id) AS fetched_at,
              COALESCE(
                (SELECT array_agg(DISTINCT qi.rule_code)
                   FROM quality_issues qi
@@ -163,33 +223,7 @@ export class PostgresAssetRepository implements AssetRepository {
       SELECT key, value_text, value_number, unit, original_value, source_label
         FROM asset_attributes WHERE asset_id = ${id} ORDER BY key`) as Row[];
 
-    const summary = rowToSummary(row);
-    return {
-      ...summary,
-      originalName: (row['original_name'] as string | null) ?? null,
-      publicationStatus: row['publication_status'] as AssetDetail['publicationStatus'],
-      attributes: attrs.map((r) => ({
-        key: String(r['key']),
-        valueText: (r['value_text'] as string | null) ?? null,
-        valueNumber: r['value_number'] == null ? null : Number(r['value_number']),
-        unit: (r['unit'] as string | null) ?? null,
-        originalValue: (r['original_value'] as string | null) ?? null,
-        sourceLabel: (r['source_label'] as string | null) ?? null,
-      })),
-      source: {
-        slug: String(row['source_slug']),
-        provider: String(row['provider_name']),
-        dataset: String(row['dataset_name']),
-        sourceUrl: String(row['source_url']),
-        sourceRecordId: (row['source_record_id'] as string | null) ?? null,
-        fetchedAt: toIso(row['fetched_at']) ?? new Date(0).toISOString(),
-        sourceUpdatedAt: toIso(row['source_updated_at']),
-        licenseName: String(row['license_name']),
-        licenseUrl: (row['license_url'] as string | null) ?? null,
-        redistribution: row['redistribution'] as AssetDetail['source']['redistribution'],
-      },
-      notices: FIXED_NOTICES,
-    };
+    return rowToDetail(row, attrs);
   }
 
   async countByType(
@@ -231,11 +265,26 @@ export class PostgresAssetRepository implements AssetRepository {
   }
 
   async exportAssets(input: AssetSearchInput): Promise<AssetDetail[]> {
+    // Bulk detail + bulk attributes: 2 queries total regardless of row count,
+    // instead of 2*N round-trips (each row previously called getAssetById).
     const rows = (await this.sql`
-      ${this.summarySelect(input)}
+      ${this.detailSelect(input)}
       LIMIT ${input.limit}`) as Row[];
-    const details = await Promise.all(rows.map((r) => this.getAssetById(String(r['id']))));
-    return details.filter((d): d is AssetDetail => d !== null);
+    if (rows.length === 0) return [];
+
+    const ids = rows.map((r) => String(r['id']));
+    const attrRows = (await this.sql`
+      SELECT asset_id, key, value_text, value_number, unit, original_value, source_label
+        FROM asset_attributes WHERE asset_id = ANY(${ids}) ORDER BY asset_id, key`) as Row[];
+    const attrsByAsset = new Map<string, Row[]>();
+    for (const r of attrRows) {
+      const assetId = String(r['asset_id']);
+      const list = attrsByAsset.get(assetId);
+      if (list) list.push(r);
+      else attrsByAsset.set(assetId, [r]);
+    }
+
+    return rows.map((row) => rowToDetail(row, attrsByAsset.get(String(row['id'])) ?? []));
   }
 }
 

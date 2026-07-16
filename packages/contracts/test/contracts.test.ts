@@ -126,4 +126,32 @@ describe('SourceInfoSchema', () => {
     expect(SourceInfoSchema.safeParse(base).success).toBe(false);
     expect(SourceInfoSchema.safeParse({ ...base, slug: 'sample-bridges' }).success).toBe(true);
   });
+
+  it('rejects non-http(s) URL schemes (defense in depth against javascript: links)', () => {
+    const base = {
+      slug: 'sample-bridges',
+      name: 'n',
+      providerName: 'p',
+      sourceUrl: 'https://example.com',
+      accessType: 'file',
+      format: 'geojson',
+      licenseName: 'CC-BY-4.0',
+      licenseUrl: null,
+      redistribution: 'allowed',
+      attributionText: null,
+      enabled: true,
+      lastFetchedAt: null,
+      sourceUpdatedAt: null,
+      publishedAssetCount: 0,
+    };
+    expect(SourceInfoSchema.safeParse({ ...base, sourceUrl: 'javascript:alert(1)' }).success).toBe(
+      false,
+    );
+    expect(SourceInfoSchema.safeParse({ ...base, sourceUrl: 'ftp://example.com' }).success).toBe(
+      false,
+    );
+    expect(SourceInfoSchema.safeParse({ ...base, licenseUrl: 'javascript:alert(1)' }).success).toBe(
+      false,
+    );
+  });
 });

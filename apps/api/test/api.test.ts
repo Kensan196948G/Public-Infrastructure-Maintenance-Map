@@ -123,6 +123,11 @@ describe('GET /api/v1/assets/summary', () => {
     expect(body.total).toBeGreaterThan(0);
     expect(body.byType.bridge).toBeGreaterThan(0);
   });
+
+  it('rejects an oversized bbox (same performance guard as /assets)', async () => {
+    const res = await get('/api/v1/assets/summary?bbox=125,30,145,45');
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('GET /api/v1/sources', () => {
@@ -169,6 +174,16 @@ describe('GET /api/v1/export (license control, FR-08)', () => {
   it('requires a format parameter', async () => {
     expect((await get('/api/v1/export')).status).toBe(400);
   });
+
+  it('rejects an oversized bbox (same performance guard as /assets)', async () => {
+    const res = await get('/api/v1/export?format=csv&bbox=125,30,145,45');
+    expect(res.status).toBe(400);
+  });
+
+  it('caps limit at 2000 (reduced from the original 10000 ceiling)', async () => {
+    expect((await get('/api/v1/export?format=csv&limit=2000')).status).toBe(200);
+    expect((await get('/api/v1/export?format=csv&limit=2001')).status).toBe(400);
+  });
 });
 
 describe('security', () => {
@@ -185,6 +200,8 @@ describe('security', () => {
     expect(sanitizeCsvCell('+1234')).toBe("'+1234");
     expect(sanitizeCsvCell('-5')).toBe("'-5");
     expect(sanitizeCsvCell('@cmd')).toBe("'@cmd");
+    expect(sanitizeCsvCell('\tSUM(A1)')).toBe("'\tSUM(A1)");
+    expect(sanitizeCsvCell('\rSUM(A1)')).toBe("'\rSUM(A1)");
     expect(sanitizeCsvCell('普通の名称')).toBe('普通の名称');
   });
 

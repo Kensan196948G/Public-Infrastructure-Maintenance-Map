@@ -2,7 +2,12 @@
 export interface ApiConfig {
   /** Neon connection string. Absent → sample mode (in-memory seed). */
   databaseUrl?: string;
-  /** CORS allow-origin for browser clients. Default: same-origin usage only. */
+  /**
+   * CORS allow-origin for browser clients. Defaults to '*' — acceptable here
+   * because every /api/v1 route is unauthenticated GET-only public data with
+   * no cookies. Set ALLOWED_ORIGIN explicitly once the web app has a fixed
+   * production origin, to reduce cross-site scraping of the public API.
+   */
   allowedOrigin: string;
   /** Requests per minute per client IP (in-isolate limiter; CF WAF is the real guard). */
   rateLimitPerMinute: number;

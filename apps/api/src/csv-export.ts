@@ -2,10 +2,11 @@ import type { AssetDetail, SourceInfo } from '@pimm/contracts';
 
 /**
  * CSV formula injection guard (設計書 §9): cells beginning with = + - @
- * are prefixed with a single quote so spreadsheet apps treat them as text.
+ * or a leading tab/CR (OWASP-recommended extra guard characters) are
+ * prefixed with a single quote so spreadsheet apps treat them as text.
  */
 export function sanitizeCsvCell(value: string): string {
-  return /^[=+\-@]/u.test(value) ? `'${value}` : value;
+  return /^[=+\-@\t\r]/u.test(value) ? `'${value}` : value;
 }
 
 function quote(value: string): string {

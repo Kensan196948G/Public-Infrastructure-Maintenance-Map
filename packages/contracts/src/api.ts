@@ -91,7 +91,8 @@ export const ExportQuerySchema = z.object({
     .regex(/^\d{5}$/)
     .optional(),
   quality: csv(QualityStatusSchema).optional(),
-  limit: z.coerce.number().int().min(1).max(10000).default(1000),
+  // Bounded low: exportAssets does provider round-trips proportional to this limit.
+  limit: z.coerce.number().int().min(1).max(2000).default(1000),
 });
 export type ExportQuery = z.infer<typeof ExportQuerySchema>;
 

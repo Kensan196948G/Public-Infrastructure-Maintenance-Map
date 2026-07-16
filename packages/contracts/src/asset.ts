@@ -27,12 +27,12 @@ export const AssetSourceMetaSchema = z.object({
   slug: z.string(),
   provider: z.string(),
   dataset: z.string(),
-  sourceUrl: z.url(),
+  sourceUrl: z.httpUrl(),
   sourceRecordId: z.string().nullable(),
   fetchedAt: z.iso.datetime(),
   sourceUpdatedAt: z.iso.datetime().nullable(),
   licenseName: z.string(),
-  licenseUrl: z.url().nullable(),
+  licenseUrl: z.httpUrl().nullable(),
   redistribution: RedistributionPolicySchema,
 });
 export type AssetSourceMeta = z.infer<typeof AssetSourceMetaSchema>;

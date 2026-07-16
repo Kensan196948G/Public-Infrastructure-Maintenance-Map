@@ -4,7 +4,7 @@
  */
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type { AssetSearchQuery, ErrorCode, ProblemDetails } from '@pimm/contracts';
+import type { BBox, ErrorCode, ProblemDetails } from '@pimm/contracts';
 import {
   AssetSearchQuerySchema,
   AssetSummaryQuerySchema,
@@ -85,7 +85,10 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
 
   app.use('*', cors({ origin: config.allowedOrigin, allowMethods: ['GET', 'OPTIONS'] }));
 
-  // Rate limit (429 + Retry-After).
+  // Rate limit (429 + Retry-After). CF-Connecting-IP is set by Cloudflare's edge
+  // and cannot be spoofed by clients; X-Forwarded-For is only a local-dev fallback
+  // (trusted here because @hono/node-server has no reverse proxy in front of it)
+  // and must not be trusted behind any other untrusted proxy.
   app.use('/api/*', async (c, next) => {
     const clientKey =
       c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For') ?? 'local';
@@ -114,11 +117,15 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     c.json({ status: 'ok' as const, version: config.version, time: new Date().toISOString() }),
   );
 
-  const validateBboxArea = (query: AssetSearchQuery): boolean => {
+  const validateBboxArea = (query: { bbox?: BBox | undefined }): boolean => {
     if (!query.bbox) return true;
     const [minLon, minLat, maxLon, maxLat] = query.bbox;
     return (maxLon - minLon) * (maxLat - minLat) <= MAX_BBOX_AREA_DEG2;
   };
+  const bboxTooLarge = (c: { get(key: 'requestId'): string }) =>
+    fail(c, 'VALIDATION_ERROR', 'bbox が広すぎます', {
+      detail: `bbox area must be <= ${MAX_BBOX_AREA_DEG2} deg^2`,
+    });
 
   v1.get('/assets', async (c) => {
     const parsed = AssetSearchQuerySchema.safeParse(c.req.query());
@@ -128,9 +135,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
       });
     }
     if (!validateBboxArea(parsed.data)) {
-      return fail(c, 'VALIDATION_ERROR', 'bbox が広すぎます', {
-        detail: `bbox area must be <= ${MAX_BBOX_AREA_DEG2} deg^2`,
-      });
+      return bboxTooLarge(c);
     }
     try {
       const result = await repo.searchAssets(parsed.data);
@@ -150,6 +155,9 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
       return fail(c, 'VALIDATION_ERROR', '集計条件が不正です', {
         errors: zodIssuesToErrors(parsed.error),
       });
+    }
+    if (!validateBboxArea(parsed.data)) {
+      return bboxTooLarge(c);
     }
     const filters: Parameters<AssetRepository['countByType']>[0] = {};
     if (parsed.data.bbox) filters.bbox = parsed.data.bbox;
@@ -189,6 +197,9 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
       return fail(c, 'VALIDATION_ERROR', '出力条件が不正です', {
         errors: zodIssuesToErrors(parsed.error),
       });
+    }
+    if (!validateBboxArea(parsed.data)) {
+      return bboxTooLarge(c);
     }
     const { format, ...filters } = parsed.data;
     const [assets, sources] = await Promise.all([repo.exportAssets(filters), repo.listSources()]);
