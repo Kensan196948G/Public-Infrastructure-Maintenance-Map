@@ -5,7 +5,7 @@ import {
   QualityStatusSchema,
   RedistributionPolicySchema,
 } from './enums.js';
-import { GeometrySchema, PointSchema } from './geometry.js';
+import { GeometrySchema, LonLatTupleSchema, PointSchema } from './geometry.js';
 
 /** A single normalized attribute of an asset (asset_attributes row). */
 export const AssetAttributeSchema = z.object({
@@ -53,7 +53,7 @@ export const AssetSummarySchema = z.object({
   type: AssetTypeSchema,
   name: z.string(),
   /** Representative point for list linking / clustering: [lon, lat]. */
-  representativePoint: z.tuple([z.number(), z.number()]),
+  representativePoint: LonLatTupleSchema,
   geometry: GeometrySchema,
   prefectureCode: z.string().length(2).nullable(),
   municipalityCode: z.string().length(5).nullable(),

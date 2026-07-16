@@ -6,6 +6,9 @@ import {
   ExportQuerySchema,
   GeometrySchema,
   isExportAllowed,
+  LonLatTupleSchema,
+  MAX_BBOX_AREA_DEG2,
+  PositionSchema,
   problem,
   ProblemDetailsSchema,
   QUALITY_RULES,
@@ -34,6 +37,33 @@ describe('BBoxParamSchema', () => {
   });
   it('rejects out-of-range longitude', () => {
     expect(BBoxParamSchema.safeParse('181,35,182,36').success).toBe(false);
+  });
+  it('accepts a bbox exactly at the area limit', () => {
+    expect(BBoxParamSchema.safeParse('0,0,2,2').success).toBe(true);
+  });
+  it('rejects a bbox exceeding the area limit (performance guard)', () => {
+    expect(MAX_BBOX_AREA_DEG2).toBe(4);
+    expect(BBoxParamSchema.safeParse('0,0,3,3').success).toBe(false);
+  });
+});
+
+describe('PositionSchema / LonLatTupleSchema', () => {
+  it('accepts a position within EPSG:4326 bounds', () => {
+    expect(PositionSchema.safeParse([139.7, 35.6]).success).toBe(true);
+  });
+  it('accepts a position with an elevation component', () => {
+    expect(PositionSchema.safeParse([139.7, 35.6, 12.3]).success).toBe(true);
+  });
+  it('rejects out-of-range longitude', () => {
+    expect(PositionSchema.safeParse([200, 35.6]).success).toBe(false);
+  });
+  it('rejects out-of-range latitude', () => {
+    expect(PositionSchema.safeParse([139.7, 95]).success).toBe(false);
+  });
+  it('rejects an out-of-range representative-point tuple', () => {
+    expect(LonLatTupleSchema.safeParse([139.7, 35.6]).success).toBe(true);
+    expect(LonLatTupleSchema.safeParse([-200, 35.6]).success).toBe(false);
+    expect(LonLatTupleSchema.safeParse([139.7, -95]).success).toBe(false);
   });
 });
 
@@ -74,6 +104,11 @@ describe('GeometrySchema', () => {
     };
     expect(GeometrySchema.safeParse(bad).success).toBe(false);
   });
+  it('rejects a point with out-of-range coordinates', () => {
+    expect(GeometrySchema.safeParse({ type: 'Point', coordinates: [200, 35.6] }).success).toBe(
+      false,
+    );
+  });
 });
 
 describe('problem details', () => {
@@ -82,6 +117,14 @@ describe('problem details', () => {
     expect(p.status).toBe(404);
     expect(p.code).toBe('NOT_FOUND');
     expect(ProblemDetailsSchema.parse(p).requestId).toBe('req-1');
+  });
+  it('rejects a status that does not match the known code mapping', () => {
+    const mismatched = { type: 'about:blank', title: 'x', status: 200, code: 'NOT_FOUND' };
+    expect(ProblemDetailsSchema.safeParse(mismatched).success).toBe(false);
+  });
+  it('allows an unrecognized code without enforcing a status', () => {
+    const custom = { type: 'about:blank', title: 'x', status: 599, code: 'CUSTOM_CODE' };
+    expect(ProblemDetailsSchema.safeParse(custom).success).toBe(true);
   });
 });
 

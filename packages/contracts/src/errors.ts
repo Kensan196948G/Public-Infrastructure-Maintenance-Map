@@ -14,18 +14,34 @@ export const ERROR_CODES = {
 } as const;
 export type ErrorCode = keyof typeof ERROR_CODES;
 
+function isKnownErrorCode(code: string): code is ErrorCode {
+  return Object.prototype.hasOwnProperty.call(ERROR_CODES, code);
+}
+
 /** RFC 9457 Problem Details payload. Never leaks internals; carries requestId instead. */
-export const ProblemDetailsSchema = z.object({
-  type: z.string().default('about:blank'),
-  title: z.string(),
-  status: z.number().int(),
-  code: z.string(),
-  detail: z.string().optional(),
-  instance: z.string().optional(),
-  requestId: z.string().optional(),
-  /** Field-level validation errors. */
-  errors: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
-});
+export const ProblemDetailsSchema = z
+  .object({
+    type: z.string().default('about:blank'),
+    title: z.string(),
+    status: z.number().int(),
+    code: z.string(),
+    detail: z.string().optional(),
+    instance: z.string().optional(),
+    requestId: z.string().optional(),
+    /** Field-level validation errors. */
+    errors: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (!isKnownErrorCode(val.code)) return;
+    const expectedStatus = ERROR_CODES[val.code];
+    if (val.status !== expectedStatus) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['status'],
+        message: `status ${val.status} does not match the status mapped for code "${val.code}" (expected ${expectedStatus})`,
+      });
+    }
+  });
 export type ProblemDetails = z.infer<typeof ProblemDetailsSchema>;
 
 export function problem(

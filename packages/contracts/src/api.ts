@@ -29,8 +29,6 @@ const csv = <T extends z.ZodType>(item: T) =>
 
 export const DEFAULT_PAGE_LIMIT = 100;
 export const MAX_PAGE_LIMIT = 500;
-/** Maximum allowed bbox area in square degrees (性能ガード §11). */
-export const MAX_BBOX_AREA_DEG2 = 4;
 
 /** Query parameters for GET /assets (設計書 §7.2). */
 export const AssetSearchQuerySchema = z.object({
