@@ -399,8 +399,9 @@ export class PostgresAssetPublisher implements AssetPublisher {
     // resolves ids (see dedupeBySourceRecordId for why); the count folds into
     // droppedCount so it stays visible in ingestion_runs instead of silently
     // vanishing.
-    const { assets: dedupedAssets, duplicateCount: duplicateInBatchCount } =
-      dedupeBySourceRecordId(input.assets);
+    const { assets: dedupedAssets, duplicateCount: duplicateInBatchCount } = dedupeBySourceRecordId(
+      input.assets,
+    );
 
     // Phase 1 (outside the transaction): resolve which assets already exist so
     // the upsert below can target a stable id — new rows get a fresh uuid,

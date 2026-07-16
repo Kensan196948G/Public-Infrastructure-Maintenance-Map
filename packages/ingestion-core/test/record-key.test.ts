@@ -30,8 +30,14 @@ describe('recordKey', () => {
       135.123456 + i,
       34.123456 + i,
     ]);
-    const geometryA = { type: 'LineString' as const, coordinates: [...shared, [999.999999, 888.888888] as [number, number]] };
-    const geometryB = { type: 'LineString' as const, coordinates: [...shared, [111.111111, 222.222222] as [number, number]] };
+    const geometryA = {
+      type: 'LineString' as const,
+      coordinates: [...shared, [999.999999, 888.888888] as [number, number]],
+    };
+    const geometryB = {
+      type: 'LineString' as const,
+      coordinates: [...shared, [111.111111, 222.222222] as [number, number]],
+    };
 
     expect(JSON.stringify(geometryA).slice(0, 128)).toBe(JSON.stringify(geometryB).slice(0, 128));
 
