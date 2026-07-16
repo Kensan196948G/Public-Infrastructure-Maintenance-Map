@@ -1,4 +1,5 @@
 import type { AssetDetail, SourceInfo } from '@pimm/contracts';
+import { isExportAllowed } from '@pimm/contracts';
 
 /**
  * CSV formula injection guard (設計書 §9): cells beginning with = + - @
@@ -86,9 +87,7 @@ export function partitionByLicense(
   sources: readonly SourceInfo[],
 ): { exportable: AssetDetail[]; excludedSources: string[]; attributions: string[] } {
   const allowed = new Set(
-    sources
-      .filter((s) => s.redistribution === 'allowed' || s.redistribution === 'restricted')
-      .map((s) => s.slug),
+    sources.filter((s) => isExportAllowed(s.redistribution)).map((s) => s.slug),
   );
   const exportable = assets.filter((a) => allowed.has(a.sourceSlug));
   const usedSlugs = new Set(exportable.map((a) => a.sourceSlug));

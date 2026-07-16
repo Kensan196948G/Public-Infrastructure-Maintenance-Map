@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { AssetType, BBox, QualityStatus } from '@pimm/contracts';
 import { ApiClient } from './client.js';
+import { isBboxQueryable } from '../lib/bbox.js';
 
 /** A single shared client instance for the app's default (real) fetch. */
 const defaultClient = new ApiClient();
@@ -15,29 +16,41 @@ export interface AssetsQueryInput {
 
 /** Fetches assets within the current viewport; re-runs when bbox/filters change. */
 export function useAssets(input: AssetsQueryInput, client: ApiClient = defaultClient) {
+  // At low zoom (e.g. the default country-wide view) the viewport can exceed
+  // the server's bbox area guard — omit bbox rather than erroring; the query
+  // still runs, just unfiltered by area (bounded by `limit` instead).
+  const queryableBbox = isBboxQueryable(input.bbox) ? input.bbox : null;
+
   // Round bbox for a stable cache key so tiny map jitters don't refetch.
   const key = useMemo(
     () => [
       'assets',
-      input.bbox ? input.bbox.map((n) => Number(n.toFixed(3))) : null,
+      queryableBbox ? queryableBbox.map((n) => Number(n.toFixed(3))) : null,
       [...input.types].sort(),
       [...input.quality].sort(),
       input.q.trim(),
     ],
-    [input.bbox, input.types, input.quality, input.q],
+    [queryableBbox, input.types, input.quality, input.q],
   );
 
   return useQuery({
     queryKey: key,
     enabled: input.bbox !== null,
-    queryFn: () =>
-      client.searchAssets({
-        ...(input.bbox ? { bbox: input.bbox } : {}),
+    queryFn: () => {
+      // An empty type or quality selection can never match anything — resolve
+      // to an empty result locally instead of asking the server for "all"
+      // (the API treats an omitted filter as "no restriction", not "none").
+      if (input.types.length === 0 || input.quality.length === 0) {
+        return Promise.resolve({ items: [], nextCursor: null });
+      }
+      return client.searchAssets({
+        ...(queryableBbox ? { bbox: queryableBbox } : {}),
         types: input.types,
         quality: input.quality,
         q: input.q,
         limit: 200,
-      }),
+      });
+    },
     placeholderData: (prev) => prev,
     staleTime: 30_000,
   });

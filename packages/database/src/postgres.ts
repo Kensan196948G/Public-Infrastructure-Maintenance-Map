@@ -135,7 +135,17 @@ function buildConditions(sql: Sql, filters: AssetQueryFilters) {
   if (filters.municipalityCode)
     conditions.push(sql`a.municipality_code = ${filters.municipalityCode}`);
   if (filters.updatedSince) conditions.push(sql`a.source_updated_at >= ${filters.updatedSince}`);
-  if (filters.q) conditions.push(sql`a.name ILIKE ${'%' + escapeLikePattern(filters.q) + '%'}`);
+  if (filters.q) {
+    // Same fields as InMemoryAssetRepository.matches — keep search behavior
+    // consistent across sample mode and the Postgres-backed production path.
+    const pattern = '%' + escapeLikePattern(filters.q) + '%';
+    conditions.push(sql`(
+      a.name ILIKE ${pattern}
+      OR a.original_name ILIKE ${pattern}
+      OR a.managing_authority ILIKE ${pattern}
+      OR a.municipality_code ILIKE ${pattern}
+    )`);
+  }
   return conditions.reduce((acc, c) => sql`${acc} AND ${c}`);
 }
 

@@ -36,10 +36,17 @@ function zodIssuesToErrors(error: { issues: { path: PropertyKey[]; message: stri
   return error.issues.map((i) => ({ path: i.path.join('.'), message: i.message }));
 }
 
-/** Sliding-window in-memory limiter. Per-isolate only — CF WAF fronts production. */
+/**
+ * Fixed-window in-memory limiter. Per-isolate only — CF WAF fronts production.
+ * Expired windows are evicted opportunistically so the Map cannot grow
+ * unbounded across the isolate's lifetime under many distinct client keys.
+ */
 function createRateLimiter(limitPerMinute: number) {
   const windows = new Map<string, { start: number; count: number }>();
   return (clientKey: string, now: number): boolean => {
+    for (const [key, w] of windows) {
+      if (now - w.start >= 60_000) windows.delete(key);
+    }
     const window = windows.get(clientKey);
     if (!window || now - window.start >= 60_000) {
       windows.set(clientKey, { start: now, count: 1 });

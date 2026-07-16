@@ -23,7 +23,9 @@ function matches(asset: AssetDetail, filters: AssetQueryFilters): boolean {
   if (filters.municipalityCode && asset.municipalityCode !== filters.municipalityCode) return false;
   if (filters.updatedSince) {
     if (!asset.sourceUpdatedAt) return false;
-    if (asset.sourceUpdatedAt < filters.updatedSince) return false;
+    // Compare as instants, not strings: differing (but equivalent) ISO offsets
+    // — e.g. "+09:00" vs "Z", or "Z" vs ".000Z" — sort incorrectly as text.
+    if (Date.parse(asset.sourceUpdatedAt) < Date.parse(filters.updatedSince)) return false;
   }
   if (filters.q) {
     const needle = searchable(filters.q);
