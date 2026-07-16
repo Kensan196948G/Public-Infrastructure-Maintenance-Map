@@ -55,12 +55,14 @@ jobs:
 
   dependency-scan:
     name: 📦 Dependency vulnerability scan
-    # google/osv-scanner-action ships reusable *workflows*, not a step-level
-    # action — it must be called at job level via `uses:`, not inside `steps:`.
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.3.8
-    permissions:
-      contents: read
-    with:
-      scan-args: |-
-        --lockfile=pnpm-lock.yaml
-      upload-sarif: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The osv-scanner-reusable.yml *reusable workflow* call consistently
+      # failed at parse time (startup_failure, 0 jobs scheduled) for reasons
+      # not surfaced by the Actions API. Using the underlying scanner action
+      # directly as a normal step avoids that call mechanism entirely.
+      - uses: google/osv-scanner-action/osv-scanner-action@v2.3.8
+        with:
+          scan-args: |-
+            --lockfile=pnpm-lock.yaml
