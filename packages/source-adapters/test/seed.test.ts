@@ -5,9 +5,8 @@ import {
   createSampleBridgesAdapter,
   createSampleFacilitiesAdapter,
   deterministicUuid,
-  getAdapterBySlug,
-  listAdapters,
 } from '../src/index.js';
+import { getAdapterBySlug, listAdapters } from '../src/registry.js';
 import { runPipeline } from '@pimm/ingestion-core';
 
 const CTX = { now: '2026-07-16T00:00:00.000Z' };

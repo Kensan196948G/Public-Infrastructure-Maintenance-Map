@@ -11,7 +11,7 @@ import type { PublishableAsset } from '@pimm/database';
 import { PostgresAssetPublisher } from '@pimm/database';
 import type { ProcessedAsset } from '@pimm/ingestion-core';
 import { recordKey, runPipeline } from '@pimm/ingestion-core';
-import { getAdapterBySlug, listAdapters } from '@pimm/source-adapters';
+import { getAdapterBySlug, listAdapters } from '@pimm/source-adapters/registry';
 
 /**
  * Geometry-less records cannot be written (infrastructure_assets.geometry is
