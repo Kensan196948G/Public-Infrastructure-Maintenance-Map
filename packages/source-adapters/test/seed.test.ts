@@ -97,13 +97,20 @@ describe('buildSampleSeed', () => {
 });
 
 describe('registry', () => {
-  it('lists three adapters and resolves by slug', () => {
+  it('lists five adapters and resolves by slug', () => {
     expect(
       listAdapters()
         .map((a) => a.descriptor.slug)
         .sort(),
-    ).toEqual(['sample-bridges', 'sample-facilities', 'sample-rivers']);
+    ).toEqual([
+      'facility-osaka-park',
+      'facility-osaka-toilet',
+      'sample-bridges',
+      'sample-facilities',
+      'sample-rivers',
+    ]);
     expect(getAdapterBySlug('sample-rivers')?.descriptor.redistribution).toBe('prohibited');
+    expect(getAdapterBySlug('facility-osaka-park')?.descriptor.crs).toBe('EPSG:6668');
     expect(getAdapterBySlug('nope')).toBeNull();
   });
 });
