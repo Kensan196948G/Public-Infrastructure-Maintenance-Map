@@ -10,18 +10,18 @@ import type {
 
 /** Filters shared by search / summary / export. */
 export interface AssetQueryFilters {
-  bbox?: BBox;
-  types?: AssetType[];
-  q?: string;
-  prefectureCode?: string;
-  municipalityCode?: string;
-  quality?: QualityStatus[];
-  updatedSince?: string;
+  bbox?: BBox | undefined;
+  types?: AssetType[] | undefined;
+  q?: string | undefined;
+  prefectureCode?: string | undefined;
+  municipalityCode?: string | undefined;
+  quality?: QualityStatus[] | undefined;
+  updatedSince?: string | undefined;
 }
 
 export interface AssetSearchInput extends AssetQueryFilters {
   limit: number;
-  cursor?: string;
+  cursor?: string | undefined;
 }
 
 /** Thrown for malformed cursors so the API can answer 400 instead of 500. */

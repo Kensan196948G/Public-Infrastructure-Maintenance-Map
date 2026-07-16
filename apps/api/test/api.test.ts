@@ -1,0 +1,209 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+import type { Hono } from 'hono';
+import type {
+  AssetCountSummary,
+  AssetDetail,
+  AssetSearchResponse,
+  ProblemDetails,
+  SourceInfo,
+} from '@pimm/contracts';
+import { InMemoryAssetRepository } from '@pimm/database';
+import { buildSampleSeed } from '@pimm/source-adapters';
+import { createApp } from '../src/app.js';
+import type { ApiConfig } from '../src/config.js';
+import { sanitizeCsvCell } from '../src/csv-export.js';
+
+const CONFIG: ApiConfig = {
+  allowedOrigin: '*',
+  rateLimitPerMinute: 10_000,
+  version: 'test',
+};
+
+let app: Hono<never>;
+
+beforeAll(async () => {
+  const seed = await buildSampleSeed();
+  app = createApp(new InMemoryAssetRepository(seed), CONFIG) as unknown as Hono<never>;
+});
+
+const get = (path: string, headers?: Record<string, string>) =>
+  app.request(`http://localhost${path}`, { headers: headers ?? {} });
+
+describe('GET /api/v1/health', () => {
+  it('answers ok with version and time', async () => {
+    const res = await get('/api/v1/health');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { status: string };
+    expect(body.status).toBe('ok');
+  });
+});
+
+describe('GET /api/v1/assets', () => {
+  it('returns sample assets inside a Tokyo bbox', async () => {
+    const res = await get('/api/v1/assets?bbox=139.6,35.6,139.9,35.8');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as AssetSearchResponse;
+    expect(body.items.length).toBeGreaterThan(10);
+    expect(new Set(body.items.map((i) => i.type))).toEqual(
+      new Set(['bridge', 'river', 'public_facility']),
+    );
+  });
+
+  it('filters by type', async () => {
+    const res = await get('/api/v1/assets?types=river');
+    const body = (await res.json()) as AssetSearchResponse;
+    expect(body.items.length).toBe(3);
+    expect(body.items.every((i) => i.type === 'river')).toBe(true);
+  });
+
+  it('searches by keyword and reflects duplicate flags', async () => {
+    const res = await get('/api/v1/assets?q=ふたご');
+    const body = (await res.json()) as AssetSearchResponse;
+    expect(body.items).toHaveLength(2);
+    expect(body.items.every((i) => i.quality.status === 'review')).toBe(true);
+    expect(body.items.every((i) => i.quality.openIssueCodes.includes('Q005'))).toBe(true);
+  });
+
+  it('paginates with cursors', async () => {
+    const p1raw = await get('/api/v1/assets?limit=5');
+    const p1 = (await p1raw.json()) as AssetSearchResponse;
+    expect(p1.items).toHaveLength(5);
+    expect(p1.nextCursor).not.toBeNull();
+    const p2 = (await (
+      await get(`/api/v1/assets?limit=5&cursor=${encodeURIComponent(p1.nextCursor!)}`)
+    ).json()) as AssetSearchResponse;
+    const ids = new Set([...p1.items, ...p2.items].map((i) => i.id));
+    expect(ids.size).toBe(p1.items.length + p2.items.length);
+  });
+
+  it('rejects malformed bbox with Problem Details', async () => {
+    const res = await get('/api/v1/assets?bbox=abc', { 'X-Request-Id': 'req-test-1' });
+    expect(res.status).toBe(400);
+    expect(res.headers.get('Content-Type')).toContain('application/problem+json');
+    const body = (await res.json()) as ProblemDetails;
+    expect(body.code).toBe('VALIDATION_ERROR');
+    expect(body.requestId).toBe('req-test-1');
+  });
+
+  it('rejects an oversized bbox (performance guard)', async () => {
+    const res = await get('/api/v1/assets?bbox=125,30,145,45');
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a garbage cursor', async () => {
+    const res = await get('/api/v1/assets?cursor=%21%21%21');
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/v1/assets/:id', () => {
+  it('returns full detail with provenance and notices', async () => {
+    const list = (await (await get('/api/v1/assets?types=bridge&limit=1')).json()) as AssetSearchResponse;
+    const id = list.items[0]!.id;
+    const res = await get(`/api/v1/assets/${id}`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as AssetDetail;
+    expect(body.source.sourceUrl).toMatch(/^https:/u);
+    expect(body.notices.length).toBeGreaterThan(0);
+    expect(body.attributes).toBeInstanceOf(Array);
+  });
+
+  it('404s for an unknown uuid and 400s for a malformed id', async () => {
+    expect((await get('/api/v1/assets/00000000-0000-4000-8000-000000000000')).status).toBe(404);
+    expect((await get('/api/v1/assets/not-a-uuid')).status).toBe(400);
+  });
+});
+
+describe('GET /api/v1/assets/summary', () => {
+  it('counts by type', async () => {
+    const res = await get('/api/v1/assets/summary?bbox=139.6,35.6,139.9,35.8');
+    const body = (await res.json()) as AssetCountSummary;
+    expect(body.total).toBeGreaterThan(0);
+    expect(body.byType.bridge).toBeGreaterThan(0);
+  });
+});
+
+describe('GET /api/v1/sources', () => {
+  it('lists the 3 sample sources with license info', async () => {
+    const res = await get('/api/v1/sources');
+    const body = (await res.json()) as { items: SourceInfo[] };
+    expect(body.items).toHaveLength(3);
+    expect(body.items.every((s) => s.licenseName.length > 0)).toBe(true);
+  });
+  it('resolves a source by slug and 404s otherwise', async () => {
+    expect((await get('/api/v1/sources/sample-bridges')).status).toBe(200);
+    expect((await get('/api/v1/sources/nope')).status).toBe(404);
+  });
+});
+
+describe('GET /api/v1/export (license control, FR-08)', () => {
+  it('exports CSV with BOM and attribution-safe cells', async () => {
+    const res = await get('/api/v1/export?format=csv&types=bridge');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/csv');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect([bytes[0], bytes[1], bytes[2]]).toEqual([0xef, 0xbb, 0xbf]);
+    const text = new TextDecoder().decode(bytes.subarray(3));
+    
+    expect(text).toContain('みらい大橋');
+  });
+
+  it('excludes prohibited sources (rivers) from export', async () => {
+    const res = await get('/api/v1/export?format=geojson&types=river');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-Excluded-Sources')).toContain('sample-rivers');
+    const body = (await res.json()) as { features: unknown[]; excludedSources: string[] };
+    expect(body.features).toHaveLength(0);
+    expect(body.excludedSources).toContain('sample-rivers');
+  });
+
+  it('includes attributions for exported sources', async () => {
+    const res = await get('/api/v1/export?format=geojson&types=public_facility');
+    const body = (await res.json()) as { features: unknown[]; attributions: string[] };
+    expect(body.features.length).toBeGreaterThan(0);
+    expect(body.attributions.some((a) => a.includes('サンプル自治体'))).toBe(true);
+  });
+
+  it('requires a format parameter', async () => {
+    expect((await get('/api/v1/export')).status).toBe(400);
+  });
+});
+
+describe('security', () => {
+  it('sets security headers on every response', async () => {
+    const res = await get('/api/v1/health');
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(res.headers.get('Strict-Transport-Security')).toContain('max-age=');
+    expect(res.headers.get('Content-Security-Policy')).toContain("default-src 'none'");
+    expect(res.headers.get('X-Request-Id')).toBeTruthy();
+  });
+
+  it('sanitizes CSV formula injection', () => {
+    expect(sanitizeCsvCell('=SUM(A1)')).toBe("'=SUM(A1)");
+    expect(sanitizeCsvCell('+1234')).toBe("'+1234");
+    expect(sanitizeCsvCell('-5')).toBe("'-5");
+    expect(sanitizeCsvCell('@cmd')).toBe("'@cmd");
+    expect(sanitizeCsvCell('普通の名称')).toBe('普通の名称');
+  });
+
+  it('rate limits after the configured threshold', async () => {
+    const seed = await buildSampleSeed();
+    const limited = createApp(new InMemoryAssetRepository(seed), {
+      ...CONFIG,
+      rateLimitPerMinute: 3,
+    });
+    const statuses: number[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      const res = await limited.request('http://localhost/api/v1/health');
+      statuses.push(res.status);
+    }
+    expect(statuses.slice(0, 3)).toEqual([200, 200, 200]);
+    expect(statuses[3]).toBe(429);
+  });
+
+  it('answers unknown paths with Problem Details JSON', async () => {
+    const res = await get('/api/v1/nope');
+    expect(res.status).toBe(404);
+    expect(res.headers.get('Content-Type')).toContain('application/problem+json');
+  });
+});

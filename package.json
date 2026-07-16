@@ -2,6 +2,7 @@
   "name": "public-infrastructure-maintenance-map",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "公開インフラ維持管理マップ — 公開情報からインフラ調査の入口を提供する Web GIS",
   "license": "MIT",
   "packageManager": "pnpm@10.34.5",

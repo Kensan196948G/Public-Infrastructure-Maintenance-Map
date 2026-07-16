@@ -1,0 +1,12 @@
+# Cloudflare Workers deploy configuration.
+# Secrets (DATABASE_URL) are set via `wrangler secret put` — never committed.
+name = "pimm-api"
+main = "src/worker.ts"
+compatibility_date = "2026-07-01"
+
+[vars]
+ALLOWED_ORIGIN = "*"
+RATE_LIMIT_PER_MINUTE = "120"
+
+[observability]
+enabled = true
