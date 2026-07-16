@@ -19,10 +19,10 @@ import { getAdapterBySlug, listAdapters } from '@pimm/source-adapters';
  * falls back to the same deterministic recordKey sample-mode seeding uses, so
  * re-publishing the same source upserts instead of duplicating.
  */
-function toPublishableAssets(items: readonly ProcessedAsset[]): {
+async function toPublishableAssets(items: readonly ProcessedAsset[]): Promise<{
   assets: PublishableAsset[];
   droppedCount: number;
-} {
+}> {
   const assets: PublishableAsset[] = [];
   let droppedCount = 0;
   for (const { asset, qualityStatus, issues } of items) {
@@ -31,7 +31,7 @@ function toPublishableAssets(items: readonly ProcessedAsset[]): {
       continue;
     }
     assets.push({
-      sourceRecordId: recordKey(asset),
+      sourceRecordId: await recordKey(asset),
       assetType: asset.assetType,
       name: asset.name,
       originalName: asset.originalName,
@@ -121,10 +121,10 @@ if (!shouldPublish || !databaseUrl) {
 } else {
   const publisher = new PostgresAssetPublisher(databaseUrl);
   const sourceId = await publisher.ensureDataSource(adapter.descriptor);
-  const { assets: acceptedAssets, droppedCount: droppedAccepted } = toPublishableAssets(
+  const { assets: acceptedAssets, droppedCount: droppedAccepted } = await toPublishableAssets(
     result.accepted,
   );
-  const { assets: quarantinedAssets, droppedCount: droppedQuarantined } = toPublishableAssets(
+  const { assets: quarantinedAssets, droppedCount: droppedQuarantined } = await toPublishableAssets(
     result.quarantined,
   );
 

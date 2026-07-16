@@ -24,7 +24,7 @@ import type {
   PublishInput,
   PublishSummary,
 } from './publisher.js';
-import { decideRunStatus } from './publisher.js';
+import { decideRunStatus, dedupeBySourceRecordId } from './publisher.js';
 import type { AssetQueryFilters, AssetRepository, AssetSearchInput } from './repository.js';
 import { InvalidCursorError } from './repository.js';
 
@@ -339,7 +339,6 @@ export class PostgresAssetPublisher implements AssetPublisher {
         license_url = EXCLUDED.license_url,
         redistribution = EXCLUDED.redistribution,
         attribution_text = EXCLUDED.attribution_text,
-        enabled = true,
         updated_at = now()
       RETURNING id`) as Row[];
     return String(rows[0]!['id']);
@@ -396,11 +395,18 @@ export class PostgresAssetPublisher implements AssetPublisher {
   async publish(input: PublishInput): Promise<PublishSummary> {
     if (input.aborted) return this.publishAborted(input, input.aborted);
 
+    // Same-batch sourceRecordId collisions must be resolved before Phase 1
+    // resolves ids (see dedupeBySourceRecordId for why); the count folds into
+    // droppedCount so it stays visible in ingestion_runs instead of silently
+    // vanishing.
+    const { assets: dedupedAssets, duplicateCount: duplicateInBatchCount } =
+      dedupeBySourceRecordId(input.assets);
+
     // Phase 1 (outside the transaction): resolve which assets already exist so
     // the upsert below can target a stable id — new rows get a fresh uuid,
     // existing ones keep theirs so joins from asset_attributes/quality_issues
     // (built in the same batch) stay correct after the transaction commits.
-    const recordIds = input.assets.map((a) => a.sourceRecordId);
+    const recordIds = dedupedAssets.map((a) => a.sourceRecordId);
     const existingRows =
       recordIds.length > 0
         ? ((await this.sql`
@@ -411,16 +417,17 @@ export class PostgresAssetPublisher implements AssetPublisher {
     const existingIdByRecordId = new Map(
       existingRows.map((r) => [String(r['source_record_id']), String(r['id'])]),
     );
-    const assetIds = input.assets.map(
+    const assetIds = dedupedAssets.map(
       (a) => existingIdByRecordId.get(a.sourceRecordId) ?? crypto.randomUUID(),
     );
 
     const now = new Date().toISOString();
     const datasetVersionId = crypto.randomUUID();
     const ingestionRunId = crypto.randomUUID();
-    const publishedCount = input.assets.filter((a) => a.qualityStatus !== 'hidden').length;
-    const hiddenCount = input.assets.length - publishedCount;
-    const status = decideRunStatus({ droppedCount: input.droppedCount, hiddenCount });
+    const publishedCount = dedupedAssets.filter((a) => a.qualityStatus !== 'hidden').length;
+    const hiddenCount = dedupedAssets.length - publishedCount;
+    const droppedCount = input.droppedCount + duplicateInBatchCount;
+    const status = decideRunStatus({ droppedCount, hiddenCount });
 
     // Phase 2: one non-interactive transaction — every statement here is fixed
     // up front (ids already resolved above), so no statement needs to see
@@ -433,7 +440,7 @@ export class PostgresAssetPublisher implements AssetPublisher {
         VALUES
           (${datasetVersionId}, ${input.sourceId}, ${input.sourceUpdatedAt}, ${now},
            ${input.contentHash}, ${input.schemaFingerprint}, ${input.fetchedCount}, 'published')`,
-      ...input.assets.map(
+      ...dedupedAssets.map(
         (asset, i) => this.sql`
         INSERT INTO infrastructure_assets
           (id, source_id, source_record_id, asset_type, name, original_name, geometry,
@@ -447,6 +454,7 @@ export class PostgresAssetPublisher implements AssetPublisher {
            ${asset.sourceUpdatedAt}, ${asset.qualityStatus},
            ${asset.qualityStatus === 'hidden' ? 'draft' : 'published'}, ${now})
         ON CONFLICT (source_id, source_record_id) DO UPDATE SET
+          asset_type = EXCLUDED.asset_type,
           name = EXCLUDED.name,
           original_name = EXCLUDED.original_name,
           geometry = EXCLUDED.geometry,
@@ -461,7 +469,7 @@ export class PostgresAssetPublisher implements AssetPublisher {
       // Attributes are replaced wholesale per asset rather than diffed —
       // simpler, and cheap at this data volume.
       ...assetIds.map((id) => this.sql`DELETE FROM asset_attributes WHERE asset_id = ${id}`),
-      ...input.assets.flatMap((asset, i) =>
+      ...dedupedAssets.flatMap((asset, i) =>
         asset.attributes.map(
           (attr) => this.sql`
         INSERT INTO asset_attributes
@@ -474,7 +482,7 @@ export class PostgresAssetPublisher implements AssetPublisher {
       // Issues are appended per run, not reconciled against prior-run issues on
       // the same asset — resolution-status lifecycle management (dismiss,
       // accept, mark fixed) is the admin-console's job (Issue #4), not publish's.
-      ...input.assets.flatMap((asset, i) =>
+      ...dedupedAssets.flatMap((asset, i) =>
         asset.issues.map(
           (issue) => this.sql`
         INSERT INTO quality_issues
@@ -491,14 +499,33 @@ export class PostgresAssetPublisher implements AssetPublisher {
            triggered_by, correlation_id)
         VALUES
           (${ingestionRunId}, ${input.sourceId}, ${datasetVersionId}, ${now}, ${now}, ${status},
-           ${input.fetchedCount}, ${publishedCount}, ${input.droppedCount + hiddenCount},
+           ${input.fetchedCount}, ${publishedCount}, ${droppedCount + hiddenCount},
            ${input.warningCount}, ${input.triggeredBy}, ${input.correlationId})`,
     ];
 
     try {
       await this.sql.transaction(queries);
     } catch (error) {
-      return this.publishFailed(input, error);
+      // A thrown error from Neon's HTTP transaction endpoint doesn't prove the
+      // batch never committed (the response can be lost after the server
+      // applied it) — check via the run id minted above before recording a
+      // failure that would otherwise misreport a successful publish.
+      const committed = (await this.sql`
+        SELECT 1 FROM ingestion_runs WHERE id = ${ingestionRunId}`) as Row[];
+      if (committed.length > 0) {
+        return { ingestionRunId, datasetVersionId, publishedCount, hiddenCount, status };
+      }
+      try {
+        return await this.publishFailed(input, error);
+      } catch (recordingError) {
+        console.error('publish: failed to record failed ingestion run', {
+          sourceId: input.sourceId,
+          correlationId: input.correlationId,
+          originalError: error,
+          recordingError,
+        });
+        throw error;
+      }
     }
 
     return { ingestionRunId, datasetVersionId, publishedCount, hiddenCount, status };

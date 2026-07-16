@@ -91,3 +91,19 @@ export function decideRunStatus(counts: {
 }): 'succeeded' | 'partial' {
   return counts.droppedCount > 0 || counts.hiddenCount > 0 ? 'partial' : 'succeeded';
 }
+
+/**
+ * Collapses same-batch sourceRecordId collisions to one row (last-write-wins)
+ * before publish() resolves asset ids — otherwise two records sharing a key
+ * would each mint their own id, but only one can occupy the database's
+ * (source_id, source_record_id) unique slot, leaving the loser's
+ * attributes/issues pointing at an id that was never inserted. Pure so the
+ * collision count is unit-testable without a database.
+ */
+export function dedupeBySourceRecordId(assets: readonly PublishableAsset[]): {
+  assets: PublishableAsset[];
+  duplicateCount: number;
+} {
+  const deduped = [...new Map(assets.map((a) => [a.sourceRecordId, a])).values()];
+  return { assets: deduped, duplicateCount: assets.length - deduped.length };
+}

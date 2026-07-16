@@ -28,7 +28,7 @@ async function toDetail(
 ): Promise<AssetDetail | null> {
   const { asset, qualityStatus, issues } = processed;
   if (asset.geometry === null) return null; // quarantined shapes never publish
-  const id = await deterministicUuid(descriptor.slug, recordKey(asset));
+  const id = await deterministicUuid(descriptor.slug, await recordKey(asset));
   return {
     id,
     type: asset.assetType,
