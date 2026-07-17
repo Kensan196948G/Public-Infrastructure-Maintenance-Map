@@ -31,7 +31,11 @@ import { InvalidCursorError } from './repository.js';
 type Row = Record<string, unknown>;
 type Sql = ReturnType<typeof neon>;
 
-const FIXED_NOTICES = [
+/**
+ * Distinct wording from sample-mode's seed.ts FIXED_NOTICES: production data
+ * must never claim to be a fictional sample (Issue #2 Completion Criteria 4).
+ */
+export const FIXED_NOTICES = [
   '本データは公開情報を機械的に整形した参考情報です。',
   '構造物の健全性・安全性・通行可否は判定していません。',
   '最新かつ正式な情報は原典および管理主体へ確認してください。',

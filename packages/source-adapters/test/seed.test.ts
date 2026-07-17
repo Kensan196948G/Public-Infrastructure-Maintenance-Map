@@ -6,10 +6,20 @@ import {
   createSampleFacilitiesAdapter,
   deterministicUuid,
 } from '../src/index.js';
+import { FIXED_NOTICES } from '../src/seed.js';
 import { getAdapterBySlug, listAdapters } from '../src/registry.js';
 import { runPipeline } from '@pimm/ingestion-core';
 
 const CTX = { now: '2026-07-16T00:00:00.000Z' };
+
+// Issue #2 Completion Criteria 4: sample モードは実データと取り違えられない
+// よう、架空サンプルであることを常に開示しなければならない。
+describe('FIXED_NOTICES (sample mode)', () => {
+  it('always discloses that the data is a fictional sample', () => {
+    const joined = FIXED_NOTICES.join(' ');
+    expect(joined).toContain('架空');
+  });
+});
 
 describe('deterministicUuid', () => {
   it('is stable and RFC 4122 shaped', async () => {

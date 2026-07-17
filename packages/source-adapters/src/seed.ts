@@ -16,7 +16,11 @@ import { createSampleFacilitiesAdapter } from './adapters/sample-facilities.js';
 /** Fixed timestamp keeps sample mode deterministic across restarts. */
 export const SAMPLE_FETCHED_AT = '2026-07-16T00:00:00.000Z';
 
-const FIXED_NOTICES = [
+/**
+ * Distinct wording from Postgres-mode's postgres.ts FIXED_NOTICES: sample data
+ * must always disclose it is fictional (Issue #2 Completion Criteria 4).
+ */
+export const FIXED_NOTICES = [
   '本データは検証用の架空サンプルです。実在のインフラを示しません。',
   '本システムは参考情報を提供するもので、構造物の健全性・安全性・通行可否を判定しません。',
   '最新かつ正式な情報は、必ず原典と管理主体へ確認してください。',

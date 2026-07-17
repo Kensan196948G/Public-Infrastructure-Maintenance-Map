@@ -1,16 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { runPipeline } from '@pimm/ingestion-core';
 import type { SourceAdapter } from '@pimm/ingestion-core';
-import {
-  ROAD_N13_DESCRIPTOR,
-  createRoadN13Adapter,
-} from '../src/adapters/road-n13.js';
+import { ROAD_N13_DESCRIPTOR, createRoadN13Adapter } from '../src/adapters/road-n13.js';
 
 const CTX = { now: '2026-07-16T00:00:00.000Z' };
 
-type RoadN13Row = Parameters<
-  ReturnType<typeof createRoadN13Adapter>['normalize']
->[0];
+type RoadN13Row = Parameters<ReturnType<typeof createRoadN13Adapter>['normalize']>[0];
 
 /** Swaps in a fixed GeoJSON body so the real zip fetch/unzip never runs in tests. */
 function withFixedGeoJson(
