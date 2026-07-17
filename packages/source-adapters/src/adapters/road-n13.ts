@@ -50,7 +50,7 @@ export const ROAD_N13_DESCRIPTOR: SourceDescriptor = {
 interface RoadN13Feature {
   type: 'Feature';
   properties: Record<string, string | number>;
-  geometry: Geometry;
+  geometry: Geometry | null;
 }
 
 /** コードリスト値の意味(道路種別・分類・状態等)は製品仕様書PDF未確認のため、コード値をそのまま保持する。 */
@@ -81,7 +81,14 @@ export function createRoadN13Adapter(): SourceAdapter<RoadN13Feature> {
       return parsed.features;
     },
     normalize: (feature): NormalizedAsset => {
-      const geometry = geometryToWgs84(feature.geometry, ROAD_N13_DESCRIPTOR.crs);
+      let geometry: Geometry | null = null;
+      if (feature.geometry) {
+        try {
+          geometry = geometryToWgs84(feature.geometry, ROAD_N13_DESCRIPTOR.crs);
+        } catch {
+          geometry = null;
+        }
+      }
       const props = feature.properties;
 
       const attributes: AssetAttribute[] = [];

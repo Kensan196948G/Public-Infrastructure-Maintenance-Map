@@ -82,6 +82,23 @@ describe('road-n13 adapter (contract test)', () => {
     const asset = result.accepted[0]?.asset;
     expect(asset?.attributes.find((a) => a.key === 'toll_category_code')).toBeUndefined();
   });
+
+  it('quarantines a feature with null geometry instead of aborting the whole run', async () => {
+    const geojson = {
+      type: 'FeatureCollection',
+      // geometry:null is legal GeoJSON; a single malformed feature must not
+      // kill the entire ingestion run (Codex review on PR #17).
+      features: [SAMPLE_FEATURE, { ...SAMPLE_FEATURE, geometry: null }],
+    };
+    const adapter = withFixedGeoJson(createRoadN13Adapter(), geojson);
+    const result = await runPipeline(adapter, CTX);
+
+    expect(result.aborted).toBeNull();
+    expect(result.counts.fetched).toBe(2);
+    expect(result.accepted).toHaveLength(1);
+    expect(result.quarantined).toHaveLength(1);
+    expect(result.quarantined[0]?.issues.some((i) => i.ruleCode === 'Q002')).toBe(true);
+  });
 });
 
 describe('ROAD_N13_DESCRIPTOR', () => {
