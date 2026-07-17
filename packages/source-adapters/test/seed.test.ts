@@ -19,6 +19,18 @@ describe('FIXED_NOTICES (sample mode)', () => {
     const joined = FIXED_NOTICES.join(' ');
     expect(joined).toContain('架空');
   });
+
+  it('is frozen so callers cannot mutate the shared wording', () => {
+    expect(Object.isFrozen(FIXED_NOTICES)).toBe(true);
+  });
+
+  it('does not hand the shared notices array to built seed assets', async () => {
+    const seed = await buildSampleSeed();
+    expect(seed.assets.length).toBeGreaterThan(0);
+    for (const asset of seed.assets) {
+      expect(asset.notices).not.toBe(FIXED_NOTICES);
+    }
+  });
 });
 
 describe('deterministicUuid', () => {

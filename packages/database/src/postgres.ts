@@ -34,12 +34,13 @@ type Sql = ReturnType<typeof neon>;
 /**
  * Distinct wording from sample-mode's seed.ts FIXED_NOTICES: production data
  * must never claim to be a fictional sample (Issue #2 Completion Criteria 4).
+ * Frozen: callers must not mutate the shared wording.
  */
-export const FIXED_NOTICES = [
+export const FIXED_NOTICES = Object.freeze([
   '本データは公開情報を機械的に整形した参考情報です。',
   '構造物の健全性・安全性・通行可否は判定していません。',
   '最新かつ正式な情報は原典および管理主体へ確認してください。',
-];
+]);
 
 /** Escapes %, _ and backslash so user input in ILIKE cannot inject wildcards. */
 export function escapeLikePattern(value: string): string {
@@ -104,7 +105,7 @@ function rowToDetail(row: Row, attrRows: readonly Row[]): AssetDetail {
       licenseUrl: (row['license_url'] as string | null) ?? null,
       redistribution: row['redistribution'] as AssetDetail['source']['redistribution'],
     },
-    notices: FIXED_NOTICES,
+    notices: [...FIXED_NOTICES],
   };
 }
 

@@ -17,13 +17,20 @@ export interface FetchTextOptions {
    * dependency — several 行政機関 CSVs (e.g. 熊本県橋梁データ) are CP932.
    */
   encoding?: string;
+  /**
+   * Abort the request if it has not completed within this budget (ms).
+   * Defaults to 30_000. Municipal endpoints occasionally stall mid-response;
+   * without a timeout the whole ingestion run would hang indefinitely.
+   */
+  timeoutMs?: number;
 }
 
 /** Fetches a URL as a raw Buffer over HTTPS (binary payloads: zip, xlsx, ...). */
 export function fetchBinaryOverHttps(
   url: string,
-  options: Pick<FetchTextOptions, 'ciphers'> = {},
+  options: Pick<FetchTextOptions, 'ciphers' | 'timeoutMs'> = {},
 ): Promise<Buffer> {
+  const timeoutMs = options.timeoutMs ?? 30_000;
   return new Promise((resolve, reject) => {
     const req = https.get(url, { ciphers: options.ciphers }, (res) => {
       const status = res.statusCode ?? 0;
@@ -36,6 +43,9 @@ export function fetchBinaryOverHttps(
       res.on('data', (chunk: Buffer) => chunks.push(chunk));
       res.on('end', () => resolve(Buffer.concat(chunks)));
       res.on('error', reject);
+    });
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`${url}: request timed out after ${timeoutMs}ms`));
     });
     req.on('error', reject);
   });

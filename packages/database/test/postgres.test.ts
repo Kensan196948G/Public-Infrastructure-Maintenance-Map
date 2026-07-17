@@ -15,6 +15,10 @@ describe('FIXED_NOTICES (production/Postgres path)', () => {
     expect(joined).toContain('健全性');
     expect(joined).toContain('原典');
   });
+
+  it('is frozen so callers cannot mutate the shared wording', () => {
+    expect(Object.isFrozen(FIXED_NOTICES)).toBe(true);
+  });
 });
 
 describe('escapeLikePattern', () => {
