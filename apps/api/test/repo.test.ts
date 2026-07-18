@@ -37,3 +37,29 @@ describe('getRepository (sample mode)', () => {
     expect(buildSampleSeedMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('getRepository (production guard, Issue #3)', () => {
+  it('refuses the sample fallback when requireDatabaseUrl is set but databaseUrl is absent', async () => {
+    const { getRepository } = await import('../src/repo.js');
+
+    await expect(getRepository({ ...CONFIG, requireDatabaseUrl: true })).rejects.toThrow(
+      /REQUIRE_DATABASE_URL/,
+    );
+    expect(buildSampleSeedMock).not.toHaveBeenCalled();
+  });
+
+  it('emits a one-time structured warning when falling back to sample mode', async () => {
+    buildSampleSeedMock.mockResolvedValue({ assets: [], sources: [] });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { getRepository } = await import('../src/repo.js');
+    await getRepository(CONFIG);
+    await getRepository(CONFIG);
+
+    const fallbackWarnings = warnSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('sample_mode_fallback'),
+    );
+    expect(fallbackWarnings).toHaveLength(1);
+    warnSpy.mockRestore();
+  });
+});
