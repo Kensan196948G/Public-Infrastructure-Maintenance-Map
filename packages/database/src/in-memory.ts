@@ -7,7 +7,12 @@ import type {
 } from '@pimm/contracts';
 import { decodeCursor, encodeCursor } from './cursor.js';
 import { bboxIntersects, geometryBBox } from './geo.js';
-import type { AssetQueryFilters, AssetRepository, AssetSearchInput } from './repository.js';
+import type {
+  AssetExportInput,
+  AssetQueryFilters,
+  AssetRepository,
+  AssetSearchInput,
+} from './repository.js';
 import { InvalidCursorError } from './repository.js';
 
 /** Case/width-insensitive match target for keyword search. */
@@ -104,7 +109,7 @@ export class InMemoryAssetRepository implements AssetRepository {
     return Promise.resolve(this.sources.find((s) => s.slug === slug && s.enabled) ?? null);
   }
 
-  exportAssets(input: AssetSearchInput): Promise<AssetDetail[]> {
+  exportAssets(input: AssetExportInput): Promise<AssetDetail[]> {
     const filtered = this.assets.filter((a) => matches(a, input));
     return Promise.resolve(filtered.slice(0, input.limit));
   }

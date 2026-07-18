@@ -120,4 +120,16 @@ describe('exportAssets', () => {
     expect(res).toHaveLength(1);
     expect(res[0]!.source.licenseName).toBe('CC-BY-4.0');
   });
+
+  it('is a single bounded pull with no cursor pagination (Issue #9)', async () => {
+    // Export takes AssetExportInput (no cursor): a generous limit returns every
+    // match in one call, so there is no cursor to respect or accidentally ignore.
+    const repo = repoWith([
+      makeAsset({ name: 'A橋' }),
+      makeAsset({ name: 'B橋' }),
+      makeAsset({ name: 'C橋' }),
+    ]);
+    const res = await repo.exportAssets({ limit: 1000 });
+    expect(res).toHaveLength(3);
+  });
 });

@@ -25,7 +25,12 @@ import type {
   PublishSummary,
 } from './publisher.js';
 import { decideRunStatus, dedupeBySourceRecordId } from './publisher.js';
-import type { AssetQueryFilters, AssetRepository, AssetSearchInput } from './repository.js';
+import type {
+  AssetExportInput,
+  AssetQueryFilters,
+  AssetRepository,
+  AssetSearchInput,
+} from './repository.js';
 import { InvalidCursorError } from './repository.js';
 
 type Row = Record<string, unknown>;
@@ -286,7 +291,7 @@ export class PostgresAssetRepository implements AssetRepository {
     return sources.find((s) => s.slug === slug) ?? null;
   }
 
-  async exportAssets(input: AssetSearchInput): Promise<AssetDetail[]> {
+  async exportAssets(input: AssetExportInput): Promise<AssetDetail[]> {
     // Bulk detail + bulk attributes: 2 queries total regardless of row count,
     // instead of 2*N round-trips (each row previously called getAssetById).
     const rows = (await this.sql`
