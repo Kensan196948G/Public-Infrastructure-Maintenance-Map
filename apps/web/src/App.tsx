@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { AssetSummary, AssetType, BBox, QualityStatus } from '@pimm/contracts';
-import { useAssetDetail, useAssets, useSources } from './api/hooks.js';
+import { useAssetDetail, useAssets, useHealth, useSources } from './api/hooks.js';
+import { AuditLogDialog } from './components/AuditLogDialog.js';
 import { DisclaimerBanner } from './components/DisclaimerBanner.js';
 import { DetailPanel } from './components/DetailPanel.js';
 import { FilterPanel } from './components/FilterPanel.js';
 import { MapView } from './components/MapView.js';
 import { NoticeDialog } from './components/NoticeDialog.js';
 import { ResultList } from './components/ResultList.js';
+import { SettingsDialog } from './components/SettingsDialog.js';
 import { SourcesDialog } from './components/SourcesDialog.js';
 import { parseUrlState, serializeUrlState } from './lib/url-state.js';
 
@@ -31,6 +33,8 @@ export function App() {
   const [focusPoint, setFocusPoint] = useState<[number, number] | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   // Keep the shareable URL in sync with filters and viewport (FR-07).
   useEffect(() => {
@@ -41,7 +45,9 @@ export function App() {
 
   const assetsQuery = useAssets({ bbox, types, quality, q });
   const detailQuery = useAssetDetail(selectedId);
-  const sourcesQuery = useSources(sourcesOpen);
+  // Sources feed three views (catalogue, settings summary, audit status).
+  const sourcesQuery = useSources(sourcesOpen || settingsOpen || auditOpen);
+  const healthQuery = useHealth(settingsOpen);
 
   const items = assetsQuery.data?.items ?? [];
 
@@ -105,6 +111,12 @@ export function App() {
         <button type="button" className="header-link" onClick={() => setNoticeOpen(true)}>
           ℹ️ 利用上の注意
         </button>
+        <button type="button" className="header-link" onClick={() => setAuditOpen(true)}>
+          📋 監査ログ
+        </button>
+        <button type="button" className="header-link" onClick={() => setSettingsOpen(true)}>
+          ⚙️ システム設定
+        </button>
       </header>
 
       <DisclaimerBanner onOpenNotice={() => setNoticeOpen(true)} />
@@ -161,6 +173,25 @@ export function App() {
       ) : null}
 
       {noticeOpen ? <NoticeDialog onClose={() => setNoticeOpen(false)} /> : null}
+
+      {auditOpen ? (
+        <AuditLogDialog
+          sources={sourcesQuery.data?.items ?? []}
+          isLoading={sourcesQuery.isLoading}
+          isError={sourcesQuery.isError}
+          onClose={() => setAuditOpen(false)}
+        />
+      ) : null}
+
+      {settingsOpen ? (
+        <SettingsDialog
+          health={healthQuery.data ?? null}
+          sources={sourcesQuery.data?.items ?? []}
+          isLoading={sourcesQuery.isLoading || healthQuery.isLoading}
+          isError={healthQuery.isError}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

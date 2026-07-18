@@ -3,6 +3,7 @@ import type {
   AssetDetail,
   AssetSearchResponse,
   AssetType,
+  HealthResponse,
   QualityStatus,
   SourceListResponse,
 } from '@pimm/contracts';
@@ -111,6 +112,10 @@ export class ApiClient {
 
   getSources(): Promise<SourceListResponse> {
     return getJson<SourceListResponse>(`${this.base}/sources`, this.fetchImpl);
+  }
+
+  getHealth(): Promise<HealthResponse> {
+    return getJson<HealthResponse>(`${this.base}/health`, this.fetchImpl);
   }
 }
 

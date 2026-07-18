@@ -482,3 +482,46 @@ a {
     max-height: 40%;
   }
 }
+
+/* ---------- Admin views (settings / audit log) ---------- */
+.admin-note {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  background: var(--color-warn-bg);
+  border: 1px solid var(--color-warn-border);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-section {
+  margin-bottom: 20px;
+}
+
+.settings-heading {
+  font-size: 14px;
+  margin: 0 0 8px;
+  color: var(--color-text);
+}
+
+.settings-list {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.settings-list dt {
+  color: var(--color-muted);
+}
+
+.settings-list dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.settings-list .mono {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 13px;
+}
