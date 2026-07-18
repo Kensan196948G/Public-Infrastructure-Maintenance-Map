@@ -4,10 +4,19 @@
  * Unparseable input yields null — never a guessed date.
  */
 
-const ERA_BASE: Record<string, number> = {
-  令和: 2018,
-  平成: 1988,
-  昭和: 1925,
+/**
+ * Japanese era → Gregorian mapping. `base` is (era-year 1 - 1) so year =
+ * base + eraYear. `maxYear` bounds the era's real span so out-of-range years
+ * (e.g. 令和0年, or 平成32年 which never existed) are rejected rather than
+ * silently converted (Issue #11):
+ *   昭和1..64 (〜1989-01-07), 平成1..31 (〜2019-04-30), 令和1.. (継続中).
+ * 令和's cap is a generous sanity bound — the era is ongoing and datasets carry
+ * planned future years (e.g. 「令和8年登録予定」).
+ */
+const ERA: Record<string, { base: number; maxYear: number }> = {
+  令和: { base: 2018, maxYear: 99 },
+  平成: { base: 1988, maxYear: 31 },
+  昭和: { base: 1925, maxYear: 64 },
 };
 
 function toUtcIso(year: number, month: number, day: number): string | null {
@@ -50,10 +59,12 @@ export function parseDateToIso(raw: string | null | undefined): string | null {
   const wareki = /^(令和|平成|昭和)(元|\d{1,2})年(\d{1,2})月(\d{1,2})日$/u.exec(input);
   if (wareki) {
     const era = wareki[1];
-    const base = era === undefined ? undefined : ERA_BASE[era];
-    if (base === undefined) return null;
+    const spec = era === undefined ? undefined : ERA[era];
+    if (spec === undefined) return null;
     const eraYear = wareki[2] === '元' ? 1 : Number(wareki[2]);
-    return toUtcIso(base + eraYear, Number(wareki[3]), Number(wareki[4]));
+    // Reject era years outside the era's real span (e.g. 令和0年, 平成32年).
+    if (eraYear < 1 || eraYear > spec.maxYear) return null;
+    return toUtcIso(spec.base + eraYear, Number(wareki[3]), Number(wareki[4]));
   }
 
   return null;

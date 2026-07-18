@@ -14,8 +14,14 @@ export function contentHash(content: string): Promise<string> {
   return sha256Hex(content);
 }
 
-/** Order-insensitive fingerprint of the observed property keys (Q008). */
+/**
+ * Order-insensitive fingerprint of the observed property keys (Q008).
+ * Serialized with JSON.stringify rather than a delimiter-joined string so keys
+ * that themselves contain the delimiter (newline, comma, ...) cannot make two
+ * distinct key sets collide onto the same fingerprint (Issue #11): JSON quotes
+ * and escapes every element, giving an injective encoding of the sorted array.
+ */
 export function schemaFingerprint(keys: readonly string[]): Promise<string> {
-  const canonical = [...new Set(keys)].sort().join('\n');
+  const canonical = JSON.stringify([...new Set(keys)].sort());
   return sha256Hex(canonical);
 }
