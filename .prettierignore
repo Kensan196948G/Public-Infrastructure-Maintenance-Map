@@ -3,5 +3,11 @@ dist/
 coverage/
 pnpm-lock.yaml
 .claude/
+.opencode/
+.omo/
+.agents/
+.codex/
+opencode.json
+opencode.json.bak-*
 *.md
 migrations/*.sql
