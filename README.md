@@ -3,7 +3,7 @@
 > **公開インフラ維持管理マップ**  
 > 橋梁・道路・港湾・河川・公共施設などの公開情報を、一つの地図から探せるWeb GISです。
 
-[![Status](https://img.shields.io/badge/status-planning-blue)](#-現在の状態)
+[![Status](https://img.shields.io/badge/status-MVP%20Phase%201%2F2-blue)](#-現在の状態)
 [![Data](https://img.shields.io/badge/data-public%20only-green)](#-データ方針)
 [![Platform](https://img.shields.io/badge/platform-Cloudflare%20%2B%20Neon-orange)](#%EF%B8%8F-システム構成)
 
@@ -177,9 +177,11 @@ pnpm dev
 | `pnpm lint` | コード規約検査 |
 | `pnpm typecheck` | 型検査 |
 | `pnpm test` | 単体・統合テスト |
-| `pnpm test:e2e` | ブラウザE2Eテスト |
-| `pnpm db:migrate` | DB migration |
-| `pnpm ingest --source <slug>` | 指定公開ソースの取込 |
+| `pnpm db:migrate` | DB migration（`DATABASE_URL` 必須） |
+| `pnpm ingest --source <slug>` | 指定公開ソースの取込（dry-run。`--publish` で本番DBへ反映） |
+
+> [!NOTE]
+> ブラウザE2E（Playwright）は未導入です（Issue #12）。導入後に `pnpm test:e2e` を追加します。
 
 ## 🔐 環境変数
 
@@ -229,10 +231,11 @@ flowchart LR
 | アイデア・目的整理 | ✅ 完了 |
 | 要件定義 | ✅ 初版作成 |
 | 詳細設計 | ✅ 初版作成 |
-| MVP基盤実装（Phase 1: サンプルデータ・地図・検索・詳細・出典表示） | ✅ 初版実装（テスト141件通過） |
-| 公開データソース選定 | ⏳ 未着手 |
-| 実データ取込・管理画面（Phase 2） | ⏳ 未着手 |
-| UAT・公開判定 | ⏳ 未着手 |
+| MVP基盤実装（Phase 1: 地図・検索・詳細・出典表示・取込パイプライン・公開API・CI） | ✅ 実装済（全パッケージでテスト整備、CIで検証） |
+| 公開データソース選定・アダプター実装 | ✅ 実データ4ソース・3種別（公共施設／橋梁／道路） |
+| 実データ取込→公開DB反映（Phase 2） | ✅ 取込→Publish経路を実装（`ingest --publish`。実Neon統合テストは Issue #8） |
+| 管理API・管理画面（UI-05/06/07・FR-13/14） | ⏳ 未実装（Issue #4） |
+| UAT・本番公開判定 | ⏳ 未着手 |
 
 ### 実装済みの内容（Phase 1）
 
@@ -240,13 +243,13 @@ flowchart LR
 - 🧹 取込パイプライン: 正規化（NFC/和暦→ISO 8601/SI単位/座標系→WGS 84）+ 品質ルール Q001〜Q008 + 重複検出
 - 🔌 REST API `/api/v1`: bbox検索・詳細・集計・ソース一覧・CSV/GeoJSONエクスポート（ライセンス制御付き）
 - 🔒 セキュリティ: レート制限・セキュリティヘッダ・CSV数式インジェクション対策・Problem Details（RFC 9457）
-- ⚙️ CI: lint / format / typecheck / test / build / secret scan（gitleaks）
+- ⚙️ CI: lint / format / typecheck / test / build / secret scan（gitleaks）/ 依存脆弱性スキャン（osv-scanner）
 
-### 既知の制約（Phase 1 時点）
+### 既知の制約（現時点）
 
-- 🐘 `PostgresAssetRepository` は型検査のみ（実 Neon/PostGIS への統合テスト未実施）。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作
-- 📥 `pnpm ingest --source <slug>` は dry-run（品質レポートのみ。DB への公開反映は Phase 2）
-- 🛠️ 管理 API・管理画面（UI-05/06/07）、Playwright E2E は未着手
+- 🐘 `PostgresAssetRepository`／`PostgresAssetPublisher` は型検査・単体テスト済だが、実 Neon/PostGIS への統合テストは未整備（Issue #8）。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作する
+- 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。実データでの一気通貫検証は Issue #8 で整備予定
+- 🛠️ 管理 API・管理画面（UI-05/06/07、取込監査の閲覧・公開停止制御）、Playwright E2E は未着手（Issue #4／#12）
 - 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。分散実行環境では isolate 数だけ実効上限が緩むため、本番環境の実効的な防御層は Cloudflare WAF が担う
 
 ## 🗺️ ロードマップ
