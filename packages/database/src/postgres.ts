@@ -312,11 +312,16 @@ export class PostgresAssetRepository implements AssetRepository {
 
 /**
  * Write side of the Postgres port (see publisher.ts for the interface contract
- * and the dependency-direction rationale). Two-phase because Neon's transaction()
- * is non-interactive — it ships a fixed batch of queries in one HTTP round trip,
- * so a query cannot branch on an earlier query's result within the same
- * transaction. Asset ids for the upsert must therefore be resolved *before*
- * the transaction starts, not derived from an ON CONFLICT RETURNING inside it.
+ * and the dependency-direction rationale).
+ *
+ * Neon's transaction() is non-interactive — it ships a fixed batch of queries in
+ * one HTTP round trip, so a query cannot branch on an earlier query's returned
+ * value within the same transaction. Rather than resolve asset ids *before* the
+ * transaction (which opened a TOCTOU window between the check and the write — see
+ * Issue #16), child rows resolve their parent asset id by natural key
+ * (source_id, source_record_id) inside the transaction, after the upsert has run.
+ * That id is whatever actually persisted, so two concurrent publishes for the
+ * same source can no longer attach attributes/issues to a minted-but-discarded id.
  */
 export class PostgresAssetPublisher implements AssetPublisher {
   private readonly sql: Sql;
@@ -400,31 +405,11 @@ export class PostgresAssetPublisher implements AssetPublisher {
   async publish(input: PublishInput): Promise<PublishSummary> {
     if (input.aborted) return this.publishAborted(input, input.aborted);
 
-    // Same-batch sourceRecordId collisions must be resolved before Phase 1
-    // resolves ids (see dedupeBySourceRecordId for why); the count folds into
-    // droppedCount so it stays visible in ingestion_runs instead of silently
-    // vanishing.
+    // Same-batch sourceRecordId collisions must be collapsed before the upsert
+    // (see dedupeBySourceRecordId for why); the count folds into droppedCount so
+    // it stays visible in ingestion_runs instead of silently vanishing.
     const { assets: dedupedAssets, duplicateCount: duplicateInBatchCount } = dedupeBySourceRecordId(
       input.assets,
-    );
-
-    // Phase 1 (outside the transaction): resolve which assets already exist so
-    // the upsert below can target a stable id — new rows get a fresh uuid,
-    // existing ones keep theirs so joins from asset_attributes/quality_issues
-    // (built in the same batch) stay correct after the transaction commits.
-    const recordIds = dedupedAssets.map((a) => a.sourceRecordId);
-    const existingRows =
-      recordIds.length > 0
-        ? ((await this.sql`
-            SELECT id, source_record_id FROM infrastructure_assets
-             WHERE source_id = ${input.sourceId} AND source_record_id = ANY(${recordIds})
-          `) as Row[])
-        : [];
-    const existingIdByRecordId = new Map(
-      existingRows.map((r) => [String(r['source_record_id']), String(r['id'])]),
-    );
-    const assetIds = dedupedAssets.map(
-      (a) => existingIdByRecordId.get(a.sourceRecordId) ?? crypto.randomUUID(),
     );
 
     const now = new Date().toISOString();
@@ -435,9 +420,26 @@ export class PostgresAssetPublisher implements AssetPublisher {
     const droppedCount = input.droppedCount + duplicateInBatchCount;
     const status = decideRunStatus({ droppedCount, hiddenCount });
 
-    // Phase 2: one non-interactive transaction — every statement here is fixed
-    // up front (ids already resolved above), so no statement needs to see
-    // another's result.
+    // Candidate ids for *new* assets only. The upsert never lists id in its
+    // UPDATE SET, so an existing (source_id, source_record_id) row keeps its id
+    // on conflict and this freshly minted uuid is discarded. Child rows never
+    // reference these — they resolve the asset id by natural key inside the
+    // transaction (assetIdByRecord), which is what makes concurrent publishes for
+    // the same source safe: whichever transaction wins the ON CONFLICT race, the
+    // child write reads the id that actually persisted (Issue #16).
+    const newAssetIds = dedupedAssets.map(() => crypto.randomUUID());
+
+    // Scalar subquery resolving an asset's surrogate id from its natural key,
+    // evaluated inside the transaction after the upsert above has run. The
+    // unique (source_id, source_record_id) index guarantees at most one row.
+    const assetIdByRecord = (sourceRecordId: string) => this.sql`(
+      SELECT id FROM infrastructure_assets
+       WHERE source_id = ${input.sourceId} AND source_record_id = ${sourceRecordId}
+    )`;
+
+    // One non-interactive transaction — every statement is fixed up front. Parent
+    // upserts precede the child writes that reference them by natural key, so no
+    // statement needs to read another's returned value (Neon can't branch on results).
     const queries = [
       this.sql`
         INSERT INTO dataset_versions
@@ -453,7 +455,7 @@ export class PostgresAssetPublisher implements AssetPublisher {
            prefecture_code, municipality_code, managing_authority, source_updated_at,
            quality_status, publication_status, updated_at)
         VALUES
-          (${assetIds[i]}, ${input.sourceId}, ${asset.sourceRecordId}, ${asset.assetType},
+          (${newAssetIds[i]}, ${input.sourceId}, ${asset.sourceRecordId}, ${asset.assetType},
            ${asset.name ?? asset.originalName ?? '(名称不明)'}, ${asset.originalName},
            ST_SetSRID(ST_GeomFromGeoJSON(${JSON.stringify(asset.geometry)}), 4326),
            ${asset.prefectureCode}, ${asset.municipalityCode}, ${asset.managingAuthority},
@@ -472,30 +474,36 @@ export class PostgresAssetPublisher implements AssetPublisher {
           publication_status = EXCLUDED.publication_status,
           updated_at = EXCLUDED.updated_at`,
       ),
-      // Attributes are replaced wholesale per asset rather than diffed —
-      // simpler, and cheap at this data volume.
-      ...assetIds.map((id) => this.sql`DELETE FROM asset_attributes WHERE asset_id = ${id}`),
-      ...dedupedAssets.flatMap((asset, i) =>
+      // Attributes are replaced wholesale per asset rather than diffed — simpler,
+      // and cheap at this data volume. Deleted by natural key so the delete hits
+      // the row that actually persisted, not a minted-but-discarded id.
+      ...dedupedAssets.map(
+        (asset) => this.sql`
+        DELETE FROM asset_attributes WHERE asset_id = ${assetIdByRecord(asset.sourceRecordId)}`,
+      ),
+      ...dedupedAssets.flatMap((asset) =>
         asset.attributes.map(
           (attr) => this.sql`
         INSERT INTO asset_attributes
           (asset_id, key, value_text, value_number, unit, original_value, source_label)
-        VALUES
-          (${assetIds[i]}, ${attr.key}, ${attr.valueText}, ${attr.valueNumber}, ${attr.unit},
-           ${attr.originalValue}, ${attr.sourceLabel})`,
+        SELECT a.id, ${attr.key}, ${attr.valueText}, ${attr.valueNumber}, ${attr.unit},
+               ${attr.originalValue}, ${attr.sourceLabel}
+          FROM infrastructure_assets a
+         WHERE a.source_id = ${input.sourceId} AND a.source_record_id = ${asset.sourceRecordId}`,
         ),
       ),
       // Issues are appended per run, not reconciled against prior-run issues on
       // the same asset — resolution-status lifecycle management (dismiss,
       // accept, mark fixed) is the admin-console's job (Issue #4), not publish's.
-      ...dedupedAssets.flatMap((asset, i) =>
+      ...dedupedAssets.flatMap((asset) =>
         asset.issues.map(
           (issue) => this.sql`
         INSERT INTO quality_issues
           (run_id, asset_id, rule_code, severity, field_name, observed_value, message, resolution_status)
-        VALUES
-          (${ingestionRunId}, ${assetIds[i]}, ${issue.ruleCode}, ${issue.severity},
-           ${issue.fieldName}, ${issue.observedValue}, ${issue.message}, ${issue.resolutionStatus})`,
+        SELECT ${ingestionRunId}, a.id, ${issue.ruleCode}, ${issue.severity},
+               ${issue.fieldName}, ${issue.observedValue}, ${issue.message}, ${issue.resolutionStatus}
+          FROM infrastructure_assets a
+         WHERE a.source_id = ${input.sourceId} AND a.source_record_id = ${asset.sourceRecordId}`,
         ),
       ),
       this.sql`
