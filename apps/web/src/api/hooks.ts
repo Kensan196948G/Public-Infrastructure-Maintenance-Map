@@ -74,3 +74,13 @@ export function useSources(enabled: boolean, client: ApiClient = defaultClient) 
     staleTime: 5 * 60_000,
   });
 }
+
+/** Fetches API liveness/version for the system-settings view; only when opened. */
+export function useHealth(enabled: boolean, client: ApiClient = defaultClient) {
+  return useQuery({
+    queryKey: ['health'],
+    enabled,
+    queryFn: () => client.getHealth(),
+    staleTime: 60_000,
+  });
+}
