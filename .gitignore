@@ -23,6 +23,10 @@ state.json
 reports/
 .claude/settings.local.json
 
+# Agent session artifacts (plans, evidence, local config)
+.omo/
+.opencode/
+
 # Editor / OS
 .DS_Store
 Thumbs.db

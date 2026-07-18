@@ -1,6 +1,8 @@
 import type { SourceAdapter } from '@pimm/ingestion-core';
+import { createBridgeKumamotoAdapter } from './adapters/bridge-kumamoto.js';
 import { createFacilityOsakaParkAdapter } from './adapters/facility-osaka-park.js';
 import { createFacilityOsakaToiletAdapter } from './adapters/facility-osaka-toilet.js';
+import { createRoadN13Adapter } from './adapters/road-n13.js';
 import { createSampleBridgesAdapter } from './adapters/sample-bridges.js';
 import { createSampleFacilitiesAdapter } from './adapters/sample-facilities.js';
 import { createSampleRiversAdapter } from './adapters/sample-rivers.js';
@@ -13,6 +15,8 @@ export function listAdapters(): SourceAdapter<never>[] {
     createSampleFacilitiesAdapter(),
     createFacilityOsakaParkAdapter(),
     createFacilityOsakaToiletAdapter(),
+    createBridgeKumamotoAdapter(),
+    createRoadN13Adapter(),
   ] as SourceAdapter<never>[];
 }
 

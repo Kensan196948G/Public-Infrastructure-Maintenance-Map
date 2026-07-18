@@ -6,10 +6,32 @@ import {
   createSampleFacilitiesAdapter,
   deterministicUuid,
 } from '../src/index.js';
+import { FIXED_NOTICES } from '../src/seed.js';
 import { getAdapterBySlug, listAdapters } from '../src/registry.js';
 import { runPipeline } from '@pimm/ingestion-core';
 
 const CTX = { now: '2026-07-16T00:00:00.000Z' };
+
+// Issue #2 Completion Criteria 4: sample モードは実データと取り違えられない
+// よう、架空サンプルであることを常に開示しなければならない。
+describe('FIXED_NOTICES (sample mode)', () => {
+  it('always discloses that the data is a fictional sample', () => {
+    const joined = FIXED_NOTICES.join(' ');
+    expect(joined).toContain('架空');
+  });
+
+  it('is frozen so callers cannot mutate the shared wording', () => {
+    expect(Object.isFrozen(FIXED_NOTICES)).toBe(true);
+  });
+
+  it('does not hand the shared notices array to built seed assets', async () => {
+    const seed = await buildSampleSeed();
+    expect(seed.assets.length).toBeGreaterThan(0);
+    for (const asset of seed.assets) {
+      expect(asset.notices).not.toBe(FIXED_NOTICES);
+    }
+  });
+});
 
 describe('deterministicUuid', () => {
   it('is stable and RFC 4122 shaped', async () => {
@@ -96,20 +118,24 @@ describe('buildSampleSeed', () => {
 });
 
 describe('registry', () => {
-  it('lists five adapters and resolves by slug', () => {
+  it('lists seven adapters and resolves by slug', () => {
     expect(
       listAdapters()
         .map((a) => a.descriptor.slug)
         .sort(),
     ).toEqual([
+      'bridge-kumamoto',
       'facility-osaka-park',
       'facility-osaka-toilet',
+      'road-n13',
       'sample-bridges',
       'sample-facilities',
       'sample-rivers',
     ]);
     expect(getAdapterBySlug('sample-rivers')?.descriptor.redistribution).toBe('prohibited');
     expect(getAdapterBySlug('facility-osaka-park')?.descriptor.crs).toBe('EPSG:6668');
+    expect(getAdapterBySlug('bridge-kumamoto')?.descriptor.crs).toBe('EPSG:6668');
+    expect(getAdapterBySlug('road-n13')?.descriptor.redistribution).toBe('allowed');
     expect(getAdapterBySlug('nope')).toBeNull();
   });
 });
