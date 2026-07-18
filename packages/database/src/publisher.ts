@@ -94,10 +94,12 @@ export function decideRunStatus(counts: {
 
 /**
  * Collapses same-batch sourceRecordId collisions to one row (last-write-wins)
- * before publish() resolves asset ids — otherwise two records sharing a key
- * would each mint their own id, but only one can occupy the database's
- * (source_id, source_record_id) unique slot, leaving the loser's
- * attributes/issues pointing at an id that was never inserted. Pure so the
+ * before publish() writes. Without this, two records sharing a key resolve to
+ * the same (source_id, source_record_id) asset row, and their per-record
+ * DELETE-then-INSERT attribute writes interleave against that one row: a second
+ * insert of a shared key hits asset_attributes' (asset_id, key) primary key —
+ * a duplicate-key error that aborts the whole transaction — while differing
+ * keys merge two record versions instead of cleanly replacing one. Pure so the
  * collision count is unit-testable without a database.
  */
 export function dedupeBySourceRecordId(assets: readonly PublishableAsset[]): {
