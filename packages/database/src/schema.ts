@@ -3,9 +3,11 @@
  * PostGIS geometry uses a custom type; spatial predicates are written
  * as explicit SQL in postgres.ts (設計書 §2: PostGIS 部分は明示 SQL).
  */
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   char,
+  check,
   customType,
   integer,
   jsonb,
@@ -81,7 +83,14 @@ export const infrastructureAssets = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('uq_assets_source_record').on(t.sourceId, t.sourceRecordId)],
+  (t) => [
+    uniqueIndex('uq_assets_source_record').on(t.sourceId, t.sourceRecordId),
+    // Cross-column check mirrored from migrations/0002 (Issue #10).
+    check(
+      'chk_assets_valid_range',
+      sql`${t.validFrom} IS NULL OR ${t.validTo} IS NULL OR ${t.validTo} >= ${t.validFrom}`,
+    ),
+  ],
 );
 
 export const assetAttributes = pgTable('asset_attributes', {
@@ -96,36 +105,56 @@ export const assetAttributes = pgTable('asset_attributes', {
   sourceLabel: text('source_label'),
 });
 
-export const ingestionRuns = pgTable('ingestion_runs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  sourceId: uuid('source_id')
-    .notNull()
-    .references(() => dataSources.id),
-  datasetVersionId: uuid('dataset_version_id').references(() => datasetVersions.id),
-  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
-  finishedAt: timestamp('finished_at', { withTimezone: true }),
-  status: varchar('status', { length: 20 }).notNull().default('running'),
-  fetchedCount: integer('fetched_count').notNull().default(0),
-  acceptedCount: integer('accepted_count').notNull().default(0),
-  rejectedCount: integer('rejected_count').notNull().default(0),
-  warningCount: integer('warning_count').notNull().default(0),
-  errorCode: varchar('error_code', { length: 50 }),
-  errorSummary: text('error_summary'),
-  triggeredBy: text('triggered_by'),
-  correlationId: text('correlation_id'),
-});
+export const ingestionRuns = pgTable(
+  'ingestion_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceId: uuid('source_id')
+      .notNull()
+      .references(() => dataSources.id),
+    datasetVersionId: uuid('dataset_version_id').references(() => datasetVersions.id),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    status: varchar('status', { length: 20 }).notNull().default('running'),
+    fetchedCount: integer('fetched_count').notNull().default(0),
+    acceptedCount: integer('accepted_count').notNull().default(0),
+    rejectedCount: integer('rejected_count').notNull().default(0),
+    warningCount: integer('warning_count').notNull().default(0),
+    errorCode: varchar('error_code', { length: 50 }),
+    errorSummary: text('error_summary'),
+    triggeredBy: text('triggered_by'),
+    correlationId: text('correlation_id'),
+  },
+  (t) => [
+    // Cross-column check mirrored from migrations/0002 (Issue #10): a finished run records finished_at.
+    check(
+      'chk_ingestion_runs_finished_at',
+      sql`${t.status} = 'running' OR ${t.finishedAt} IS NOT NULL`,
+    ),
+  ],
+);
 
-export const qualityIssues = pgTable('quality_issues', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  runId: uuid('run_id').references(() => ingestionRuns.id),
-  assetId: uuid('asset_id').references(() => infrastructureAssets.id, { onDelete: 'cascade' }),
-  ruleCode: varchar('rule_code', { length: 10 }).notNull(),
-  severity: varchar('severity', { length: 10 }).notNull(),
-  fieldName: text('field_name'),
-  observedValue: text('observed_value'),
-  message: text('message').notNull(),
-  resolutionStatus: varchar('resolution_status', { length: 20 }).notNull().default('open'),
-  resolvedBy: text('resolved_by'),
-  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const qualityIssues = pgTable(
+  'quality_issues',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runId: uuid('run_id').references(() => ingestionRuns.id),
+    assetId: uuid('asset_id').references(() => infrastructureAssets.id, { onDelete: 'cascade' }),
+    ruleCode: varchar('rule_code', { length: 10 }).notNull(),
+    severity: varchar('severity', { length: 10 }).notNull(),
+    fieldName: text('field_name'),
+    observedValue: text('observed_value'),
+    message: text('message').notNull(),
+    resolutionStatus: varchar('resolution_status', { length: 20 }).notNull().default('open'),
+    resolvedBy: text('resolved_by'),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Cross-column check mirrored from migrations/0002 (Issue #10): an open issue carries no resolved_at.
+    check(
+      'chk_quality_issues_open_unresolved',
+      sql`${t.resolutionStatus} <> 'open' OR ${t.resolvedAt} IS NULL`,
+    ),
+  ],
+);
