@@ -4,12 +4,15 @@ import type {
   AssetSearchResponse,
   AssetType,
   AdminAssetPublication,
+  AdminCreateSource,
   AdminIngestionDetail,
   AdminIngestionList,
   AdminIngestionRun,
   AdminQualityIssueList,
   AdminQualityIssueRecord,
   AdminResolveQualityIssue,
+  AdminSourceResponse,
+  AdminUpdateSource,
   HealthResponse,
   QualityStatus,
   SourceListResponse,
@@ -89,6 +92,16 @@ async function postJson<T>(url: string, fetchImpl: FetchLike, body?: unknown): P
   return parseJsonResponse<T>(res);
 }
 
+async function patchJson<T>(url: string, fetchImpl: FetchLike, body: unknown): Promise<T> {
+  const res = await fetchImpl(url, {
+    method: 'PATCH',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    credentials: 'include',
+  });
+  return parseJsonResponse<T>(res);
+}
+
 async function parseJsonResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let detail = res.statusText;
@@ -141,6 +154,18 @@ export class ApiClient {
 
   getHealth(): Promise<HealthResponse> {
     return getJson<HealthResponse>(`${this.base}/health`, this.fetchImpl);
+  }
+
+  createAdminSource(input: AdminCreateSource): Promise<AdminSourceResponse> {
+    return postJson<AdminSourceResponse>(`${this.base}/admin/sources`, this.fetchImpl, input);
+  }
+
+  updateAdminSource(slug: string, input: AdminUpdateSource): Promise<AdminSourceResponse> {
+    return patchJson<AdminSourceResponse>(
+      `${this.base}/admin/sources/${encodeURIComponent(slug)}`,
+      this.fetchImpl,
+      input,
+    );
   }
 
   startAdminIngestion(sourceSlug: string): Promise<AdminIngestionRun> {

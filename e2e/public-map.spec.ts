@@ -38,3 +38,33 @@ test('supports public type filtering', async ({ page }) => {
   await expect(page.getByRole('button', { name: /みらい大橋/ })).toHaveCount(0);
   await expect(page).not.toHaveURL(/types=bridge/);
 });
+
+test('opens the system settings source-management form', async ({ page }) => {
+  await page.goto('/');
+  await waitForPublicResults(page);
+
+  await page.getByRole('button', { name: /システム設定/ }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'システム設定' });
+  await expect(dialog).toContainText('データソース登録 / 編集');
+  await expect(dialog.getByLabel('対象')).toBeVisible();
+  await expect(dialog.getByLabel('slug')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /登録/ })).toBeVisible();
+});
+
+test('rejects unauthenticated source registration from the settings form', async ({ page }) => {
+  await page.goto('/');
+  await waitForPublicResults(page);
+
+  await page.getByRole('button', { name: /システム設定/ }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'システム設定' });
+  await dialog.getByLabel('slug').fill('e2e-source');
+  await dialog.getByLabel('名称').fill('E2E ソース');
+  await dialog.getByLabel('提供者').fill('E2E 提供者');
+  await dialog.getByLabel('URL', { exact: true }).fill('https://example.com/e2e.geojson');
+  await dialog.getByLabel('ライセンス', { exact: true }).fill('CC-BY-4.0');
+  await dialog.getByRole('button', { name: /登録/ }).click();
+
+  await expect(dialog.getByRole('alert')).toContainText('401');
+});

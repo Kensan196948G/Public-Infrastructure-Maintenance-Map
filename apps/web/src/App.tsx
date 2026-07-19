@@ -174,6 +174,7 @@ export function App() {
           sources={sourcesQuery.data?.items ?? []}
           isLoading={sourcesQuery.isLoading || healthQuery.isLoading}
           isError={healthQuery.isError}
+          onSourcesChanged={() => void sourcesQuery.refetch()}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}
