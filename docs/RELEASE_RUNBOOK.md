@@ -233,7 +233,7 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 
 | Issue | 内容 | 本番判断への影響 |
 |---|---|---|
-| 🔒 #4 | 管理画面（Cloudflare Access 認証）は段階実装中 | 管理APIの認証・基本操作に加え、監査ログ画面から取込履歴一覧・未解決品質issue一覧・取込記録作成・取込詳細確認・理由入力付きの品質issue解決、詳細画面から理由入力付きの資産公開停止までは接続済み。ソース登録/編集UIと管理系E2Eは次フェーズ。公開 GET API のみで運用する前提なら**公開リリースは可** |
+| 🔒 #4 | 管理画面（Cloudflare Access 認証）は段階実装中 | 管理APIの認証・基本操作に加え、監査ログ画面から取込履歴一覧・未解決品質issue一覧・取込記録作成・取込詳細確認・理由入力付きの品質issue解決、詳細画面から理由入力付きの個別資産公開停止までは接続済み。ライセンス変更時の一括公開停止UI、ソース登録/編集UI、管理系E2Eは次フェーズ。公開 GET API のみで運用する前提なら**公開リリースは可** |
 | 🧪 #12 | E2E（Playwright）**公開地図の主要回帰を導入済み** | `pnpm test:e2e` / CI `🗺️ Playwright E2E` で初期表示・検索・詳細表示・種別フィルタを検証。公開前は手動スモークテスト（§4④）も併用 |
 | 🗄️ #8 | `PostgresAssetRepository` の PostGIS 統合テストを CI に導入 | 読取経路の公開可視性・検索・bbox・`getAssetById` 契約は `🗄️ PostGIS integration` で検証。Neon dev branch を使った publish 一気通貫は #5/#16 で継続 |
 | 🔄 #5 / #16 | Publish 経路の PostGIS 統合テストを CI に導入 | `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証。実 Neon への流し込みは本 runbook の手動手順で実施 |

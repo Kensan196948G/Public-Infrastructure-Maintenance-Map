@@ -162,10 +162,10 @@ describe('AuditLogDialog', () => {
 
     await waitFor(() => {
       expect(client.listAdminIngestions).toHaveBeenCalledWith(20);
+      expect(screen.getByRole('button', { name: /sample-bridges \/ running/ })).toBeInTheDocument();
+      expect(screen.getByText('公開停止中です')).toBeInTheDocument();
     });
     expect(client.listAdminQualityIssues).toHaveBeenCalledWith(50);
-    expect(screen.getByRole('button', { name: /sample-bridges \/ running/ })).toBeInTheDocument();
-    expect(screen.getByText('公開停止中です')).toBeInTheDocument();
   });
 
   it('shows an authorization message when the admin API rejects the user', async () => {

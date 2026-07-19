@@ -7,6 +7,8 @@ import { cors } from 'hono/cors';
 import type { ErrorCode, ProblemDetails } from '@pimm/contracts';
 import {
   AdminCreateSourceSchema,
+  AdminIngestionListQuerySchema,
+  AdminQualityIssueListQuerySchema,
   AdminResolveQualityIssueSchema,
   AdminSuspendAssetSchema,
   AdminUpdateSourceSchema,
@@ -281,11 +283,13 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.get('/ingestions', async (c) => {
-    const limit = Number(c.req.query('limit') ?? '20');
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-      return fail(c, 'VALIDATION_ERROR', 'limit は 1〜100 の整数で指定してください');
+    const parsed = AdminIngestionListQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'limit は 1〜100 の整数で指定してください', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
     }
-    return c.json(await repo.listIngestions(limit));
+    return c.json(await repo.listIngestions(parsed.data.limit));
   });
 
   admin.get('/ingestions/:id', async (c) => {
@@ -297,11 +301,13 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.get('/quality-issues', async (c) => {
-    const limit = Number(c.req.query('limit') ?? '50');
-    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
-      return fail(c, 'VALIDATION_ERROR', 'limit は 1〜200 の整数で指定してください');
+    const parsed = AdminQualityIssueListQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'limit は 1〜200 の整数で指定してください', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
     }
-    return c.json(await repo.listQualityIssues(limit));
+    return c.json(await repo.listQualityIssues(parsed.data.limit));
   });
 
   admin.post('/quality-issues/:id/resolve', async (c) => {

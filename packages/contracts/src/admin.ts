@@ -61,6 +61,16 @@ export const AdminSuspendAssetSchema = z.object({
 });
 export type AdminSuspendAsset = z.infer<typeof AdminSuspendAssetSchema>;
 
+export const AdminIngestionListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type AdminIngestionListQuery = z.infer<typeof AdminIngestionListQuerySchema>;
+
+export const AdminQualityIssueListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type AdminQualityIssueListQuery = z.infer<typeof AdminQualityIssueListQuerySchema>;
+
 export const AdminIngestionRunSchema = z.object({
   id: z.uuid(),
   sourceSlug: z.string(),
