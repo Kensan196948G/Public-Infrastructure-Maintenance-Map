@@ -1,5 +1,10 @@
 import { useState } from 'react';
-import type { AdminIngestionDetail, AdminIngestionRun, SourceInfo } from '@pimm/contracts';
+import type {
+  AdminIngestionDetail,
+  AdminIngestionRun,
+  AdminQualityIssueRecord,
+  SourceInfo,
+} from '@pimm/contracts';
 import { ApiClient, ApiError } from '../api/client.js';
 import { formatDate } from '../lib/format.js';
 import { Modal } from './Modal.js';
@@ -13,6 +18,7 @@ interface AuditLogDialogProps {
 }
 
 const defaultClient = new ApiClient();
+type ResolutionChoice = 'accepted' | 'fixed' | 'dismissed';
 
 /**
  * 監査ログ (取込監査, FR-13) — ソース単位の取込状況に加え、
@@ -29,6 +35,9 @@ export function AuditLogDialog({
   const [latestRun, setLatestRun] = useState<AdminIngestionRun | null>(null);
   const [detail, setDetail] = useState<AdminIngestionDetail | null>(null);
   const [adminError, setAdminError] = useState<string | null>(null);
+  const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
+  const [resolutionChoices, setResolutionChoices] = useState<Record<string, ResolutionChoice>>({});
+  const [pendingIssueId, setPendingIssueId] = useState<string | null>(null);
 
   const startIngestion = async (source: SourceInfo) => {
     setPendingSlug(source.slug);
@@ -48,6 +57,48 @@ export function AuditLogDialog({
       }
     } finally {
       setPendingSlug(null);
+    }
+  };
+
+  const setIssueReason = (issueId: string, reason: string) => {
+    setResolutionInputs((prev) => ({ ...prev, [issueId]: reason }));
+  };
+
+  const setIssueResolution = (issueId: string, resolutionStatus: ResolutionChoice) => {
+    setResolutionChoices((prev) => ({ ...prev, [issueId]: resolutionStatus }));
+  };
+
+  const resolveIssue = async (issue: AdminQualityIssueRecord) => {
+    const reason = (resolutionInputs[issue.id] ?? '').trim();
+    if (reason === '') return;
+    setPendingIssueId(issue.id);
+    setAdminError(null);
+    try {
+      const resolved = await client.resolveAdminQualityIssue(issue.id, {
+        resolutionStatus: resolutionChoices[issue.id] ?? 'accepted',
+        reason,
+      });
+      setDetail((prev) =>
+        prev
+          ? {
+              ...prev,
+              qualityIssues: prev.qualityIssues.map((item) =>
+                item.id === resolved.id ? resolved : item,
+              ),
+            }
+          : prev,
+      );
+      setIssueReason(issue.id, '');
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        setAdminError(
+          '品質issueの解決には管理APIへのアクセス権が必要です。Cloudflare Access の認証状態を確認してください。',
+        );
+      } else {
+        setAdminError('品質issueの解決を記録できませんでした。');
+      }
+    } finally {
+      setPendingIssueId(null);
     }
   };
 
@@ -135,6 +186,71 @@ export function AuditLogDialog({
               {detail ? `${detail.qualityIssues.length.toLocaleString('ja-JP')} 件` : '読み込み中…'}
             </dd>
           </dl>
+          {detail ? (
+            <div className="admin-quality-issues">
+              <h4 className="admin-subheading">品質issue</h4>
+              {detail.qualityIssues.length === 0 ? (
+                <p className="detail-empty">未解決の品質issueはありません。</p>
+              ) : (
+                <ul className="admin-issue-list">
+                  {detail.qualityIssues.map((issue) => {
+                    const isOpen = issue.resolutionStatus === 'open';
+                    const reason = resolutionInputs[issue.id] ?? '';
+                    return (
+                      <li key={issue.id} className="admin-issue-item">
+                        <div className="admin-issue-main">
+                          <span className="quality-badge admin-issue-code">{issue.ruleCode}</span>
+                          <span>{issue.message}</span>
+                        </div>
+                        <div className="source-provider">
+                          {issue.severity} / {issue.resolutionStatus}
+                        </div>
+                        {isOpen ? (
+                          <div className="admin-issue-resolution">
+                            <label>
+                              <span className="visually-hidden">解決ステータス</span>
+                              <select
+                                className="admin-issue-select"
+                                value={resolutionChoices[issue.id] ?? 'accepted'}
+                                onChange={(event) =>
+                                  setIssueResolution(
+                                    issue.id,
+                                    event.currentTarget.value as ResolutionChoice,
+                                  )
+                                }
+                              >
+                                <option value="accepted">受容</option>
+                                <option value="fixed">修正済み</option>
+                                <option value="dismissed">却下</option>
+                              </select>
+                            </label>
+                            <label className="admin-issue-reason-label">
+                              理由
+                              <input
+                                className="admin-issue-reason"
+                                value={reason}
+                                onChange={(event) =>
+                                  setIssueReason(issue.id, event.currentTarget.value)
+                                }
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              className="admin-action-button"
+                              disabled={pendingIssueId !== null || reason.trim() === ''}
+                              onClick={() => void resolveIssue(issue)}
+                            >
+                              {pendingIssueId === issue.id ? '記録中…' : '解決を記録'}
+                            </button>
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
         </section>
       ) : null}
     </Modal>

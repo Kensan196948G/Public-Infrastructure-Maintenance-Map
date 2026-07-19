@@ -6,6 +6,8 @@ import type {
   AdminAssetPublication,
   AdminIngestionDetail,
   AdminIngestionRun,
+  AdminQualityIssueRecord,
+  AdminResolveQualityIssue,
   HealthResponse,
   QualityStatus,
   SourceListResponse,
@@ -157,6 +159,17 @@ export class ApiClient {
       `${this.base}/admin/assets/${encodeURIComponent(id)}/suspend`,
       this.fetchImpl,
       { reason },
+    );
+  }
+
+  resolveAdminQualityIssue(
+    id: string,
+    input: AdminResolveQualityIssue,
+  ): Promise<AdminQualityIssueRecord> {
+    return postJson<AdminQualityIssueRecord>(
+      `${this.base}/admin/quality-issues/${encodeURIComponent(id)}/resolve`,
+      this.fetchImpl,
+      input,
     );
   }
 }

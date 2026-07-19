@@ -59,12 +59,22 @@ const detail: AdminIngestionDetail = {
 
 type AdminClient = Pick<ApiClient, 'startAdminIngestion' | 'getAdminIngestion'>;
 
-function makeClient(overrides: Partial<AdminClient> = {}): ApiClient & AdminClient {
+type AuditClient = Pick<
+  ApiClient,
+  'startAdminIngestion' | 'getAdminIngestion' | 'resolveAdminQualityIssue'
+>;
+
+function makeClient(overrides: Partial<AuditClient> = {}): ApiClient & AuditClient {
   return {
     startAdminIngestion: vi.fn(async () => run),
     getAdminIngestion: vi.fn(async () => detail),
+    resolveAdminQualityIssue: vi.fn(async () => ({
+      ...detail.qualityIssues[0]!,
+      resolutionStatus: 'accepted',
+      resolvedAt: '2026-07-19T00:10:00.000Z',
+    })),
     ...overrides,
-  } as unknown as ApiClient & AdminClient;
+  } as unknown as ApiClient & AuditClient;
 }
 
 function setup(overrides: Partial<Parameters<typeof AuditLogDialog>[0]> = {}) {
@@ -117,6 +127,7 @@ describe('AuditLogDialog', () => {
     expect(client.getAdminIngestion).toHaveBeenCalledWith(run.id);
     expect(screen.getByText(run.id)).toBeInTheDocument();
     expect(screen.getByText('1 件')).toBeInTheDocument();
+    expect(screen.getByText('更新日が不明です')).toBeInTheDocument();
   });
 
   it('shows an authorization message when the admin API rejects the user', async () => {
@@ -133,6 +144,51 @@ describe('AuditLogDialog', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/アクセス権がありません/);
+    });
+  });
+
+  it('requires a reason before resolving a quality issue', async () => {
+    const user = userEvent.setup();
+    const client = makeClient();
+    setup({ client });
+
+    await user.click(screen.getByRole('button', { name: '取込記録' }));
+    await screen.findByText('更新日が不明です');
+
+    const resolveButton = screen.getByRole('button', { name: '解決を記録' });
+    expect(resolveButton).toBeDisabled();
+    await user.type(screen.getByLabelText('理由'), '原典で確認済み');
+    await user.selectOptions(screen.getByLabelText('解決ステータス'), 'accepted');
+    await user.click(resolveButton);
+
+    await waitFor(() => {
+      expect(client.resolveAdminQualityIssue).toHaveBeenCalledWith(detail.qualityIssues[0]!.id, {
+        resolutionStatus: 'accepted',
+        reason: '原典で確認済み',
+      });
+    });
+    expect(screen.getByText(/accepted/)).toBeInTheDocument();
+  });
+
+  it('shows an authorization message when resolving a quality issue is rejected', async () => {
+    const user = userEvent.setup();
+    setup({
+      client: makeClient({
+        resolveAdminQualityIssue: vi.fn(async () => {
+          throw new ApiError(403, 'Forbidden');
+        }),
+      }),
+    });
+
+    await user.click(screen.getByRole('button', { name: '取込記録' }));
+    await screen.findByText('更新日が不明です');
+    await user.type(screen.getByLabelText('理由'), '確認中');
+    await user.click(screen.getByRole('button', { name: '解決を記録' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /品質issueの解決には管理APIへのアクセス権/,
+      );
     });
   });
 });

@@ -127,4 +127,41 @@ describe('ApiClient', () => {
       body: JSON.stringify({ reason: payload.reason }),
     });
   });
+
+  it('posts a resolution decision to the admin quality issue endpoint', async () => {
+    const payload = {
+      id: '00000000-0000-4000-8000-000000000101',
+      assetId: null,
+      runId: '00000000-0000-4000-8000-000000000001',
+      ruleCode: 'Q005',
+      severity: 'warning',
+      fieldName: 'source_updated_at',
+      observedValue: null,
+      message: '更新日が不明です',
+      resolutionStatus: 'accepted',
+      createdAt: '2026-07-19T00:00:00.000Z',
+      resolvedAt: '2026-07-19T00:10:00.000Z',
+    };
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(payload),
+    );
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(
+      client.resolveAdminQualityIssue(payload.id, {
+        resolutionStatus: 'accepted',
+        reason: '原典で確認済み',
+      }),
+    ).resolves.toEqual(payload);
+
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      '/api/v1/admin/quality-issues/00000000-0000-4000-8000-000000000101/resolve',
+    );
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ resolutionStatus: 'accepted', reason: '原典で確認済み' }),
+    });
+  });
 });
