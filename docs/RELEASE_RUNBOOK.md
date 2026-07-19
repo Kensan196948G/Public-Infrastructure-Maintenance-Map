@@ -236,6 +236,7 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 | 🔒 #4 | 管理画面（Cloudflare Access 認証）**未実装** | 管理系操作は不可。公開 GET API のみで運用する前提なら**公開リリースは可**。管理機能提供は次フェーズ |
 | 🧪 #12 | E2E（Playwright）**公開地図の主要回帰を導入済み** | `pnpm test:e2e` / CI `🗺️ Playwright E2E` で初期表示・検索・詳細表示・種別フィルタを検証。公開前は手動スモークテスト（§4④）も併用 |
 | 🗄️ #8 | `PostgresAssetRepository` の PostGIS 統合テストを CI に導入 | 読取経路の公開可視性・検索・bbox・`getAssetById` 契約は `🗄️ PostGIS integration` で検証。Neon dev branch を使った publish 一気通貫は #5/#16 で継続 |
+| 🔄 #5 / #16 | Publish 経路の PostGIS 統合テストを CI に導入 | `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証。実 Neon への流し込みは本 runbook の手動手順で実施 |
 
 ### 🚦 リリース判断（Deploy Gate）
 
