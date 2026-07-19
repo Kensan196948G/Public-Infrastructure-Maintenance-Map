@@ -180,6 +180,8 @@ pnpm dev
 | `pnpm test:e2e` | 初回のみ `pnpm exec playwright install --with-deps chromium` を実行してから、Playwright Chromium で API/Web dev server を起動し、公開地図の初期表示・検索・詳細表示・種別フィルタを検証 |
 | `pnpm db:migrate` | DB migration（`DATABASE_URL` 必須） |
 | `pnpm ingest --source <slug>` | 指定公開ソースの取込（dry-run。`--publish` で本番DBへ反映） |
+| `pnpm smoke:cloudflare` | Cloudflare 本番 custom domain / DNS / API / Web / 管理API未認証拒否のスモーク検証 |
+| `pnpm smoke:cloudflare:preflight` | `wrangler login` とサブドメインDNS反映前に、zone NS と検証手順だけを安全に事前確認 |
 
 ## 🔐 環境変数
 
@@ -239,21 +241,19 @@ flowchart LR
 | MVP基盤実装（Phase 1: 地図・検索・詳細・出典表示・取込パイプライン・公開API・CI） | ✅ 実装済（全パッケージでテスト整備、CIで検証） |
 | 公開データソース選定・アダプター実装 | ✅ 実データ4ソース・3種別（公共施設／橋梁／道路） |
 | 実データ取込→公開DB反映（Phase 2） | ✅ 取込→Publish経路を実装（`ingest --publish`）。CI の disposable PostGIS で publish→公開Repository参照を検証 |
-| 管理API・管理画面（UI-05/06/07・FR-13/14） | 🟡 管理APIゲート・基本操作・取込履歴一覧・未解決品質issue一覧・監査ログ画面からの取込記録/詳細確認/品質issue解決・詳細画面からの個別資産公開停止・システム設定からのソース登録/編集とソース単位の公開一括停止を実装済。実 Cloudflare Access 認証済み管理E2Eは継続（Issue #4） |
-| UAT・本番公開判定 | ⏳ 未着手 |
+| 管理API・管理画面（UI-05/06/07・FR-13/14） | ✅ 管理APIゲート・基本操作・取込履歴一覧・未解決品質issue一覧・監査ログ画面からの取込記録/詳細確認/品質issue解決・詳細画面からの個別資産公開停止・システム設定からのソース登録/編集とソース単位の公開一括停止を実装済（Issue #4 完了） |
+| UAT・本番公開判定 | 🟡 Cloudflare custom domain / Access 本番スモーク検証を Issue #38 で追跡。本番URL反映後に `pnpm smoke:cloudflare` を実行して判定 |
 
 ### 🚦 Release Gate（2026-07-19）
 
 | 項目 | 状態 |
 | --- | --- |
-| 🧩 統合検証PR | Draft PR [#32](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/pull/32) で #31 → #26 → #27 → #28 → #29 → #30 の順に統合済み |
-| ✅ 統合CI | #32 で lint / typecheck / test / build、Playwright E2E、PostGIS integration、publish PostGIS integration、secret scan、dependency scan、CodeRabbit が成功 |
-| 🧭 個別PR | #31、#26、#27、#28、#29、#30 は個別PRとして Ready / CLEAN / CI success。通常マージはユーザーの `Y` 判定後に実施 |
+| ✅ main CI | 最新 main run `29676725911` で lint / typecheck / test / build、Playwright E2E、PostGIS integration、publish PostGIS integration、secret scan、dependency scan が成功 |
+| ✅ 管理UI Scope | PR #34 / #36 / #37 を main へ統合済み。Issue #4 は完了・close 済み |
+| 🧪 本番スモーク | Issue [#38](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/issues/38) で `pimm.mirai-dx-platform.com` / `api.pimm.mirai-dx-platform.com` のDNS、Cloudflare Access、公開API/Webを検証 |
 | 🚫 本番操作 | Cloudflare / Neon 本番デプロイ、production migration、production publish は未実行。実行はリリース手順書に従い人間が手動で行う |
 
-推奨マージ順序は **#31 → #26 → #27 → #28 → #29 → #30** です。#32 は統合後状態の検証用Draft PRであり、通常の個別PRマージ承認を置き換えません。
-
-PR [#33](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/pull/33) は main に統合済みです。PR #34 では、監査ログ画面から管理APIの取込履歴一覧・未解決品質issue一覧を取得できる機能を追加し、Issue #4 の履歴閲覧/品質issue一覧の残Scopeを縮小しています。
+本番デプロイ前の機械確認は `pnpm smoke:cloudflare` で行います。Cloudflare認証またはサブドメインDNS反映前の事前確認だけなら `pnpm smoke:cloudflare:preflight` を使用します。
 
 ### 実装済みの内容（Phase 1）
 
@@ -268,7 +268,7 @@ PR [#33](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/
 - 🐘 `PostgresAssetRepository` は CI の `🗄️ PostGIS integration` で公開可視性・検索・bbox・`getAssetById` 契約を検証する。`PostgresAssetPublisher` の実 Neon 一気通貫検証は Issue #5/#16 の残課題。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作する
 - 🐘 `PostgresAssetPublisher` は CI の `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証する。Neon dev branch での接続先固有検証はリリース手順で実施
 - 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。公開前は runbook の手動 publish と API 件数突合を必須とする
-- 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込履歴一覧、取込詳細、未解決品質issue一覧、品質issue解決、個別資産公開停止、ソース単位の公開一括停止の基本経路を実装済み。監査ログ画面からは取込履歴・未解決品質issueの一覧更新、ソース別の取込記録作成、取込詳細確認、理由入力付きの品質issue解決、詳細画面からは理由入力付きの個別資産公開停止、システム設定画面からはソース登録/編集とライセンス変更時の公開一括停止まで接続済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタと管理系の未認証拒否を導入済み。実 Cloudflare Access 認証済み管理E2Eは継続課題（Issue #4）
+- 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込履歴一覧、取込詳細、未解決品質issue一覧、品質issue解決、個別資産公開停止、ソース単位の公開一括停止の基本経路を実装済み。監査ログ画面からは取込履歴・未解決品質issueの一覧更新、ソース別の取込記録作成、取込詳細確認、理由入力付きの品質issue解決、詳細画面からは理由入力付きの個別資産公開停止、システム設定画面からはソース登録/編集とライセンス変更時の公開一括停止まで接続済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタと管理系の未認証拒否を導入済み。実 Cloudflare Access 認証済み管理E2Eと custom domain 本番スモークは Issue #38 で追跡
 - 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。分散実行環境では isolate 数だけ実効上限が緩むため、本番環境の実効的な防御層は Cloudflare WAF が担う
 
 ## 🗺️ ロードマップ
