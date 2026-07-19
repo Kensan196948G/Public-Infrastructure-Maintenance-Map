@@ -10,3 +10,14 @@ RATE_LIMIT_PER_MINUTE = "120"
 
 [observability]
 enabled = true
+
+[env.production]
+name = "pimm-api-production"
+
+[[env.production.routes]]
+pattern = "api.pimm.mirai-dx-platform.com"
+custom_domain = true
+
+[env.production.vars]
+ALLOWED_ORIGIN = "https://pimm.mirai-dx-platform.com"
+RATE_LIMIT_PER_MINUTE = "120"

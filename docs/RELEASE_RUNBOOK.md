@@ -39,6 +39,7 @@ flowchart LR
 | 🔑 対象 | 用途 | 権限レベルの目安 |
 |---|---|---|
 | Cloudflare アカウント | Workers デプロイ・Pages 配信・WAF | Workers/Pages の編集権限 |
+| Cloudflare zone | `mirai-dx-platform.com` の DNS / Custom Domain | Zone DNS 編集権限 |
 | Neon アカウント | PostgreSQL + PostGIS 本番DB | 対象プロジェクトの接続文字列発行・ブランチ操作 |
 | GitHub | ソース・CI（`.github/workflows/ci.yml`） | リポジトリ書込 |
 
@@ -60,13 +61,22 @@ flowchart LR
 | 🔢 `RATE_LIMIT_PER_MINUTE` | `wrangler.toml` `[vars]`（既定 `"120"`） | 任意 | in-isolate レート制限の分あたり上限 |
 | 🔐 `ADMIN_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの書込操作を許可するカンマ区切り許可リスト |
 | 👀 `REVIEWER_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの閲覧・品質レビュー操作を許可するカンマ区切り許可リスト |
-| 🌐 `VITE_API_BASE_URL` | **Cloudflare Pages の環境変数**（ビルド時） | 別オリジン配信時のみ | Web と API を別ドメインで配信する場合に API ベースURLを指定。未設定なら同一オリジン `/api/v1` |
+| 🌐 `VITE_API_BASE_URL` | **Cloudflare Pages の環境変数**（ビルド時） | 本番 | `https://api.pimm.mirai-dx-platform.com/api/v1`。未設定なら同一オリジン `/api/v1` |
 
 > ✅ **実装状況の注記**
 > - Web 向け環境変数は `VITE_API_BASE_URL`（`apps/web/src/api/client.ts`）に統一済みです。Pages 側でも `VITE_API_BASE_URL` を設定してください。
 > - `REQUIRE_DATABASE_URL`（未設定時 fail-fast）と、サンプルモード転落時の `sample_mode_fallback` 警告ログは実装済みです。本番では `REQUIRE_DATABASE_URL=true` を設定し、DB未接続のままサンプルデータを公開しない運用にしてください。
 >
 > 🔒 管理APIのロールはリクエストヘッダではなく、`ADMIN_EMAILS` / `REVIEWER_EMAILS` のサーバ側許可リストからのみ解決します。Cloudflare Accessは外側の認証境界、アプリはメール許可リストによる認可境界として扱います。
+
+### 2.4 Cloudflare 本番ドメイン
+
+| 用途 | Hostname | 設定場所 |
+|---|---|---|
+| 🌐 WebUI | `pimm.mirai-dx-platform.com` | Cloudflare Pages custom domain |
+| ⚙️ API | `api.pimm.mirai-dx-platform.com` | `apps/api/wrangler.toml` production env custom domain |
+
+> ⚠️ ドメイン/route変更は本番影響を持つため、`docs/CLOUDFLARE_DOMAIN_APPROVAL.md` のApproval PRで承認された範囲だけ実行します。
 
 ---
 
@@ -138,16 +148,20 @@ DATABASE_URL='postgresql://...sslmode=require' pnpm ingest --source <slug> --pub
 ```bash
 # 初回・変更時のみ: Worker Secret を登録
 cd apps/api
-wrangler secret put DATABASE_URL   # プロンプトに Neon 接続文字列を貼付
+wrangler secret put DATABASE_URL --env production   # プロンプトに Neon 接続文字列を貼付
+wrangler secret put REQUIRE_DATABASE_URL --env production
+wrangler secret put CLOUDFLARE_ACCESS_AUD --env production
+wrangler secret put ADMIN_EMAILS --env production
+wrangler secret put REVIEWER_EMAILS --env production
 
 # デプロイ
-wrangler deploy                    # wrangler.toml (name=pimm-api) を使用
+wrangler deploy --env production   # api.pimm.mirai-dx-platform.com を使用
 ```
 
 - 🔎 **検証（health）**:
 
 ```bash
-curl -fsS https://<pimm-api-domain>/api/v1/health
+curl -fsS https://api.pimm.mirai-dx-platform.com/api/v1/health
 # 期待: {"status":"ok", ...}
 ```
 
@@ -156,12 +170,14 @@ curl -fsS https://<pimm-api-domain>/api/v1/health
 ### ④ 🌐 Web（Cloudflare Pages）デプロイ
 
 ```bash
-# 別オリジン配信なら Pages のビルド環境変数に VITE_API_BASE_URL を設定
+# Pages のビルド環境変数に設定:
+# VITE_API_BASE_URL=https://api.pimm.mirai-dx-platform.com/api/v1
 pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 # 生成物 apps/web/dist/ を Cloudflare Pages へ配信（Pages プロジェクト設定に従う）
 ```
 
 - 🔎 **検証**: 本番 URL を開き、地図表示・アセット検索・詳細表示が動作し、`/api/v1` への通信が本番 API を指すことを確認。
+- 🌐 **本番URL**: `https://pimm.mirai-dx-platform.com`
 - 💡 dev では Vite(:5173) が `/api` → `http://localhost:8787` を proxy しますが、これは開発専用です。
 
 ---
