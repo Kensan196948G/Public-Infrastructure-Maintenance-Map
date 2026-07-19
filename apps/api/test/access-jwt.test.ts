@@ -151,6 +151,14 @@ describe('verifyAccessJwt', () => {
     expect(result).toEqual({ ok: false, reason: 'unknown kid' });
   });
 
+  it('rejects rather than throws when the signature is not valid base64url', async () => {
+    stubJwks();
+    const [header, payload] = (await signToken()).split('.');
+    // Length % 4 === 1 is undecodable; atob throws on it.
+    const result = await verifyAccessJwt(`${header}.${payload}.A`, options);
+    expect(result).toEqual({ ok: false, reason: 'undecodable signature' });
+  });
+
   it('fails closed when the JWKS endpoint is unavailable', async () => {
     stubJwks({ ok: false, status: 503 });
     const result = await verifyAccessJwt(await signToken(), options);

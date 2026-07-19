@@ -114,10 +114,20 @@ export async function verifyAccessJwt(
   }
   if (!key) return { ok: false, reason: 'unknown kid' };
 
+  // Decoding is fallible on malformed base64url, and an unauthenticated caller
+  // must never be able to turn that into a 500 — the status difference would
+  // itself leak that the kid resolved to a published key.
+  let signature: Uint8Array;
+  try {
+    signature = decodeBase64Url(encodedSignature);
+  } catch {
+    return { ok: false, reason: 'undecodable signature' };
+  }
+
   const verified = await crypto.subtle.verify(
     'RSASSA-PKCS1-v1_5',
     key,
-    decodeBase64Url(encodedSignature),
+    signature,
     new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`),
   );
   if (!verified) return { ok: false, reason: 'signature mismatch' };
