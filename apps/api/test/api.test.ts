@@ -197,6 +197,27 @@ describe('GET /api/v1/export (license control, FR-08)', () => {
 });
 
 describe('admin API (Issue #4 / FR-13 / FR-14)', () => {
+  it('allows credentialed cross-origin admin preflight when ALLOWED_ORIGIN is fixed', async () => {
+    const seed = await buildSampleSeed();
+    const corsApp = createApp(new InMemoryAssetRepository(seed), {
+      ...CONFIG,
+      allowedOrigin: 'https://admin.example.com',
+    }) as unknown as Hono<never>;
+
+    const res = await corsApp.request('http://localhost/api/v1/admin/sources/sample/ingestions', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://admin.example.com',
+        'Access-Control-Request-Method': 'POST',
+      },
+    });
+
+    expect(res.status).toBe(204);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://admin.example.com');
+    expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(res.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+  });
+
   it('rejects unauthenticated access before any admin operation', async () => {
     const res = await get('/api/v1/admin/ingestions/00000000-0000-4000-8000-000000000000');
     expect(res.status).toBe(401);

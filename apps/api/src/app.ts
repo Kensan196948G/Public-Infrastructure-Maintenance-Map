@@ -110,7 +110,14 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     );
   });
 
-  app.use('*', cors({ origin: config.allowedOrigin, allowMethods: ['GET', 'OPTIONS'] }));
+  app.use(
+    '*',
+    cors({
+      origin: config.allowedOrigin,
+      allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+      credentials: config.allowedOrigin !== '*',
+    }),
+  );
 
   // Rate limit (429 + Retry-After). CF-Connecting-IP is set by Cloudflare's edge
   // and cannot be spoofed by clients; X-Forwarded-For is only a local-dev fallback

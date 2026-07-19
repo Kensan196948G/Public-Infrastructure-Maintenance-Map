@@ -125,11 +125,13 @@ async function main(): Promise<void> {
   } else {
     const publisher = new PostgresAssetPublisher(databaseUrl);
     const sourceId = await publisher.ensureDataSource(selectedAdapter.descriptor);
-    const { assets: acceptedAssets, droppedCount: droppedAccepted } = await toPublishableAssets(
-      result.accepted,
-    );
-    const { assets: quarantinedAssets, droppedCount: droppedQuarantined } =
-      await toPublishableAssets(result.quarantined);
+    const [
+      { assets: acceptedAssets, droppedCount: droppedAccepted },
+      { assets: quarantinedAssets, droppedCount: droppedQuarantined },
+    ] = await Promise.all([
+      toPublishableAssets(result.accepted),
+      toPublishableAssets(result.quarantined),
+    ]);
 
     const summary = await publisher.publish({
       sourceId,

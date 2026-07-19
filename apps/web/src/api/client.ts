@@ -66,9 +66,10 @@ function buildAssetQuery(params: AssetSearchParams): string {
 /** Injectable fetch so tests can supply a stub without touching globals. */
 export type FetchLike = typeof fetch;
 
-async function getJson<T>(url: string, fetchImpl: FetchLike): Promise<T> {
+async function getJson<T>(url: string, fetchImpl: FetchLike, init?: RequestInit): Promise<T> {
   const res = await fetchImpl(url, {
     headers: { Accept: 'application/json' },
+    ...init,
   });
   return parseJsonResponse<T>(res);
 }
@@ -151,6 +152,7 @@ export class ApiClient {
     return getJson<AdminIngestionDetail>(
       `${this.base}/admin/ingestions/${encodeURIComponent(id)}`,
       this.fetchImpl,
+      { credentials: 'include' },
     );
   }
 

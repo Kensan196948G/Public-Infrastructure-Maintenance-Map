@@ -214,9 +214,9 @@ function buildConditions(sql: Sql, filters: AssetQueryFilters) {
 }
 
 export class PostgresAssetRepository implements AssetRepository {
-  private readonly sql: Sql;
+  private readonly sql: TransactionalSql;
 
-  constructor(databaseUrl: string, sqlOverride?: Sql) {
+  constructor(databaseUrl: string, sqlOverride?: TransactionalSql) {
     this.sql = sqlOverride ?? neon(databaseUrl);
   }
 
@@ -491,20 +491,33 @@ export class PostgresAssetRepository implements AssetRepository {
     input: AdminSuspendAsset,
     actor: string,
   ): Promise<AdminAssetPublication | null> {
-    const rows = (await this.sql`
+    const updateAsset = (sql: Sql) => sql`
       UPDATE infrastructure_assets SET
         publication_status = 'suspended',
         updated_at = now()
       WHERE id = ${id}
-      RETURNING id, publication_status`) as Row[];
-    const row = rows[0];
-    if (!row) return null;
-    await this.sql`
+      RETURNING id, publication_status`;
+    const insertIssue = (sql: Sql) => sql`
       INSERT INTO quality_issues
         (asset_id, rule_code, severity, field_name, observed_value, message, resolution_status)
-      VALUES
-        (${id}, 'Q007', 'warning', 'publication_status', 'suspended',
-         ${`Publication suspended by ${actor}: ${input.reason}`}, 'open')`;
+      SELECT ${id}, 'Q007', 'warning', 'publication_status', 'suspended',
+             ${`Publication suspended by ${actor}: ${input.reason}`}, 'open'
+       WHERE EXISTS (SELECT 1 FROM infrastructure_assets WHERE id = ${id})`;
+    let rows: Row[] = [];
+    if (this.sql.begin) {
+      await this.sql.begin(async (tx) => {
+        rows = (await updateAsset(tx)) as Row[];
+        if (rows.length > 0) await insertIssue(tx);
+      });
+    } else {
+      const [updatedRows] = await this.sql.transaction([
+        updateAsset(this.sql),
+        insertIssue(this.sql),
+      ]);
+      rows = updatedRows as Row[];
+    }
+    const row = rows[0];
+    if (!row) return null;
     return {
       id: String(row['id']),
       publicationStatus: row['publication_status'] as AdminAssetPublication['publicationStatus'],

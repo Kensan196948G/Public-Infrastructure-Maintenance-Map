@@ -177,7 +177,7 @@ pnpm dev
 | `pnpm lint` | コード規約検査 |
 | `pnpm typecheck` | 型検査 |
 | `pnpm test` | 単体・統合テスト |
-| `pnpm test:e2e` | Playwright Chromium で API/Web dev server を起動し、公開地図の初期表示・検索・詳細表示・種別フィルタを検証 |
+| `pnpm test:e2e` | 初回のみ `pnpm exec playwright install --with-deps chromium` を実行してから、Playwright Chromium で API/Web dev server を起動し、公開地図の初期表示・検索・詳細表示・種別フィルタを検証 |
 | `pnpm db:migrate` | DB migration（`DATABASE_URL` 必須） |
 | `pnpm ingest --source <slug>` | 指定公開ソースの取込（dry-run。`--publish` で本番DBへ反映） |
 
