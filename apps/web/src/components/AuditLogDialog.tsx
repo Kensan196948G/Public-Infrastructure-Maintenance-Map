@@ -33,8 +33,11 @@ export function AuditLogDialog({
 }: AuditLogDialogProps) {
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
   const [latestRun, setLatestRun] = useState<AdminIngestionRun | null>(null);
+  const [runs, setRuns] = useState<AdminIngestionRun[]>([]);
+  const [openIssues, setOpenIssues] = useState<AdminQualityIssueRecord[]>([]);
   const [detail, setDetail] = useState<AdminIngestionDetail | null>(null);
   const [adminError, setAdminError] = useState<string | null>(null);
+  const [isLoadingAdminLists, setIsLoadingAdminLists] = useState(false);
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
   const [resolutionChoices, setResolutionChoices] = useState<Record<string, ResolutionChoice>>({});
   const [pendingIssueId, setPendingIssueId] = useState<string | null>(null);
@@ -46,6 +49,7 @@ export function AuditLogDialog({
     try {
       const run = await client.startAdminIngestion(source.slug);
       setLatestRun(run);
+      setRuns((prev) => [run, ...prev.filter((item) => item.id !== run.id)].slice(0, 20));
       setDetail(await client.getAdminIngestion(run.id));
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
@@ -57,6 +61,43 @@ export function AuditLogDialog({
       }
     } finally {
       setPendingSlug(null);
+    }
+  };
+
+  const loadAdminLists = async () => {
+    setIsLoadingAdminLists(true);
+    setAdminError(null);
+    try {
+      const [runList, issueList] = await Promise.all([
+        client.listAdminIngestions(20),
+        client.listAdminQualityIssues(50),
+      ]);
+      setRuns(runList.items);
+      setOpenIssues(issueList.items);
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        setAdminError(
+          '管理一覧の閲覧には Cloudflare Access の管理者またはレビュー担当者権限が必要です。',
+        );
+      } else {
+        setAdminError('管理一覧を取得できませんでした。');
+      }
+    } finally {
+      setIsLoadingAdminLists(false);
+    }
+  };
+
+  const loadRunDetail = async (run: AdminIngestionRun) => {
+    setLatestRun(run);
+    setAdminError(null);
+    try {
+      setDetail(await client.getAdminIngestion(run.id));
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        setAdminError('取込詳細の閲覧権限がありません。');
+      } else {
+        setAdminError('取込詳細を取得できませんでした。');
+      }
     }
   };
 
@@ -165,6 +206,67 @@ export function AuditLogDialog({
           </table>
         </div>
       )}
+      <section className="admin-run-detail" aria-labelledby="admin-management-heading">
+        <div className="admin-section-header">
+          <h3 id="admin-management-heading" className="settings-heading">
+            管理一覧
+          </h3>
+          <button
+            type="button"
+            className="admin-action-button"
+            disabled={isLoadingAdminLists}
+            onClick={() => void loadAdminLists()}
+          >
+            {isLoadingAdminLists ? '読み込み中…' : '一覧を更新'}
+          </button>
+        </div>
+        <div className="admin-grid">
+          <div>
+            <h4 className="admin-subheading">取込履歴</h4>
+            {runs.length === 0 ? (
+              <p className="detail-empty">取込履歴はまだ読み込まれていません。</p>
+            ) : (
+              <ul className="admin-issue-list">
+                {runs.map((run) => (
+                  <li key={run.id} className="admin-issue-item">
+                    <button
+                      type="button"
+                      className="admin-link-button"
+                      onClick={() => void loadRunDetail(run)}
+                    >
+                      {run.sourceSlug} / {run.status}
+                    </button>
+                    <div className="source-provider">
+                      {formatDate(run.startedAt)} / 取得 {run.fetchedCount.toLocaleString('ja-JP')}
+                      件
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <h4 className="admin-subheading">未解決品質issue</h4>
+            {openIssues.length === 0 ? (
+              <p className="detail-empty">未解決issueはまだ読み込まれていません。</p>
+            ) : (
+              <ul className="admin-issue-list">
+                {openIssues.map((issue) => (
+                  <li key={issue.id} className="admin-issue-item">
+                    <div className="admin-issue-main">
+                      <span className="quality-badge admin-issue-code">{issue.ruleCode}</span>
+                      <span>{issue.message}</span>
+                    </div>
+                    <div className="source-provider">
+                      {issue.severity} / {formatDate(issue.createdAt)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
       {latestRun ? (
         <section className="admin-run-detail" aria-labelledby="admin-run-heading">
           <h3 id="admin-run-heading" className="settings-heading">

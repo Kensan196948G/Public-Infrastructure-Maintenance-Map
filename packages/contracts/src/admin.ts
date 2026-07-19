@@ -99,6 +99,16 @@ export const AdminIngestionDetailSchema = z.object({
 });
 export type AdminIngestionDetail = z.infer<typeof AdminIngestionDetailSchema>;
 
+export const AdminIngestionListSchema = z.object({
+  items: z.array(AdminIngestionRunSchema),
+});
+export type AdminIngestionList = z.infer<typeof AdminIngestionListSchema>;
+
+export const AdminQualityIssueListSchema = z.object({
+  items: z.array(AdminQualityIssueRecordSchema),
+});
+export type AdminQualityIssueList = z.infer<typeof AdminQualityIssueListSchema>;
+
 export const AdminAssetPublicationSchema = z.object({
   id: z.uuid(),
   publicationStatus: PublicationStatusSchema,

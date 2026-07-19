@@ -11,8 +11,10 @@ import type {
   AdminAssetPublication,
   AdminCreateSource,
   AdminIngestionDetail,
+  AdminIngestionList,
   AdminIngestionRun,
   AdminQualityIssueRecord,
+  AdminQualityIssueList,
   AdminResolveQualityIssue,
   AdminSourceResponse,
   AdminSuspendAsset,
@@ -450,6 +452,16 @@ export class PostgresAssetRepository implements AssetRepository {
     return rowToAdminRun(rows[0]!);
   }
 
+  async listIngestions(limit: number): Promise<AdminIngestionList> {
+    const rows = (await this.sql`
+      SELECT r.*, s.slug AS source_slug
+        FROM ingestion_runs r
+        JOIN data_sources s ON s.id = r.source_id
+       ORDER BY r.started_at DESC, r.id
+       LIMIT ${limit}`) as Row[];
+    return { items: rows.map(rowToAdminRun) };
+  }
+
   async getIngestionDetail(id: string): Promise<AdminIngestionDetail | null> {
     const runs = (await this.sql`
       SELECT r.*, s.slug AS source_slug
@@ -466,6 +478,17 @@ export class PostgresAssetRepository implements AssetRepository {
        WHERE run_id = ${id}
        ORDER BY created_at DESC, id`) as Row[];
     return { run: rowToAdminRun(run), qualityIssues: issues.map(rowToAdminIssue) };
+  }
+
+  async listQualityIssues(limit: number): Promise<AdminQualityIssueList> {
+    const rows = (await this.sql`
+      SELECT id, asset_id, run_id, rule_code, severity, field_name, observed_value,
+             message, resolution_status, created_at, resolved_at
+        FROM quality_issues
+       WHERE resolution_status = 'open'
+       ORDER BY created_at DESC, id
+       LIMIT ${limit}`) as Row[];
+    return { items: rows.map(rowToAdminIssue) };
   }
 
   async resolveQualityIssue(

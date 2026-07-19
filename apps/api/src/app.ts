@@ -280,12 +280,28 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     return c.json(run, 202);
   });
 
+  admin.get('/ingestions', async (c) => {
+    const limit = Number(c.req.query('limit') ?? '20');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      return fail(c, 'VALIDATION_ERROR', 'limit は 1〜100 の整数で指定してください');
+    }
+    return c.json(await repo.listIngestions(limit));
+  });
+
   admin.get('/ingestions/:id', async (c) => {
     const id = c.req.param('id');
     if (!UUID_RE.test(id)) return fail(c, 'VALIDATION_ERROR', 'id の形式が不正です');
     const detail = await repo.getIngestionDetail(id.toLowerCase());
     if (!detail) return fail(c, 'NOT_FOUND', '取込実行が見つかりません');
     return c.json(detail);
+  });
+
+  admin.get('/quality-issues', async (c) => {
+    const limit = Number(c.req.query('limit') ?? '50');
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+      return fail(c, 'VALIDATION_ERROR', 'limit は 1〜200 の整数で指定してください');
+    }
+    return c.json(await repo.listQualityIssues(limit));
   });
 
   admin.post('/quality-issues/:id/resolve', async (c) => {
