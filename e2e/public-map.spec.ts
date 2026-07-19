@@ -38,3 +38,16 @@ test('supports public type filtering', async ({ page }) => {
   await expect(page.getByRole('button', { name: /みらい大橋/ })).toHaveCount(0);
   await expect(page).not.toHaveURL(/types=bridge/);
 });
+
+test('opens the system settings source-management form', async ({ page }) => {
+  await page.goto('/');
+  await waitForPublicResults(page);
+
+  await page.getByRole('button', { name: /システム設定/ }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'システム設定' });
+  await expect(dialog).toContainText('データソース登録 / 編集');
+  await expect(dialog.getByLabel('対象')).toBeVisible();
+  await expect(dialog.getByLabel('slug')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /登録/ })).toBeVisible();
+});

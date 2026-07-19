@@ -104,6 +104,89 @@ describe('ApiClient', () => {
     });
   });
 
+  it('posts a new admin source with credentials', async () => {
+    const payload = {
+      slug: 'new-source',
+      name: '新規ソース',
+      providerName: '新規提供者',
+      sourceUrl: 'https://example.com/new.geojson',
+      accessType: 'file',
+      format: 'geojson',
+      licenseName: 'CC-BY-4.0',
+      licenseUrl: null,
+      redistribution: 'allowed',
+      attributionText: null,
+      enabled: false,
+      lastFetchedAt: null,
+      sourceUpdatedAt: null,
+      publishedAssetCount: 0,
+    };
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(payload),
+    );
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(
+      client.createAdminSource({
+        slug: 'new-source',
+        name: '新規ソース',
+        providerName: '新規提供者',
+        sourceUrl: 'https://example.com/new.geojson',
+        accessType: 'file',
+        format: 'geojson',
+        licenseName: 'CC-BY-4.0',
+        licenseUrl: null,
+        redistribution: 'allowed',
+        attributionText: null,
+        refreshCron: null,
+        enabled: false,
+      }),
+    ).resolves.toEqual(payload);
+
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('/api/v1/admin/sources');
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      body: expect.stringContaining('"slug":"new-source"'),
+    });
+  });
+
+  it('patches an admin source with credentials', async () => {
+    const payload = {
+      slug: 'sample-bridges',
+      name: '更新後ソース',
+      providerName: 'テスト提供機関',
+      sourceUrl: 'https://example.com/source',
+      accessType: 'file',
+      format: 'geojson',
+      licenseName: 'CC-BY-4.0',
+      licenseUrl: null,
+      redistribution: 'allowed',
+      attributionText: null,
+      enabled: true,
+      lastFetchedAt: null,
+      sourceUpdatedAt: null,
+      publishedAssetCount: 10,
+    };
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(payload),
+    );
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(
+      client.updateAdminSource('sample-bridges', { name: '更新後ソース' }),
+    ).resolves.toEqual(payload);
+
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('/api/v1/admin/sources/sample-bridges');
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      method: 'PATCH',
+      credentials: 'include',
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ name: '更新後ソース' }),
+    });
+  });
+
   it('gets admin ingestion detail with credentials', async () => {
     const payload = {
       run: {

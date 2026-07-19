@@ -267,7 +267,7 @@ Draft PR [#33](https://github.com/Kensan196948G/Public-Infrastructure-Maintenanc
 - 🐘 `PostgresAssetRepository` は CI の `🗄️ PostGIS integration` で公開可視性・検索・bbox・`getAssetById` 契約を検証する。`PostgresAssetPublisher` の実 Neon 一気通貫検証は Issue #5/#16 の残課題。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作する
 - 🐘 `PostgresAssetPublisher` は CI の `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証する。Neon dev branch での接続先固有検証はリリース手順で実施
 - 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。公開前は runbook の手動 publish と API 件数突合を必須とする
-- 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込詳細、品質issue解決、資産公開停止の基本経路を実装済み。監査ログ画面からはソース別の取込記録作成、最新取込詳細確認、理由入力付きの品質issue解決、詳細画面からは理由入力付きの資産公開停止まで接続済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタを導入済み。管理画面でのソース登録/編集UIと管理系ブラウザE2Eは継続課題（Issue #4）
+- 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込詳細、品質issue解決、資産公開停止の基本経路を実装済み。システム設定画面からはソース登録/編集、監査ログ画面からはソース別の取込記録作成、最新取込詳細確認、理由入力付きの品質issue解決、詳細画面からは理由入力付きの資産公開停止まで接続済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタを導入済み。管理系ブラウザE2Eは継続課題（Issue #4）
 - 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。分散実行環境では isolate 数だけ実効上限が緩むため、本番環境の実効的な防御層は Cloudflare WAF が担う
 
 ## 🗺️ ロードマップ
