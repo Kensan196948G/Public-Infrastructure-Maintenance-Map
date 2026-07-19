@@ -10,6 +10,8 @@
 |---|---|---|
 | リポジトリ内の既存指定 | `apps/api/wrangler.toml` に `routes` / `custom_domain` / `zone_name` なし | 未指定 |
 | Cloudflare 実アカウント確認 | `wrangler whoami` が未認証で停止 | 未確認 |
+| 公開DNSのzone確認 | `mirai-dx-platform.com` のNSは `kareem.ns.cloudflare.com` / `nia.ns.cloudflare.com` | Cloudflare委任済み |
+| 公開DNSのサブドメイン確認 | `pimm.mirai-dx-platform.com` / `api.pimm.mirai-dx-platform.com` は未解決 | DNS反映前 |
 | 今回のCTO指定 | WebUI: `pimm.mirai-dx-platform.com` / API: `api.pimm.mirai-dx-platform.com` | Approval対象 |
 
 ## 2. 正確な対象環境
