@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { AssetSummary, AssetType, BBox, QualityStatus } from '@pimm/contracts';
 import { useAssetDetail, useAssets, useHealth, useSources } from './api/hooks.js';
@@ -65,21 +65,6 @@ export function App() {
     setFocusPoint([asset.representativePoint[0], asset.representativePoint[1]]);
   }, []);
 
-  // Avoid re-triggering easeTo for the same coordinates on unrelated renders.
-  const lastFocusRef = useRef<[number, number] | null>(null);
-  const stableFocus = useMemo(() => {
-    if (
-      focusPoint &&
-      lastFocusRef.current &&
-      focusPoint[0] === lastFocusRef.current[0] &&
-      focusPoint[1] === lastFocusRef.current[1]
-    ) {
-      return lastFocusRef.current;
-    }
-    lastFocusRef.current = focusPoint;
-    return focusPoint;
-  }, [focusPoint]);
-
   const onSearchSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setQ(searchInput.trim());
@@ -137,7 +122,7 @@ export function App() {
             center={center}
             zoom={zoom}
             selectedId={selectedId}
-            focusPoint={stableFocus}
+            focusPoint={focusPoint}
             onViewportChange={handleViewportChange}
             onSelectAsset={handleSelect}
           />

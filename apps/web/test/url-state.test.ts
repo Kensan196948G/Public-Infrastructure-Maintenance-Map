@@ -32,6 +32,11 @@ describe('parseUrlState', () => {
     expect(state.quality).toEqual(['verified']);
   });
 
+  it('drops hidden quality from URL filters because hidden assets are never public', () => {
+    const state = parseUrlState('quality=verified,hidden,review');
+    expect(state.quality).toEqual(['verified', 'review']);
+  });
+
   it('treats a present-but-empty types param as an empty selection', () => {
     const state = parseUrlState('types=&quality=');
     expect(state.types).toEqual([]);

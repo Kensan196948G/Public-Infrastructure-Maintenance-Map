@@ -68,6 +68,7 @@ if (!adapter) {
   console.error(`❌ unknown source: ${slug}`);
   process.exit(1);
 }
+const selectedAdapter = adapter;
 
 const databaseUrl = process.env['DATABASE_URL'];
 if (shouldPublish && !databaseUrl) {
@@ -75,75 +76,84 @@ if (shouldPublish && !databaseUrl) {
   process.exit(1);
 }
 
-const result = await runPipeline(adapter, { now: new Date().toISOString() });
+async function main(): Promise<void> {
+  const result = await runPipeline(selectedAdapter, { now: new Date().toISOString() });
 
-console.log(`\n📥 source: ${adapter.descriptor.slug} (${adapter.descriptor.name})`);
-console.log(
-  `🔢 fetched=${result.counts.fetched} accepted=${result.counts.accepted} quarantined=${result.counts.quarantined} warnings=${result.counts.warnings}`,
-);
-console.log(
-  `#️⃣  contentHash=${result.contentHash.slice(0, 12)}… schemaFingerprint=${result.schemaFingerprint.slice(0, 12)}…`,
-);
+  console.log(
+    `\n📥 source: ${selectedAdapter.descriptor.slug} (${selectedAdapter.descriptor.name})`,
+  );
+  console.log(
+    `🔢 fetched=${result.counts.fetched} accepted=${result.counts.accepted} quarantined=${result.counts.quarantined} warnings=${result.counts.warnings}`,
+  );
+  console.log(
+    `#️⃣  contentHash=${result.contentHash.slice(0, 12)}… schemaFingerprint=${result.schemaFingerprint.slice(0, 12)}…`,
+  );
 
-if (result.aborted) {
-  console.error(`🚨 aborted: [${result.aborted.ruleCode}] ${result.aborted.message}`);
-  if (shouldPublish && databaseUrl) {
+  if (result.aborted) {
+    console.error(`🚨 aborted: [${result.aborted.ruleCode}] ${result.aborted.message}`);
+    if (shouldPublish && databaseUrl) {
+      const publisher = new PostgresAssetPublisher(databaseUrl);
+      const sourceId = await publisher.ensureDataSource(selectedAdapter.descriptor);
+      await publisher.publish({
+        sourceId,
+        sourceUpdatedAt: null,
+        contentHash: result.contentHash,
+        schemaFingerprint: result.schemaFingerprint,
+        fetchedCount: result.counts.fetched,
+        droppedCount: 0,
+        warningCount: 0,
+        triggeredBy: 'cli',
+        correlationId: crypto.randomUUID(),
+        assets: [],
+        aborted: result.aborted,
+      });
+    }
+    process.exit(2);
+  }
+
+  for (const item of [...result.accepted, ...result.quarantined]) {
+    for (const issue of item.issues) {
+      const icon = issue.severity === 'error' ? '❌' : issue.severity === 'warning' ? '⚠️' : 'ℹ️';
+      console.log(
+        `${icon} [${issue.ruleCode}] ${item.asset.sourceRecordId ?? '(no id)'} ${item.asset.name ?? '(名称不明)'}: ${issue.message}`,
+      );
+    }
+  }
+
+  if (!shouldPublish || !databaseUrl) {
+    console.log('\n✅ dry-run complete (DB publication skipped — pass --publish to write to Neon)');
+  } else {
     const publisher = new PostgresAssetPublisher(databaseUrl);
-    const sourceId = await publisher.ensureDataSource(adapter.descriptor);
-    await publisher.publish({
+    const sourceId = await publisher.ensureDataSource(selectedAdapter.descriptor);
+    const { assets: acceptedAssets, droppedCount: droppedAccepted } = await toPublishableAssets(
+      result.accepted,
+    );
+    const { assets: quarantinedAssets, droppedCount: droppedQuarantined } =
+      await toPublishableAssets(result.quarantined);
+
+    const summary = await publisher.publish({
       sourceId,
       sourceUpdatedAt: null,
       contentHash: result.contentHash,
       schemaFingerprint: result.schemaFingerprint,
       fetchedCount: result.counts.fetched,
-      droppedCount: 0,
-      warningCount: 0,
+      droppedCount: droppedAccepted + droppedQuarantined,
+      warningCount: result.counts.warnings,
       triggeredBy: 'cli',
       correlationId: crypto.randomUUID(),
-      assets: [],
-      aborted: result.aborted,
+      assets: [...acceptedAssets, ...quarantinedAssets],
+      aborted: null,
     });
-  }
-  process.exit(2);
-}
 
-for (const item of [...result.accepted, ...result.quarantined]) {
-  for (const issue of item.issues) {
-    const icon = issue.severity === 'error' ? '❌' : issue.severity === 'warning' ? '⚠️' : 'ℹ️';
     console.log(
-      `${icon} [${issue.ruleCode}] ${item.asset.sourceRecordId ?? '(no id)'} ${item.asset.name ?? '(名称不明)'}: ${issue.message}`,
+      `\n📤 publish: runId=${summary.ingestionRunId} status=${summary.status} published=${summary.publishedCount} hidden=${summary.hiddenCount}`,
     );
+    if (summary.status === 'failed') process.exit(2);
   }
 }
 
-if (!shouldPublish || !databaseUrl) {
-  console.log('\n✅ dry-run complete (DB publication skipped — pass --publish to write to Neon)');
-} else {
-  const publisher = new PostgresAssetPublisher(databaseUrl);
-  const sourceId = await publisher.ensureDataSource(adapter.descriptor);
-  const { assets: acceptedAssets, droppedCount: droppedAccepted } = await toPublishableAssets(
-    result.accepted,
-  );
-  const { assets: quarantinedAssets, droppedCount: droppedQuarantined } = await toPublishableAssets(
-    result.quarantined,
-  );
-
-  const summary = await publisher.publish({
-    sourceId,
-    sourceUpdatedAt: null,
-    contentHash: result.contentHash,
-    schemaFingerprint: result.schemaFingerprint,
-    fetchedCount: result.counts.fetched,
-    droppedCount: droppedAccepted + droppedQuarantined,
-    warningCount: result.counts.warnings,
-    triggeredBy: 'cli',
-    correlationId: crypto.randomUUID(),
-    assets: [...acceptedAssets, ...quarantinedAssets],
-    aborted: null,
-  });
-
-  console.log(
-    `\n📤 publish: runId=${summary.ingestionRunId} status=${summary.status} published=${summary.publishedCount} hidden=${summary.hiddenCount}`,
-  );
-  if (summary.status === 'failed') process.exit(2);
-}
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`❌ ingest failed: ${message}`);
+  process.exit(1);
+});
