@@ -6,6 +6,10 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { ErrorCode, ProblemDetails } from '@pimm/contracts';
 import {
+  AdminCreateSourceSchema,
+  AdminResolveQualityIssueSchema,
+  AdminSuspendAssetSchema,
+  AdminUpdateSourceSchema,
   AssetSearchQuerySchema,
   AssetSummaryQuerySchema,
   ExportQuerySchema,
@@ -33,6 +37,23 @@ function problemResponse(p: ProblemDetails): Response {
 
 function zodIssuesToErrors(error: { issues: { path: PropertyKey[]; message: string }[] }) {
   return error.issues.map((i) => ({ path: i.path.join('.'), message: i.message }));
+}
+
+function adminIdentity(
+  c: { req: { header(name: string): string | undefined } },
+  config: ApiConfig,
+) {
+  const email = c.req.header('CF-Access-Authenticated-User-Email');
+  if (!email) return null;
+  const normalizedEmail = email.trim().toLowerCase();
+  const roles = new Set<string>();
+  if (config.adminEmails.includes(normalizedEmail)) roles.add('admin');
+  if (config.reviewerEmails.includes(normalizedEmail)) roles.add('reviewer');
+  return { email: normalizedEmail, roles: [...roles] };
+}
+
+function hasRole(identity: { roles: string[] }, allowed: readonly string[]) {
+  return identity.roles.some((role) => allowed.includes(role));
 }
 
 /**
@@ -118,6 +139,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   ) => problemResponse(problem(code, title, { ...extra, requestId: c.get('requestId') }));
 
   const v1 = new Hono<AppContext>();
+  const admin = new Hono<AppContext>();
 
   v1.get('/health', (c) =>
     c.json({ status: 'ok' as const, version: config.version, time: new Date().toISOString() }),
@@ -203,6 +225,94 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     c.header('Content-Disposition', 'attachment; filename="pimm-export.geojson"');
     return c.body(assetsToGeoJson(exportable, attributions, excludedSources));
   });
+
+  admin.use('*', async (c, next) => {
+    c.header('Cache-Control', 'no-store');
+    const identity = adminIdentity(c, config);
+    if (!identity) {
+      return fail(c, 'UNAUTHORIZED', '管理APIの認証が必要です');
+    }
+    if (!hasRole(identity, ['admin', 'reviewer'])) {
+      return fail(c, 'FORBIDDEN', '管理APIを利用する権限がありません');
+    }
+    return next();
+  });
+
+  admin.post('/sources', async (c) => {
+    const identity = adminIdentity(c, config)!;
+    if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
+    const parsed = AdminCreateSourceSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'ソース登録内容が不正です', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    const source = await repo.createSource(parsed.data);
+    return c.json(source, 201);
+  });
+
+  admin.patch('/sources/:slug', async (c) => {
+    const identity = adminIdentity(c, config)!;
+    if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
+    const parsed = AdminUpdateSourceSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'ソース更新内容が不正です', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    const source = await repo.updateSource(c.req.param('slug'), parsed.data);
+    if (!source) return fail(c, 'NOT_FOUND', 'データソースが見つかりません');
+    return c.json(source);
+  });
+
+  admin.post('/sources/:slug/ingestions', async (c) => {
+    const identity = adminIdentity(c, config)!;
+    if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
+    const run = await repo.startIngestion(c.req.param('slug'), identity.email, c.get('requestId'));
+    if (!run) return fail(c, 'NOT_FOUND', 'データソースが見つかりません');
+    return c.json(run, 202);
+  });
+
+  admin.get('/ingestions/:id', async (c) => {
+    const id = c.req.param('id');
+    if (!UUID_RE.test(id)) return fail(c, 'VALIDATION_ERROR', 'id の形式が不正です');
+    const detail = await repo.getIngestionDetail(id.toLowerCase());
+    if (!detail) return fail(c, 'NOT_FOUND', '取込実行が見つかりません');
+    return c.json(detail);
+  });
+
+  admin.post('/quality-issues/:id/resolve', async (c) => {
+    const identity = adminIdentity(c, config)!;
+    const id = c.req.param('id');
+    if (!UUID_RE.test(id)) return fail(c, 'VALIDATION_ERROR', 'id の形式が不正です');
+    const parsed = AdminResolveQualityIssueSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', '品質問題の解決内容が不正です', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    const issue = await repo.resolveQualityIssue(id.toLowerCase(), parsed.data, identity.email);
+    if (!issue) return fail(c, 'NOT_FOUND', '品質問題が見つかりません');
+    return c.json(issue);
+  });
+
+  admin.post('/assets/:id/suspend', async (c) => {
+    const identity = adminIdentity(c, config)!;
+    if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
+    const id = c.req.param('id');
+    if (!UUID_RE.test(id)) return fail(c, 'VALIDATION_ERROR', 'id の形式が不正です');
+    const parsed = AdminSuspendAssetSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', '公開停止理由が不正です', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    const result = await repo.suspendAsset(id.toLowerCase(), parsed.data, identity.email);
+    if (!result) return fail(c, 'NOT_FOUND', '対象が見つかりません');
+    return c.json(result);
+  });
+
+  v1.route('/admin', admin);
 
   app.route('/api/v1', v1);
 

@@ -1,4 +1,12 @@
 import type {
+  AdminAssetPublication,
+  AdminCreateSource,
+  AdminIngestionDetail,
+  AdminIngestionRun,
+  AdminResolveQualityIssue,
+  AdminSourceResponse,
+  AdminSuspendAsset,
+  AdminUpdateSource,
   AssetCountSummary,
   AssetDetail,
   AssetSearchResponse,
@@ -54,4 +62,28 @@ export interface AssetRepository {
   getSourceBySlug(slug: string): Promise<SourceInfo | null>;
   /** Same filters as search, bounded by limit (no pagination); license control happens in the API layer. */
   exportAssets(input: AssetExportInput): Promise<AssetDetail[]>;
+
+  /**
+   * Admin surface (Issue #4 / FR-13 / FR-14).
+   * These methods are only reachable through /api/v1/admin/* after
+   * Cloudflare Access identity and role checks in the API layer.
+   */
+  createSource(input: AdminCreateSource): Promise<AdminSourceResponse>;
+  updateSource(slug: string, input: AdminUpdateSource): Promise<AdminSourceResponse | null>;
+  startIngestion(
+    sourceSlug: string,
+    actor: string,
+    correlationId: string,
+  ): Promise<AdminIngestionRun | null>;
+  getIngestionDetail(id: string): Promise<AdminIngestionDetail | null>;
+  resolveQualityIssue(
+    id: string,
+    input: AdminResolveQualityIssue,
+    actor: string,
+  ): Promise<AdminIngestionDetail['qualityIssues'][number] | null>;
+  suspendAsset(
+    id: string,
+    input: AdminSuspendAsset,
+    actor: string,
+  ): Promise<AdminAssetPublication | null>;
 }

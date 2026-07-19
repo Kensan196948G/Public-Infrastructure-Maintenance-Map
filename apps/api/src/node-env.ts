@@ -9,5 +9,7 @@ export function envBindingsFromProcessEnv(env: NodeJS.ProcessEnv): EnvBindings {
       ? { RATE_LIMIT_PER_MINUTE: env['RATE_LIMIT_PER_MINUTE'] }
       : {}),
     ...(env['REQUIRE_DATABASE_URL'] ? { REQUIRE_DATABASE_URL: env['REQUIRE_DATABASE_URL'] } : {}),
+    ...(env['ADMIN_EMAILS'] ? { ADMIN_EMAILS: env['ADMIN_EMAILS'] } : {}),
+    ...(env['REVIEWER_EMAILS'] ? { REVIEWER_EMAILS: env['REVIEWER_EMAILS'] } : {}),
   };
 }
