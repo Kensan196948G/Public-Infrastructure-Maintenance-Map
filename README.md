@@ -194,9 +194,12 @@ VITE_API_BASE_URL=http://localhost:8787/api/v1
 # Secret（実値はGit管理しない）
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
 CLOUDFLARE_ACCESS_AUD=
+ADMIN_EMAILS=admin@example.com
+REVIEWER_EMAILS=reviewer@example.com
 ```
 
 - `VITE_API_BASE_URL`: Web と API を別オリジン（別ドメインの Cloudflare Pages／Workers 等）で配信する場合に、API のベース URL を指定します。同一オリジン配信なら未設定でよく、既定の `/api/v1` が使われます。ビルド時（`vite build`）に値がバンドルへ焼き込まれるため、デプロイ環境ごとに設定します。
+- `ADMIN_EMAILS` / `REVIEWER_EMAILS`: Cloudflare Accessで認証されたメールアドレスに対する管理APIのサーバ側許可リストです。ロールはリクエストヘッダではなく、この設定からのみ解決します。
 - 公開データ用APIキーが必要な場合も、ブラウザへ渡さずWorkers側のSecretとして保管します。
 
 ## 🧪 テスト方針

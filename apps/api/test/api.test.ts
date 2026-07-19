@@ -17,6 +17,8 @@ const CONFIG: ApiConfig = {
   allowedOrigin: '*',
   rateLimitPerMinute: 10_000,
   version: 'test',
+  adminEmails: ['admin@example.com'],
+  reviewerEmails: ['reviewer@example.com'],
 };
 
 let app: Hono<never>;
@@ -31,12 +33,10 @@ const get = (path: string, headers?: Record<string, string>) =>
 
 const adminHeaders = {
   'CF-Access-Authenticated-User-Email': 'admin@example.com',
-  'X-PIMM-Admin-Roles': 'admin',
 };
 
 const reviewerHeaders = {
   'CF-Access-Authenticated-User-Email': 'reviewer@example.com',
-  'X-PIMM-Admin-Roles': 'reviewer',
 };
 
 describe('GET /api/v1/health', () => {
@@ -204,10 +204,17 @@ describe('admin API (Issue #4 / FR-13 / FR-14)', () => {
     expect(body.code).toBe('UNAUTHORIZED');
   });
 
-  it('rejects authenticated users without an admin/reviewer role', async () => {
+  it('rejects authenticated users outside the server-side admin/reviewer allowlists', async () => {
     const res = await get('/api/v1/admin/ingestions/00000000-0000-4000-8000-000000000000', {
       'CF-Access-Authenticated-User-Email': 'viewer@example.com',
-      'X-PIMM-Admin-Roles': 'viewer',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('does not trust client-supplied role headers for admin authorization', async () => {
+    const res = await get('/api/v1/admin/ingestions/00000000-0000-4000-8000-000000000000', {
+      'CF-Access-Authenticated-User-Email': 'viewer@example.com',
+      'X-PIMM-Admin-Roles': 'admin',
     });
     expect(res.status).toBe(403);
   });

@@ -58,7 +58,11 @@ flowchart LR
 | 🛡️ `REQUIRE_DATABASE_URL` | Worker Secret / 環境変数（`true`/`1`） | 推奨（本番） | `DATABASE_URL` 未設定時に fail-fast させ、サンプルデータの誤公開を防ぐ。**対応 PR #20（レビュー中）で実装** |
 | 🌐 `ALLOWED_ORIGIN` | `apps/api/wrangler.toml` `[vars]`（既定 `"*"`） | 推奨変更 | 本番の Web 固定オリジンに絞るとAPIのクロスサイト収集を抑制できる（現状 `"*"`） |
 | 🔢 `RATE_LIMIT_PER_MINUTE` | `wrangler.toml` `[vars]`（既定 `"120"`） | 任意 | in-isolate レート制限の分あたり上限 |
+| 🔐 `ADMIN_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの書込操作を許可するカンマ区切り許可リスト |
+| 👀 `REVIEWER_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの閲覧・品質レビュー操作を許可するカンマ区切り許可リスト |
 | 🌐 `VITE_API_BASE_URL` | **Cloudflare Pages の環境変数**（ビルド時） | 別オリジン配信時のみ | Web と API を別ドメインで配信する場合に API ベースURLを指定。未設定なら同一オリジン `/api/v1` |
+
+> 🔒 管理APIのロールはリクエストヘッダではなく、`ADMIN_EMAILS` / `REVIEWER_EMAILS` のサーバ側許可リストからのみ解決します。Cloudflare Accessは外側の認証境界、アプリはメール許可リストによる認可境界として扱います。
 
 > ⚠️ **実装状況の注記（open PR で対応中）**
 > - Web 向け環境変数はコード上 `VITE_API_BASE_URL`（`apps/web/src/api/client.ts`）が正。`.env.example`/README の `PUBLIC_API_BASE_URL` 記載は **対応 PR #19（レビュー中）で `VITE_API_BASE_URL` に統一**。Pages 側では `VITE_API_BASE_URL` を設定してください。

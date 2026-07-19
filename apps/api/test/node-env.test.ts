@@ -2,16 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { envBindingsFromProcessEnv } from '../src/node-env.js';
 
 describe('envBindingsFromProcessEnv', () => {
-  it('forwards DATABASE_URL, ALLOWED_ORIGIN and RATE_LIMIT_PER_MINUTE when set', () => {
+  it('forwards supported runtime environment variables when set', () => {
     const env = {
       DATABASE_URL: 'postgres://example',
       ALLOWED_ORIGIN: 'https://example.com',
       RATE_LIMIT_PER_MINUTE: '42',
+      ADMIN_EMAILS: 'admin@example.com',
+      REVIEWER_EMAILS: 'reviewer@example.com',
     } as NodeJS.ProcessEnv;
     expect(envBindingsFromProcessEnv(env)).toEqual({
       DATABASE_URL: 'postgres://example',
       ALLOWED_ORIGIN: 'https://example.com',
       RATE_LIMIT_PER_MINUTE: '42',
+      ADMIN_EMAILS: 'admin@example.com',
+      REVIEWER_EMAILS: 'reviewer@example.com',
     });
   });
 

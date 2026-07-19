@@ -39,13 +39,17 @@ function zodIssuesToErrors(error: { issues: { path: PropertyKey[]; message: stri
   return error.issues.map((i) => ({ path: i.path.join('.'), message: i.message }));
 }
 
-function adminIdentity(c: { req: { header(name: string): string | undefined } }) {
+function adminIdentity(
+  c: { req: { header(name: string): string | undefined } },
+  config: ApiConfig,
+) {
   const email = c.req.header('CF-Access-Authenticated-User-Email');
-  const roles = (c.req.header('X-PIMM-Admin-Roles') ?? '')
-    .split(',')
-    .map((r) => r.trim())
-    .filter(Boolean);
-  return email ? { email, roles } : null;
+  if (!email) return null;
+  const normalizedEmail = email.trim().toLowerCase();
+  const roles = new Set<string>();
+  if (config.adminEmails.includes(normalizedEmail)) roles.add('admin');
+  if (config.reviewerEmails.includes(normalizedEmail)) roles.add('reviewer');
+  return { email: normalizedEmail, roles: [...roles] };
 }
 
 function hasRole(identity: { roles: string[] }, allowed: readonly string[]) {
@@ -224,7 +228,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
 
   admin.use('*', async (c, next) => {
     c.header('Cache-Control', 'no-store');
-    const identity = adminIdentity(c);
+    const identity = adminIdentity(c, config);
     if (!identity) {
       return fail(c, 'UNAUTHORIZED', '管理APIの認証が必要です');
     }
@@ -235,7 +239,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.post('/sources', async (c) => {
-    const identity = adminIdentity(c)!;
+    const identity = adminIdentity(c, config)!;
     if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
     const parsed = AdminCreateSourceSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
@@ -248,7 +252,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.patch('/sources/:slug', async (c) => {
-    const identity = adminIdentity(c)!;
+    const identity = adminIdentity(c, config)!;
     if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
     const parsed = AdminUpdateSourceSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
@@ -262,7 +266,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.post('/sources/:slug/ingestions', async (c) => {
-    const identity = adminIdentity(c)!;
+    const identity = adminIdentity(c, config)!;
     if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
     const run = await repo.startIngestion(c.req.param('slug'), identity.email, c.get('requestId'));
     if (!run) return fail(c, 'NOT_FOUND', 'データソースが見つかりません');
@@ -278,7 +282,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.post('/quality-issues/:id/resolve', async (c) => {
-    const identity = adminIdentity(c)!;
+    const identity = adminIdentity(c, config)!;
     const id = c.req.param('id');
     if (!UUID_RE.test(id)) return fail(c, 'VALIDATION_ERROR', 'id の形式が不正です');
     const parsed = AdminResolveQualityIssueSchema.safeParse(await c.req.json().catch(() => null));
@@ -293,7 +297,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.post('/assets/:id/suspend', async (c) => {
-    const identity = adminIdentity(c)!;
+    const identity = adminIdentity(c, config)!;
     if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
     const id = c.req.param('id');
     if (!UUID_RE.test(id)) return fail(c, 'VALIDATION_ERROR', 'id の形式が不正です');
