@@ -285,6 +285,11 @@ describe('admin API (Issue #4 / FR-13 / FR-14)', () => {
     const body = (await detail.json()) as { run: { id: string }; qualityIssues: unknown[] };
     expect(body.run.id).toBe(run.id);
     expect(body.qualityIssues).toEqual([]);
+
+    const history = await get('/api/v1/admin/ingestions?limit=10', reviewerHeaders);
+    expect(history.status).toBe(200);
+    const historyBody = (await history.json()) as { items: { id: string }[] };
+    expect(historyBody.items.some((item) => item.id === run.id)).toBe(true);
   });
 
   it('suspends an asset and removes it from the public detail endpoint', async () => {
@@ -299,6 +304,18 @@ describe('admin API (Issue #4 / FR-13 / FR-14)', () => {
     });
     expect(suspend.status).toBe(200);
     expect((await get(`/api/v1/assets/${id}`)).status).toBe(404);
+
+    const issues = await get('/api/v1/admin/quality-issues?limit=10', reviewerHeaders);
+    expect(issues.status).toBe(200);
+    const body = (await issues.json()) as { items: { assetId: string; ruleCode: string }[] };
+    expect(body.items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ assetId: id, ruleCode: 'Q007' })]),
+    );
+  });
+
+  it('validates admin list limits', async () => {
+    expect((await get('/api/v1/admin/ingestions?limit=0', reviewerHeaders)).status).toBe(400);
+    expect((await get('/api/v1/admin/quality-issues?limit=201', reviewerHeaders)).status).toBe(400);
   });
 });
 

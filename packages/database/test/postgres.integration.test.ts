@@ -255,6 +255,9 @@ describeIf('PostgresAssetRepository integration', () => {
     const detail = await repo.getIngestionDetail(run!.id);
     expect(detail?.run).toMatchObject({ id: run!.id, sourceSlug: 'contract-source' });
     expect(detail?.qualityIssues).toEqual([]);
+    await expect(repo.listIngestions(10)).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: run!.id, sourceSlug: 'contract-source' })],
+    });
     await expect(
       repo.startIngestion('missing-source', 'admin@example.com', 'corr-missing'),
     ).resolves.toBeNull();
@@ -280,6 +283,7 @@ describeIf('PostgresAssetRepository integration', () => {
     expect(resolved?.message).toContain('古い更新日です');
     expect(resolved?.message).toContain('Resolution: 公開対象外として確認済み');
     expect(resolved?.resolvedAt).not.toBeNull();
+    await expect(repo.listQualityIssues(10)).resolves.toMatchObject({ items: [] });
     await expect(
       repo.resolveQualityIssue(
         '00000000-0000-4000-8000-000000000000',
@@ -322,6 +326,12 @@ describeIf('PostgresAssetRepository integration', () => {
         resolution_status: 'open',
       },
     ]);
+    const issues = await repo.listQualityIssues(10);
+    expect(issues.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ assetId: ids.publishedBridge, ruleCode: 'Q007' }),
+      ]),
+    );
     await expect(
       repo.suspendAsset(
         '00000000-0000-4000-8000-000000000000',
