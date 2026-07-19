@@ -151,6 +151,23 @@ describe('verifyAccessJwt', () => {
     expect(result).toEqual({ ok: false, reason: 'unknown kid' });
   });
 
+  it.each([
+    ['null', 'bnVsbA'],
+    ['an array', 'W10'],
+    ['a number', 'MQ'],
+  ])('rejects rather than throws when a segment decodes to %s', async (_label, segment) => {
+    stubJwks();
+    const result = await verifyAccessJwt(`${segment}.${segment}.AAAA`, options);
+    expect(result).toEqual({ ok: false, reason: 'non-object token segments' });
+  });
+
+  it('does not let a nested aud array satisfy the audience check', async () => {
+    stubJwks();
+    // String(['tag']) === 'tag', so a coercing comparison would accept this.
+    const result = await verifyAccessJwt(await signToken({ aud: [[AUD]] }), options);
+    expect(result).toEqual({ ok: false, reason: 'audience mismatch' });
+  });
+
   it('rejects rather than throws when the signature is not valid base64url', async () => {
     stubJwks();
     const [header, payload] = (await signToken()).split('.');

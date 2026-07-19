@@ -204,7 +204,7 @@ REVIEWER_EMAILS=reviewer@example.com
 - 本番 Cloudflare では WebUI を `https://pimm.mirai-dx-platform.com`、API を `https://api.pimm.mirai-dx-platform.com/api/v1` として扱います。DNS / custom domain / route 変更は [Cloudflare Domain Approval PR](docs/CLOUDFLARE_DOMAIN_APPROVAL.md) の承認範囲内で実行します。
 - `ADMIN_EMAILS` / `REVIEWER_EMAILS`: 認証済みメールアドレスに対する管理APIのサーバ側許可リストです。ロールはリクエストヘッダではなく、この設定からのみ解決します。
 - 🔐 `CLOUDFLARE_ACCESS_AUD` / `CLOUDFLARE_ACCESS_TEAM_DOMAIN`: **いずれかを設定すると管理APIのJWT検証が有効化**され、Worker が `Cf-Access-Jwt-Assertion` の署名・`aud`・`iss`・有効期限を自前で検証します。この状態では利用者IDは**署名済みクレームからのみ**取得し、詐称可能な `CF-Access-Authenticated-User-Email` ヘッダは無視します。両方未設定のローカル開発時のみ、ヘッダによる簡易識別へフォールバックします。
-- 🛡️ `REQUIRE_ACCESS_JWT=true`: AUD / team domain が未設定でも強制を有効にし、設定不備時は管理APIを 503 で**フェイルクローズ**させます。本番 `wrangler.toml` の `[env.production.vars]` で宣言済みです。
+- 🛡️ `REQUIRE_ACCESS_JWT=true`: AUD / team domain が未設定でも強制を有効にし、設定不備時は管理APIを 500 で**フェイルクローズ**させます。`wrangler.toml` の既定 `[vars]` と `[env.production.vars]` の両方で宣言済みです。
 - 公開データ用APIキーが必要な場合も、ブラウザへ渡さずWorkers側のSecretとして保管します。
 
 ## 🧪 テスト方針

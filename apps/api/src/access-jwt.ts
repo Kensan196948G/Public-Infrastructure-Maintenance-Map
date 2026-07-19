@@ -34,8 +34,12 @@ function decodeBase64Url(value: string): Uint8Array {
   return bytes;
 }
 
-function decodeJsonSegment(segment: string): Record<string, unknown> {
+function decodeJsonSegment(segment: string): unknown {
   return JSON.parse(new TextDecoder().decode(decodeBase64Url(segment)));
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 async function loadKeys(
@@ -94,8 +98,16 @@ export async function verifyAccessJwt(
   let header: Record<string, unknown>;
   let payload: Record<string, unknown>;
   try {
-    header = decodeJsonSegment(encodedHeader);
-    payload = decodeJsonSegment(encodedPayload);
+    const decodedHeader = decodeJsonSegment(encodedHeader);
+    const decodedPayload = decodeJsonSegment(encodedPayload);
+    // JSON.parse accepts 'null', arrays and scalars, so a decoded segment is
+    // not necessarily indexable. Reading .alg off null would throw past this
+    // catch and surface to an unauthenticated caller as a 500.
+    if (!isPlainObject(decodedHeader) || !isPlainObject(decodedPayload)) {
+      return { ok: false, reason: 'non-object token segments' };
+    }
+    header = decodedHeader;
+    payload = decodedPayload;
   } catch {
     return { ok: false, reason: 'undecodable token segments' };
   }
@@ -133,8 +145,10 @@ export async function verifyAccessJwt(
   if (!verified) return { ok: false, reason: 'signature mismatch' };
 
   // `aud` is an array in Access tokens, but the spec permits a bare string.
+  // Filter rather than String()-coerce: String(['tag']) === 'tag', so coercion
+  // would let a nested array satisfy an exact audience comparison.
   const audiences = Array.isArray(payload.aud)
-    ? payload.aud.map(String)
+    ? payload.aud.filter((entry): entry is string => typeof entry === 'string')
     : typeof payload.aud === 'string'
       ? [payload.aud]
       : [];
