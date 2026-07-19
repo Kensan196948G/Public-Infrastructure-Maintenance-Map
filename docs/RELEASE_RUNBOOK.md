@@ -55,14 +55,18 @@ flowchart LR
 | 変数 | 設定場所 | 必須 | 説明 |
 |---|---|:--:|---|
 | 🔒 `DATABASE_URL` | **Worker Secret**（`wrangler secret put DATABASE_URL`）／取込時はローカル環境変数 | ✅ 本番 | Neon 接続文字列（`sslmode=require`）。未設定だとサンプルモードで公開されるため要注意 |
-| 🛡️ `REQUIRE_DATABASE_URL` | Worker Secret / 環境変数（`true`/`1`） | 推奨（本番） | `DATABASE_URL` 未設定時に fail-fast させ、サンプルデータの誤公開を防ぐ。**対応 PR #20（レビュー中）で実装** |
+| 🛡️ `REQUIRE_DATABASE_URL` | Worker Secret / 環境変数（`true`/`1`） | ✅ 本番 | `DATABASE_URL` 未設定時に fail-fast させ、サンプルデータの誤公開を防ぐ。本番 Workers では `DATABASE_URL` とセットで有効化する |
 | 🌐 `ALLOWED_ORIGIN` | `apps/api/wrangler.toml` `[vars]`（既定 `"*"`） | 推奨変更 | 本番の Web 固定オリジンに絞るとAPIのクロスサイト収集を抑制できる（現状 `"*"`） |
 | 🔢 `RATE_LIMIT_PER_MINUTE` | `wrangler.toml` `[vars]`（既定 `"120"`） | 任意 | in-isolate レート制限の分あたり上限 |
+| 🔐 `ADMIN_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの書込操作を許可するカンマ区切り許可リスト |
+| 👀 `REVIEWER_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの閲覧・品質レビュー操作を許可するカンマ区切り許可リスト |
 | 🌐 `VITE_API_BASE_URL` | **Cloudflare Pages の環境変数**（ビルド時） | 別オリジン配信時のみ | Web と API を別ドメインで配信する場合に API ベースURLを指定。未設定なら同一オリジン `/api/v1` |
 
-> ⚠️ **実装状況の注記（open PR で対応中）**
-> - Web 向け環境変数はコード上 `VITE_API_BASE_URL`（`apps/web/src/api/client.ts`）が正。`.env.example`/README の `PUBLIC_API_BASE_URL` 記載は **対応 PR #19（レビュー中）で `VITE_API_BASE_URL` に統一**。Pages 側では `VITE_API_BASE_URL` を設定してください。
-> - `REQUIRE_DATABASE_URL`（未設定時 fail-fast）と、サンプルモード転落の警告ログは **対応 PR #20（レビュー中）で実装**。マージ前は §6 の「件数検証」で代替してください。
+> ✅ **実装状況の注記**
+> - Web 向け環境変数は `VITE_API_BASE_URL`（`apps/web/src/api/client.ts`）に統一済みです。Pages 側でも `VITE_API_BASE_URL` を設定してください。
+> - `REQUIRE_DATABASE_URL`（未設定時 fail-fast）と、サンプルモード転落時の `sample_mode_fallback` 警告ログは実装済みです。本番では `REQUIRE_DATABASE_URL=true` を設定し、DB未接続のままサンプルデータを公開しない運用にしてください。
+>
+> 🔒 管理APIのロールはリクエストヘッダではなく、`ADMIN_EMAILS` / `REVIEWER_EMAILS` のサーバ側許可リストからのみ解決します。Cloudflare Accessは外側の認証境界、アプリはメール許可リストによる認可境界として扱います。
 
 ---
 
@@ -81,7 +85,7 @@ flowchart LR
 | 🗄️ | マイグレーション適用計画 | 未適用 `migrations/*.sql` を棚卸し（`0001_init.sql` / `0002_cross_column_checks.sql`） | 適用対象を把握 |
 | 🔁 | ロールバック確認 | §5 の手順・直前デプロイ・Neon 復元点を確認 | 手段を用意 |
 | 📄 | README / docs 最新 | 利用機能・手順の差分反映 | 反映済み |
-| ⚠️ | 受入基準の現状 | §8 の既知制約を確認（管理画面 #4 未実装 等） | リスク合意済み |
+| ⚠️ | 受入基準の現状 | §8 の既知制約を確認（管理UI #4 の残作業 等） | リスク合意済み |
 
 > 💡 CI にデプロイジョブは**ありません**（`ci.yml` は quality / secret-scan / dependency-scan の 3 ジョブのみ）。**本番反映は 100% 手動**です。
 
@@ -183,7 +187,7 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 1. 🩺 `curl https://<api>/api/v1/health` → 応答するか（プロセス生存確認）
 2. 📊 Workers Observability のログ（`wrangler.toml [observability] enabled=true`）
    - `wrangler tail` またはダッシュボードで**構造化 JSON ログ**を確認
-   - 実在する `event`: **`request`**（アクセスログ: `request_id/method/path/status_code/duration_ms`）と **`unhandled_error`**（想定外例外）。加えて、対応 PR #20 マージ後は **`sample_mode_fallback`**（DBフォールバック警告）も出力される
+   - 実在する `event`: **`request`**（アクセスログ: `request_id/method/path/status_code/duration_ms`）、**`unhandled_error`**（想定外例外）、**`sample_mode_fallback`**（DBフォールバック警告）
 3. 🗄️ データ異常なら `/api/v1/assets/summary`・`/api/v1/sources` の件数を期待値と突合
 
 ### 6.2 症状別
@@ -195,7 +199,7 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 | 5xx 増加 | `unhandled_error` ログに詳細 | ログの `request_id` で追跡し原因修正 → 再デプロイ |
 | 取込失敗 | 上流データ変化・品質チェック不合格 | dry-run で再現・原因除去後、**同一ソースを `--publish` 再実行**（既存公開データは非破壊） |
 
-> ⚠️ **サンプルモード転落の検知**: 現状 main では専用の警告ログや `/health` シグナルが無いため、切替検知は「公開データ件数の突合」に依存します。**対応 PR #20** で `REQUIRE_DATABASE_URL`（fail-fast）と `sample_mode_fallback` 警告ログを追加し、検知性を改善します。マージ前は **デプロイ直後の件数検証を必須**としてください。
+> ⚠️ **サンプルモード転落の検知**: `DATABASE_URL` が未設定で `REQUIRE_DATABASE_URL` も無効な環境では、API はローカル開発用のサンプルモードで起動します。本番では `REQUIRE_DATABASE_URL=true` による fail-fast を必須とし、あわせて `/api/v1/assets/summary`・`/api/v1/sources` の件数突合で接続先と公開件数を確認してください。
 
 ---
 
@@ -229,9 +233,10 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 
 | Issue | 内容 | 本番判断への影響 |
 |---|---|---|
-| 🔒 #4 | 管理画面（Cloudflare Access 認証）**未実装** | 管理系操作は不可。公開 GET API のみで運用する前提なら**公開リリースは可**。管理機能提供は次フェーズ |
-| 🧪 #12 | E2E（Playwright）**未導入** | ブラウザ実操作の自動回帰なし。**手動スモークテスト（§4④ の検証）で代替** |
-| 🗄️ #8 | 実 Neon/PostGIS **統合テスト未整備** | DB 経路は本番相当の自動検証がない。**デプロイ後の件数突合・health 確認を必須**に |
+| 🔒 #4 | 管理画面（Cloudflare Access 認証）は段階実装中 | 管理APIの認証・基本操作に加え、監査ログ画面から取込記録作成・最新取込詳細確認・理由入力付きの品質issue解決、詳細画面から理由入力付きの資産公開停止までは接続済み。ソース登録/編集UIと管理系E2Eは次フェーズ。公開 GET API のみで運用する前提なら**公開リリースは可** |
+| 🧪 #12 | E2E（Playwright）**公開地図の主要回帰を導入済み** | `pnpm test:e2e` / CI `🗺️ Playwright E2E` で初期表示・検索・詳細表示・種別フィルタを検証。公開前は手動スモークテスト（§4④）も併用 |
+| 🗄️ #8 | `PostgresAssetRepository` の PostGIS 統合テストを CI に導入 | 読取経路の公開可視性・検索・bbox・`getAssetById` 契約は `🗄️ PostGIS integration` で検証。Neon dev branch を使った publish 一気通貫は #5/#16 で継続 |
+| 🔄 #5 / #16 | Publish 経路の PostGIS 統合テストを CI に導入 | `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証。実 Neon への流し込みは本 runbook の手動手順で実施 |
 
 ### 🚦 リリース判断（Deploy Gate）
 

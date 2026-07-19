@@ -1,12 +1,22 @@
 /**
  * Neon PostgreSQL + PostGIS repository.
  *
- * ⚠️ Compile-checked but NOT yet integration-tested against a live database
- * (no local PostGIS in the build environment). Tracked as a known limitation;
- * run the integration suite against a Neon branch before first production use.
+ * Read-side SQL is covered by the PostGIS integration suite in CI. Production
+ * uses Neon HTTP; the integration suite injects a postgres.js-compatible SQL tag
+ * against a disposable PostGIS service so the same repository contract is tested
+ * without requiring production or preview Neon credentials.
  */
 import { neon } from '@neondatabase/serverless';
 import type {
+  AdminAssetPublication,
+  AdminCreateSource,
+  AdminIngestionDetail,
+  AdminIngestionRun,
+  AdminQualityIssueRecord,
+  AdminResolveQualityIssue,
+  AdminSourceResponse,
+  AdminSuspendAsset,
+  AdminUpdateSource,
   AssetCountSummary,
   AssetDetail,
   AssetSearchResponse,
@@ -35,6 +45,9 @@ import { InvalidCursorError } from './repository.js';
 
 type Row = Record<string, unknown>;
 type Sql = ReturnType<typeof neon>;
+type TransactionalSql = Sql & {
+  begin?: (handler: (tx: Sql) => Promise<void>) => Promise<void>;
+};
 
 /**
  * Distinct wording from sample-mode's seed.ts FIXED_NOTICES: production data
@@ -133,6 +146,40 @@ function rowToSource(row: Row): SourceInfo {
   };
 }
 
+function rowToAdminRun(row: Row): AdminIngestionRun {
+  return {
+    id: String(row['id']),
+    sourceSlug: String(row['source_slug']),
+    startedAt: toIso(row['started_at']) ?? new Date(0).toISOString(),
+    finishedAt: toIso(row['finished_at']),
+    status: row['status'] as AdminIngestionRun['status'],
+    fetchedCount: Number(row['fetched_count'] ?? 0),
+    acceptedCount: Number(row['accepted_count'] ?? 0),
+    rejectedCount: Number(row['rejected_count'] ?? 0),
+    warningCount: Number(row['warning_count'] ?? 0),
+    errorCode: (row['error_code'] as string | null) ?? null,
+    errorSummary: (row['error_summary'] as string | null) ?? null,
+    triggeredBy: (row['triggered_by'] as string | null) ?? null,
+    correlationId: (row['correlation_id'] as string | null) ?? null,
+  };
+}
+
+function rowToAdminIssue(row: Row): AdminQualityIssueRecord {
+  return {
+    id: String(row['id']),
+    assetId: (row['asset_id'] as string | null) ?? null,
+    runId: (row['run_id'] as string | null) ?? null,
+    ruleCode: row['rule_code'] as AdminQualityIssueRecord['ruleCode'],
+    severity: row['severity'] as AdminQualityIssueRecord['severity'],
+    fieldName: (row['field_name'] as string | null) ?? null,
+    observedValue: (row['observed_value'] as string | null) ?? null,
+    message: String(row['message']),
+    resolutionStatus: row['resolution_status'] as AdminQualityIssueRecord['resolutionStatus'],
+    createdAt: toIso(row['created_at']) ?? new Date(0).toISOString(),
+    resolvedAt: toIso(row['resolved_at']),
+  };
+}
+
 /** Builds the shared WHERE fragment. Every value is a bound parameter. */
 function buildConditions(sql: Sql, filters: AssetQueryFilters) {
   const conditions = [sql`a.publication_status = 'published'`, sql`a.quality_status <> 'hidden'`];
@@ -167,10 +214,10 @@ function buildConditions(sql: Sql, filters: AssetQueryFilters) {
 }
 
 export class PostgresAssetRepository implements AssetRepository {
-  private readonly sql: Sql;
+  private readonly sql: TransactionalSql;
 
-  constructor(databaseUrl: string) {
-    this.sql = neon(databaseUrl);
+  constructor(databaseUrl: string, sqlOverride?: TransactionalSql) {
+    this.sql = sqlOverride ?? neon(databaseUrl);
   }
 
   private summarySelect(filters: AssetQueryFilters) {
@@ -313,6 +360,170 @@ export class PostgresAssetRepository implements AssetRepository {
 
     return rows.map((row) => rowToDetail(row, attrsByAsset.get(String(row['id'])) ?? []));
   }
+
+  private async getAdminSourceBySlug(slug: string): Promise<AdminSourceResponse | null> {
+    const rows = (await this.sql`
+      SELECT s.*,
+             (SELECT max(v.fetched_at) FROM dataset_versions v WHERE v.source_id = s.id) AS last_fetched_at,
+             (SELECT max(v.source_updated_at) FROM dataset_versions v WHERE v.source_id = s.id) AS source_updated_at,
+             (SELECT count(*)::int FROM infrastructure_assets a
+               WHERE a.source_id = s.id AND a.publication_status = 'published'
+                 AND a.quality_status <> 'hidden') AS published_asset_count
+        FROM data_sources s
+       WHERE s.slug = ${slug}
+       LIMIT 1`) as Row[];
+    const row = rows[0];
+    return row ? rowToSource(row) : null;
+  }
+
+  async createSource(input: AdminCreateSource): Promise<AdminSourceResponse> {
+    await this.sql`
+      INSERT INTO data_sources
+        (slug, name, provider_name, source_url, access_type, format, license_name,
+         license_url, redistribution, attribution_text, refresh_cron, enabled)
+      VALUES
+        (${input.slug}, ${input.name}, ${input.providerName}, ${input.sourceUrl}, ${input.accessType},
+         ${input.format}, ${input.licenseName}, ${input.licenseUrl ?? null}, ${input.redistribution},
+         ${input.attributionText ?? null}, ${input.refreshCron ?? null}, ${input.enabled})
+      ON CONFLICT (slug) DO UPDATE SET
+        name = EXCLUDED.name,
+        provider_name = EXCLUDED.provider_name,
+        source_url = EXCLUDED.source_url,
+        access_type = EXCLUDED.access_type,
+        format = EXCLUDED.format,
+        license_name = EXCLUDED.license_name,
+        license_url = EXCLUDED.license_url,
+        redistribution = EXCLUDED.redistribution,
+        attribution_text = EXCLUDED.attribution_text,
+        refresh_cron = EXCLUDED.refresh_cron,
+        enabled = EXCLUDED.enabled,
+        updated_at = now()`;
+    const source = await this.getAdminSourceBySlug(input.slug);
+    if (!source) throw new Error('source upsert did not return a readable row');
+    return source;
+  }
+
+  async updateSource(slug: string, input: AdminUpdateSource): Promise<AdminSourceResponse | null> {
+    const current = await this.getAdminSourceBySlug(slug);
+    if (!current) return null;
+    await this.sql`
+      UPDATE data_sources SET
+        name = ${input.name ?? current.name},
+        provider_name = ${input.providerName ?? current.providerName},
+        source_url = ${input.sourceUrl ?? current.sourceUrl},
+        access_type = ${input.accessType ?? current.accessType},
+        format = ${input.format ?? current.format},
+        license_name = ${input.licenseName ?? current.licenseName},
+        license_url = ${input.licenseUrl === undefined ? current.licenseUrl : input.licenseUrl},
+        redistribution = ${input.redistribution ?? current.redistribution},
+        attribution_text = ${
+          input.attributionText === undefined ? current.attributionText : input.attributionText
+        },
+        refresh_cron = CASE
+          WHEN ${input.refreshCron === undefined} THEN refresh_cron
+          ELSE ${input.refreshCron ?? null}
+        END,
+        enabled = ${input.enabled ?? current.enabled},
+        updated_at = now()
+      WHERE slug = ${slug}`;
+    return this.getAdminSourceBySlug(slug);
+  }
+
+  async startIngestion(
+    sourceSlug: string,
+    actor: string,
+    correlationId: string,
+  ): Promise<AdminIngestionRun | null> {
+    const sourceRows = (await this.sql`
+      SELECT id FROM data_sources WHERE slug = ${sourceSlug} LIMIT 1`) as Row[];
+    const sourceId = sourceRows[0]?.['id'];
+    if (!sourceId) return null;
+    const runId = crypto.randomUUID();
+    const rows = (await this.sql`
+      INSERT INTO ingestion_runs
+        (id, source_id, status, triggered_by, correlation_id)
+      VALUES
+        (${runId}, ${String(sourceId)}, 'running', ${actor}, ${correlationId})
+      RETURNING id, started_at, finished_at, status, fetched_count, accepted_count,
+                rejected_count, warning_count, error_code, error_summary,
+                triggered_by, correlation_id, ${sourceSlug} AS source_slug`) as Row[];
+    return rowToAdminRun(rows[0]!);
+  }
+
+  async getIngestionDetail(id: string): Promise<AdminIngestionDetail | null> {
+    const runs = (await this.sql`
+      SELECT r.*, s.slug AS source_slug
+        FROM ingestion_runs r
+        JOIN data_sources s ON s.id = r.source_id
+       WHERE r.id = ${id}
+       LIMIT 1`) as Row[];
+    const run = runs[0];
+    if (!run) return null;
+    const issues = (await this.sql`
+      SELECT id, asset_id, run_id, rule_code, severity, field_name, observed_value,
+             message, resolution_status, created_at, resolved_at
+        FROM quality_issues
+       WHERE run_id = ${id}
+       ORDER BY created_at DESC, id`) as Row[];
+    return { run: rowToAdminRun(run), qualityIssues: issues.map(rowToAdminIssue) };
+  }
+
+  async resolveQualityIssue(
+    id: string,
+    input: AdminResolveQualityIssue,
+    actor: string,
+  ): Promise<AdminQualityIssueRecord | null> {
+    const rows = (await this.sql`
+      UPDATE quality_issues SET
+        resolution_status = ${input.resolutionStatus},
+        resolved_by = ${actor},
+        resolved_at = now(),
+        message = message || ${`\nResolution: ${input.reason}`}
+      WHERE id = ${id}
+      RETURNING id, asset_id, run_id, rule_code, severity, field_name, observed_value,
+                message, resolution_status, created_at, resolved_at`) as Row[];
+    const row = rows[0];
+    return row ? rowToAdminIssue(row) : null;
+  }
+
+  async suspendAsset(
+    id: string,
+    input: AdminSuspendAsset,
+    actor: string,
+  ): Promise<AdminAssetPublication | null> {
+    const updateAsset = (sql: Sql) => sql`
+      UPDATE infrastructure_assets SET
+        publication_status = 'suspended',
+        updated_at = now()
+      WHERE id = ${id}
+      RETURNING id, publication_status`;
+    const insertIssue = (sql: Sql) => sql`
+      INSERT INTO quality_issues
+        (asset_id, rule_code, severity, field_name, observed_value, message, resolution_status)
+      SELECT ${id}, 'Q007', 'warning', 'publication_status', 'suspended',
+             ${`Publication suspended by ${actor}: ${input.reason}`}, 'open'
+       WHERE EXISTS (SELECT 1 FROM infrastructure_assets WHERE id = ${id})`;
+    let rows: Row[] = [];
+    if (this.sql.begin) {
+      await this.sql.begin(async (tx) => {
+        rows = (await updateAsset(tx)) as Row[];
+        if (rows.length > 0) await insertIssue(tx);
+      });
+    } else {
+      const [updatedRows] = await this.sql.transaction([
+        updateAsset(this.sql),
+        insertIssue(this.sql),
+      ]);
+      rows = updatedRows as Row[];
+    }
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      id: String(row['id']),
+      publicationStatus: row['publication_status'] as AdminAssetPublication['publicationStatus'],
+      reason: input.reason,
+    };
+  }
 }
 
 /**
@@ -329,10 +540,10 @@ export class PostgresAssetRepository implements AssetRepository {
  * same source can no longer attach attributes/issues to a minted-but-discarded id.
  */
 export class PostgresAssetPublisher implements AssetPublisher {
-  private readonly sql: Sql;
+  private readonly sql: TransactionalSql;
 
-  constructor(databaseUrl: string) {
-    this.sql = neon(databaseUrl);
+  constructor(databaseUrl: string, sqlOverride?: TransactionalSql) {
+    this.sql = sqlOverride ?? neon(databaseUrl);
   }
 
   async ensureDataSource(descriptor: PublishableSourceDescriptor): Promise<string> {
@@ -434,27 +645,25 @@ export class PostgresAssetPublisher implements AssetPublisher {
     // child write reads the id that actually persisted (Issue #16).
     const newAssetIds = dedupedAssets.map(() => crypto.randomUUID());
 
-    // Scalar subquery resolving an asset's surrogate id from its natural key,
-    // evaluated inside the transaction after the upsert above has run. The
-    // unique (source_id, source_record_id) index guarantees at most one row.
-    const assetIdByRecord = (sourceRecordId: string) => this.sql`(
-      SELECT id FROM infrastructure_assets
-       WHERE source_id = ${input.sourceId} AND source_record_id = ${sourceRecordId}
-    )`;
+    const buildQueries = (sql: Sql) => {
+      // Scalar subquery resolving an asset's surrogate id from its natural key,
+      // evaluated inside the transaction after the upsert above has run. The
+      // unique (source_id, source_record_id) index guarantees at most one row.
+      const assetIdByRecord = (sourceRecordId: string) => sql`(
+        SELECT id FROM infrastructure_assets
+         WHERE source_id = ${input.sourceId} AND source_record_id = ${sourceRecordId}
+      )`;
 
-    // One non-interactive transaction — every statement is fixed up front. Parent
-    // upserts precede the child writes that reference them by natural key, so no
-    // statement needs to read another's returned value (Neon can't branch on results).
-    const queries = [
-      this.sql`
+      return [
+        sql`
         INSERT INTO dataset_versions
           (id, source_id, source_updated_at, fetched_at, content_hash, schema_fingerprint,
            record_count, status)
         VALUES
           (${datasetVersionId}, ${input.sourceId}, ${input.sourceUpdatedAt}, ${now},
            ${input.contentHash}, ${input.schemaFingerprint}, ${input.fetchedCount}, 'published')`,
-      ...dedupedAssets.map(
-        (asset, i) => this.sql`
+        ...dedupedAssets.map(
+          (asset, i) => sql`
         INSERT INTO infrastructure_assets
           (id, source_id, source_record_id, asset_type, name, original_name, geometry,
            prefecture_code, municipality_code, managing_authority, source_updated_at,
@@ -478,40 +687,26 @@ export class PostgresAssetPublisher implements AssetPublisher {
           quality_status = EXCLUDED.quality_status,
           publication_status = EXCLUDED.publication_status,
           updated_at = EXCLUDED.updated_at`,
-      ),
-      // Attributes are replaced wholesale per asset rather than diffed — simpler,
-      // and cheap at this data volume. Deleted by natural key so the delete hits
-      // the row that actually persisted, not a minted-but-discarded id.
-      ...dedupedAssets.map(
-        (asset) => this.sql`
+        ),
+        // Attributes are replaced wholesale per asset rather than diffed — simpler,
+        // and cheap at this data volume. Deleted by natural key so the delete hits
+        // the row that actually persisted, not a minted-but-discarded id.
+        ...dedupedAssets.map(
+          (asset) => sql`
         DELETE FROM asset_attributes WHERE asset_id = ${assetIdByRecord(asset.sourceRecordId)}`,
-      ),
-      ...dedupedAssets.flatMap((asset) =>
-        asset.attributes.map(
-          (attr) => this.sql`
+        ),
+        ...dedupedAssets.flatMap((asset) =>
+          asset.attributes.map(
+            (attr) => sql`
         INSERT INTO asset_attributes
           (asset_id, key, value_text, value_number, unit, original_value, source_label)
         SELECT a.id, ${attr.key}, ${attr.valueText}, ${attr.valueNumber}, ${attr.unit},
                ${attr.originalValue}, ${attr.sourceLabel}
           FROM infrastructure_assets a
          WHERE a.source_id = ${input.sourceId} AND a.source_record_id = ${asset.sourceRecordId}`,
+          ),
         ),
-      ),
-      // Issues are appended per run, not reconciled against prior-run issues on
-      // the same asset — resolution-status lifecycle management (dismiss,
-      // accept, mark fixed) is the admin-console's job (Issue #4), not publish's.
-      ...dedupedAssets.flatMap((asset) =>
-        asset.issues.map(
-          (issue) => this.sql`
-        INSERT INTO quality_issues
-          (run_id, asset_id, rule_code, severity, field_name, observed_value, message, resolution_status)
-        SELECT ${ingestionRunId}, a.id, ${issue.ruleCode}, ${issue.severity},
-               ${issue.fieldName}, ${issue.observedValue}, ${issue.message}, ${issue.resolutionStatus}
-          FROM infrastructure_assets a
-         WHERE a.source_id = ${input.sourceId} AND a.source_record_id = ${asset.sourceRecordId}`,
-        ),
-      ),
-      this.sql`
+        sql`
         INSERT INTO ingestion_runs
           (id, source_id, dataset_version_id, started_at, finished_at, status,
            fetched_count, accepted_count, rejected_count, warning_count,
@@ -520,10 +715,31 @@ export class PostgresAssetPublisher implements AssetPublisher {
           (${ingestionRunId}, ${input.sourceId}, ${datasetVersionId}, ${now}, ${now}, ${status},
            ${input.fetchedCount}, ${publishedCount}, ${droppedCount + hiddenCount},
            ${input.warningCount}, ${input.triggeredBy}, ${input.correlationId})`,
-    ];
+        // Issues are appended per run, not reconciled against prior-run issues on
+        // the same asset — resolution-status lifecycle management (dismiss,
+        // accept, mark fixed) is the admin-console's job (Issue #4), not publish's.
+        ...dedupedAssets.flatMap((asset) =>
+          asset.issues.map(
+            (issue) => sql`
+        INSERT INTO quality_issues
+          (run_id, asset_id, rule_code, severity, field_name, observed_value, message, resolution_status)
+        SELECT ${ingestionRunId}, a.id, ${issue.ruleCode}, ${issue.severity},
+               ${issue.fieldName}, ${issue.observedValue}, ${issue.message}, ${issue.resolutionStatus}
+          FROM infrastructure_assets a
+         WHERE a.source_id = ${input.sourceId} AND a.source_record_id = ${asset.sourceRecordId}`,
+          ),
+        ),
+      ];
+    };
 
     try {
-      await this.sql.transaction(queries);
+      if (this.sql.begin) {
+        await this.sql.begin(async (tx) => {
+          for (const query of buildQueries(tx)) await query;
+        });
+      } else {
+        await this.sql.transaction(buildQueries(this.sql));
+      }
     } catch (error) {
       // A thrown error from Neon's HTTP transaction endpoint doesn't prove the
       // batch never committed (the response can be lost after the server

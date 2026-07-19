@@ -20,6 +20,10 @@ export interface ApiConfig {
    * Absent → false (sample fallback allowed; the local-dev default).
    */
   requireDatabaseUrl?: boolean;
+  /** Server-side allowlist for admin API write operations. */
+  adminEmails: readonly string[];
+  /** Server-side allowlist for admin API read/review operations. */
+  reviewerEmails: readonly string[];
 }
 
 export interface EnvBindings {
@@ -27,11 +31,20 @@ export interface EnvBindings {
   ALLOWED_ORIGIN?: string;
   RATE_LIMIT_PER_MINUTE?: string;
   REQUIRE_DATABASE_URL?: string;
+  ADMIN_EMAILS?: string;
+  REVIEWER_EMAILS?: string;
 }
 
 /** Truthy env-string parse: 'true'/'1' (case-insensitive) enable the flag. */
 function envFlag(value: string | undefined): boolean {
   return value?.toLowerCase() === 'true' || value === '1';
+}
+
+function csvEmails(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 export function configFromEnv(env: EnvBindings): ApiConfig {
@@ -41,6 +54,8 @@ export function configFromEnv(env: EnvBindings): ApiConfig {
     rateLimitPerMinute: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 120,
     version: '0.1.0',
     requireDatabaseUrl: envFlag(env.REQUIRE_DATABASE_URL),
+    adminEmails: csvEmails(env.ADMIN_EMAILS),
+    reviewerEmails: csvEmails(env.REVIEWER_EMAILS),
   };
   if (env.DATABASE_URL) config.databaseUrl = env.DATABASE_URL;
   return config;

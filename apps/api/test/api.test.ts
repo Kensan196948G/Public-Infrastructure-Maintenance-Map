@@ -17,6 +17,8 @@ const CONFIG: ApiConfig = {
   allowedOrigin: '*',
   rateLimitPerMinute: 10_000,
   version: 'test',
+  adminEmails: ['admin@example.com'],
+  reviewerEmails: ['reviewer@example.com'],
 };
 
 let app: Hono<never>;
@@ -28,6 +30,14 @@ beforeAll(async () => {
 
 const get = (path: string, headers?: Record<string, string>) =>
   app.request(`http://localhost${path}`, { headers: headers ?? {} });
+
+const adminHeaders = {
+  'CF-Access-Authenticated-User-Email': 'admin@example.com',
+};
+
+const reviewerHeaders = {
+  'CF-Access-Authenticated-User-Email': 'reviewer@example.com',
+};
 
 describe('GET /api/v1/health', () => {
   it('answers ok with version and time', async () => {
@@ -183,6 +193,112 @@ describe('GET /api/v1/export (license control, FR-08)', () => {
   it('caps limit at 2000 (reduced from the original 10000 ceiling)', async () => {
     expect((await get('/api/v1/export?format=csv&limit=2000')).status).toBe(200);
     expect((await get('/api/v1/export?format=csv&limit=2001')).status).toBe(400);
+  });
+});
+
+describe('admin API (Issue #4 / FR-13 / FR-14)', () => {
+  it('allows credentialed cross-origin admin preflight when ALLOWED_ORIGIN is fixed', async () => {
+    const seed = await buildSampleSeed();
+    const corsApp = createApp(new InMemoryAssetRepository(seed), {
+      ...CONFIG,
+      allowedOrigin: 'https://admin.example.com',
+    }) as unknown as Hono<never>;
+
+    const res = await corsApp.request('http://localhost/api/v1/admin/sources/sample/ingestions', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://admin.example.com',
+        'Access-Control-Request-Method': 'POST',
+      },
+    });
+
+    expect(res.status).toBe(204);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://admin.example.com');
+    expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(res.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+  });
+
+  it('rejects unauthenticated access before any admin operation', async () => {
+    const res = await get('/api/v1/admin/ingestions/00000000-0000-4000-8000-000000000000');
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as ProblemDetails;
+    expect(body.code).toBe('UNAUTHORIZED');
+  });
+
+  it('rejects authenticated users outside the server-side admin/reviewer allowlists', async () => {
+    const res = await get('/api/v1/admin/ingestions/00000000-0000-4000-8000-000000000000', {
+      'CF-Access-Authenticated-User-Email': 'viewer@example.com',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('does not trust client-supplied role headers for admin authorization', async () => {
+    const res = await get('/api/v1/admin/ingestions/00000000-0000-4000-8000-000000000000', {
+      'CF-Access-Authenticated-User-Email': 'viewer@example.com',
+      'X-PIMM-Admin-Roles': 'admin',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('lets an admin register and update a source', async () => {
+    const create = await app.request('http://localhost/api/v1/admin/sources', {
+      method: 'POST',
+      headers: { ...adminHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slug: 'test-admin-source',
+        name: '管理APIテストソース',
+        providerName: 'テスト管理者',
+        sourceUrl: 'https://example.com/admin-source.json',
+        accessType: 'file',
+        format: 'json',
+        licenseName: 'CC BY 4.0',
+        redistribution: 'allowed',
+        enabled: false,
+      }),
+    });
+    expect(create.status).toBe(201);
+
+    const patch = await app.request('http://localhost/api/v1/admin/sources/test-admin-source', {
+      method: 'PATCH',
+      headers: { ...adminHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    expect(patch.status).toBe(200);
+    const body = (await patch.json()) as SourceInfo;
+    expect(body.enabled).toBe(true);
+  });
+
+  it('records an ingestion trigger and exposes the audit detail to reviewers', async () => {
+    const trigger = await app.request(
+      'http://localhost/api/v1/admin/sources/sample-bridges/ingestions',
+      {
+        method: 'POST',
+        headers: adminHeaders,
+      },
+    );
+    expect(trigger.status).toBe(202);
+    const run = (await trigger.json()) as { id: string; triggeredBy: string };
+    expect(run.triggeredBy).toBe('admin@example.com');
+
+    const detail = await get(`/api/v1/admin/ingestions/${run.id}`, reviewerHeaders);
+    expect(detail.status).toBe(200);
+    const body = (await detail.json()) as { run: { id: string }; qualityIssues: unknown[] };
+    expect(body.run.id).toBe(run.id);
+    expect(body.qualityIssues).toEqual([]);
+  });
+
+  it('suspends an asset and removes it from the public detail endpoint', async () => {
+    const list = (await (
+      await get('/api/v1/assets?types=bridge&limit=1')
+    ).json()) as AssetSearchResponse;
+    const id = list.items[0]!.id;
+    const suspend = await app.request(`http://localhost/api/v1/admin/assets/${id}/suspend`, {
+      method: 'POST',
+      headers: { ...adminHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'ライセンス棚卸しのため一時停止' }),
+    });
+    expect(suspend.status).toBe(200);
+    expect((await get(`/api/v1/assets/${id}`)).status).toBe(404);
   });
 });
 

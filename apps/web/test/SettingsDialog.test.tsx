@@ -51,9 +51,9 @@ describe('SettingsDialog', () => {
     expect(screen.getByText(/1 件（有効 1 件）/)).toBeInTheDocument();
   });
 
-  it('discloses that login authentication is not yet implemented', () => {
+  it('shows the current admin authentication state', () => {
     setup();
-    expect(screen.getByText(/未実装（Issue #4）/)).toBeInTheDocument();
+    expect(screen.getByText(/管理APIゲート実装済/)).toBeInTheDocument();
   });
 
   it('reflects an API connection failure', () => {

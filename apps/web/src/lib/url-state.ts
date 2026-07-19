@@ -1,5 +1,5 @@
 import type { AssetType, QualityStatus } from '@pimm/contracts';
-import { ASSET_TYPES, QUALITY_STATUSES } from '@pimm/contracts';
+import { ASSET_TYPES } from '@pimm/contracts';
 import { VISIBLE_QUALITY_STATUSES } from './asset-meta.js';
 
 /**
@@ -45,7 +45,7 @@ function parseNumber(raw: string | null, fallback: number): number {
 }
 
 const ASSET_TYPE_SET = new Set<string>(ASSET_TYPES);
-const QUALITY_SET = new Set<string>(QUALITY_STATUSES);
+const VISIBLE_QUALITY_SET = new Set<string>(VISIBLE_QUALITY_STATUSES);
 
 function parseCsv<T extends string>(raw: string, allowed: Set<string>): T[] {
   const seen = new Set<string>();
@@ -83,7 +83,7 @@ export function parseUrlState(search: string): MapUrlState {
     : [...ASSET_TYPES];
 
   const quality = params.has('quality')
-    ? parseCsv<QualityStatus>(params.get('quality') ?? '', QUALITY_SET)
+    ? parseCsv<QualityStatus>(params.get('quality') ?? '', VISIBLE_QUALITY_SET)
     : [...VISIBLE_QUALITY_STATUSES];
 
   const q = (params.get('q') ?? '').trim();

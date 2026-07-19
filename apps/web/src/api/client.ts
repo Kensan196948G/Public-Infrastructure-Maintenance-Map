@@ -3,6 +3,11 @@ import type {
   AssetDetail,
   AssetSearchResponse,
   AssetType,
+  AdminAssetPublication,
+  AdminIngestionDetail,
+  AdminIngestionRun,
+  AdminQualityIssueRecord,
+  AdminResolveQualityIssue,
   HealthResponse,
   QualityStatus,
   SourceListResponse,
@@ -61,10 +66,28 @@ function buildAssetQuery(params: AssetSearchParams): string {
 /** Injectable fetch so tests can supply a stub without touching globals. */
 export type FetchLike = typeof fetch;
 
-async function getJson<T>(url: string, fetchImpl: FetchLike): Promise<T> {
+async function getJson<T>(url: string, fetchImpl: FetchLike, init?: RequestInit): Promise<T> {
   const res = await fetchImpl(url, {
     headers: { Accept: 'application/json' },
+    ...init,
   });
+  return parseJsonResponse<T>(res);
+}
+
+async function postJson<T>(url: string, fetchImpl: FetchLike, body?: unknown): Promise<T> {
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers:
+      body === undefined
+        ? { Accept: 'application/json' }
+        : { Accept: 'application/json', 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    credentials: 'include',
+  });
+  return parseJsonResponse<T>(res);
+}
+
+async function parseJsonResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -116,6 +139,40 @@ export class ApiClient {
 
   getHealth(): Promise<HealthResponse> {
     return getJson<HealthResponse>(`${this.base}/health`, this.fetchImpl);
+  }
+
+  startAdminIngestion(sourceSlug: string): Promise<AdminIngestionRun> {
+    return postJson<AdminIngestionRun>(
+      `${this.base}/admin/sources/${encodeURIComponent(sourceSlug)}/ingestions`,
+      this.fetchImpl,
+    );
+  }
+
+  getAdminIngestion(id: string): Promise<AdminIngestionDetail> {
+    return getJson<AdminIngestionDetail>(
+      `${this.base}/admin/ingestions/${encodeURIComponent(id)}`,
+      this.fetchImpl,
+      { credentials: 'include' },
+    );
+  }
+
+  suspendAdminAsset(id: string, reason: string): Promise<AdminAssetPublication> {
+    return postJson<AdminAssetPublication>(
+      `${this.base}/admin/assets/${encodeURIComponent(id)}/suspend`,
+      this.fetchImpl,
+      { reason },
+    );
+  }
+
+  resolveAdminQualityIssue(
+    id: string,
+    input: AdminResolveQualityIssue,
+  ): Promise<AdminQualityIssueRecord> {
+    return postJson<AdminQualityIssueRecord>(
+      `${this.base}/admin/quality-issues/${encodeURIComponent(id)}/resolve`,
+      this.fetchImpl,
+      input,
+    );
   }
 }
 

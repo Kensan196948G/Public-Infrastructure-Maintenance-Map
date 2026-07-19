@@ -6,7 +6,13 @@ vi.mock('@pimm/source-adapters', () => ({
   buildSampleSeed: buildSampleSeedMock,
 }));
 
-const CONFIG: ApiConfig = { allowedOrigin: '*', rateLimitPerMinute: 10, version: 'test' };
+const CONFIG: ApiConfig = {
+  allowedOrigin: '*',
+  rateLimitPerMinute: 10,
+  version: 'test',
+  adminEmails: [],
+  reviewerEmails: [],
+};
 
 beforeEach(() => {
   vi.resetModules();

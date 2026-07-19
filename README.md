@@ -177,11 +177,9 @@ pnpm dev
 | `pnpm lint` | コード規約検査 |
 | `pnpm typecheck` | 型検査 |
 | `pnpm test` | 単体・統合テスト |
+| `pnpm test:e2e` | 初回のみ `pnpm exec playwright install --with-deps chromium` を実行してから、Playwright Chromium で API/Web dev server を起動し、公開地図の初期表示・検索・詳細表示・種別フィルタを検証 |
 | `pnpm db:migrate` | DB migration（`DATABASE_URL` 必須） |
 | `pnpm ingest --source <slug>` | 指定公開ソースの取込（dry-run。`--publish` で本番DBへ反映） |
-
-> [!NOTE]
-> ブラウザE2E（Playwright）は未導入です（Issue #12）。導入後に `pnpm test:e2e` を追加します。
 
 ## 🔐 環境変数
 
@@ -194,9 +192,12 @@ VITE_API_BASE_URL=http://localhost:8787/api/v1
 # Secret（実値はGit管理しない）
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
 CLOUDFLARE_ACCESS_AUD=
+ADMIN_EMAILS=admin@example.com
+REVIEWER_EMAILS=reviewer@example.com
 ```
 
 - `VITE_API_BASE_URL`: Web と API を別オリジン（別ドメインの Cloudflare Pages／Workers 等）で配信する場合に、API のベース URL を指定します。同一オリジン配信なら未設定でよく、既定の `/api/v1` が使われます。ビルド時（`vite build`）に値がバンドルへ焼き込まれるため、デプロイ環境ごとに設定します。
+- `ADMIN_EMAILS` / `REVIEWER_EMAILS`: Cloudflare Accessで認証されたメールアドレスに対する管理APIのサーバ側許可リストです。ロールはリクエストヘッダではなく、この設定からのみ解決します。
 - 公開データ用APIキーが必要な場合も、ブラウザへ渡さずWorkers側のSecretとして保管します。
 
 ## 🧪 テスト方針
@@ -236,9 +237,22 @@ flowchart LR
 | 詳細設計 | ✅ 初版作成 |
 | MVP基盤実装（Phase 1: 地図・検索・詳細・出典表示・取込パイプライン・公開API・CI） | ✅ 実装済（全パッケージでテスト整備、CIで検証） |
 | 公開データソース選定・アダプター実装 | ✅ 実データ4ソース・3種別（公共施設／橋梁／道路） |
-| 実データ取込→公開DB反映（Phase 2） | ✅ 取込→Publish経路を実装（`ingest --publish`。実Neon統合テストは Issue #8） |
-| 管理API・管理画面（UI-05/06/07・FR-13/14） | ⏳ 未実装（Issue #4） |
+| 実データ取込→公開DB反映（Phase 2） | ✅ 取込→Publish経路を実装（`ingest --publish`）。CI の disposable PostGIS で publish→公開Repository参照を検証 |
+| 管理API・管理画面（UI-05/06/07・FR-13/14） | 🟡 管理APIゲート・基本操作・監査ログ画面からの取込記録/詳細確認/品質issue解決・詳細画面からの資産公開停止を実装済。残りの管理UI接続は継続（Issue #4） |
 | UAT・本番公開判定 | ⏳ 未着手 |
+
+### 🚦 Release Gate（2026-07-19）
+
+| 項目 | 状態 |
+| --- | --- |
+| 🧩 統合検証PR | Draft PR [#32](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/pull/32) で #31 → #26 → #27 → #28 → #29 → #30 の順に統合済み |
+| ✅ 統合CI | #32 で lint / typecheck / test / build、Playwright E2E、PostGIS integration、publish PostGIS integration、secret scan、dependency scan、CodeRabbit が成功 |
+| 🧭 個別PR | #31、#26、#27、#28、#29、#30 は個別PRとして Ready / CLEAN / CI success。通常マージはユーザーの `Y` 判定後に実施 |
+| 🚫 本番操作 | Cloudflare / Neon 本番デプロイ、production migration、production publish は未実行。実行はリリース手順書に従い人間が手動で行う |
+
+推奨マージ順序は **#31 → #26 → #27 → #28 → #29 → #30** です。#32 は統合後状態の検証用Draft PRであり、通常の個別PRマージ承認を置き換えません。
+
+Draft PR [#33](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/pull/33) では、#32 の統合状態に加えて監査ログ画面から管理APIの取込記録作成・最新取込詳細確認・品質issue解決、詳細画面から理由入力付きの資産公開停止を接続し、全CI成功を確認しています。#33 は #31/#26-#30 の承認・マージ後に通常PRとして整理する後続候補です。
 
 ### 実装済みの内容（Phase 1）
 
@@ -250,9 +264,10 @@ flowchart LR
 
 ### 既知の制約（現時点）
 
-- 🐘 `PostgresAssetRepository`／`PostgresAssetPublisher` は型検査・単体テスト済だが、実 Neon/PostGIS への統合テストは未整備（Issue #8）。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作する
-- 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。実データでの一気通貫検証は Issue #8 で整備予定
-- 🛠️ 管理 API・管理画面（UI-05/06/07、取込監査の閲覧・公開停止制御）、Playwright E2E は未着手（Issue #4／#12）
+- 🐘 `PostgresAssetRepository` は CI の `🗄️ PostGIS integration` で公開可視性・検索・bbox・`getAssetById` 契約を検証する。`PostgresAssetPublisher` の実 Neon 一気通貫検証は Issue #5/#16 の残課題。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作する
+- 🐘 `PostgresAssetPublisher` は CI の `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証する。Neon dev branch での接続先固有検証はリリース手順で実施
+- 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。公開前は runbook の手動 publish と API 件数突合を必須とする
+- 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込詳細、品質issue解決、資産公開停止の基本経路を実装済み。監査ログ画面からはソース別の取込記録作成、最新取込詳細確認、理由入力付きの品質issue解決、詳細画面からは理由入力付きの資産公開停止まで接続済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタを導入済み。管理画面でのソース登録/編集UIと管理系ブラウザE2Eは継続課題（Issue #4）
 - 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。分散実行環境では isolate 数だけ実効上限が緩むため、本番環境の実効的な防御層は Cloudflare WAF が担う
 
 ## 🗺️ ロードマップ
