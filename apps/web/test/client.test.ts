@@ -71,4 +71,36 @@ describe('ApiClient', () => {
     });
     await expect(client.getAsset('missing')).rejects.toBeInstanceOf(ApiError);
   });
+
+  it('posts to the admin ingestion endpoint with credentials', async () => {
+    const payload = {
+      id: '00000000-0000-4000-8000-000000000001',
+      sourceSlug: 'sample-bridges',
+      startedAt: '2026-07-19T00:00:00.000Z',
+      finishedAt: null,
+      status: 'running',
+      fetchedCount: 0,
+      acceptedCount: 0,
+      rejectedCount: 0,
+      warningCount: 0,
+      errorCode: null,
+      errorSummary: null,
+      triggeredBy: 'admin@example.com',
+      correlationId: 'req-1',
+    };
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(payload),
+    );
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(client.startAdminIngestion('sample-bridges')).resolves.toEqual(payload);
+
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      '/api/v1/admin/sources/sample-bridges/ingestions',
+    );
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      credentials: 'include',
+    });
+  });
 });

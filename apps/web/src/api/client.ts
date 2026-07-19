@@ -3,6 +3,8 @@ import type {
   AssetDetail,
   AssetSearchResponse,
   AssetType,
+  AdminIngestionDetail,
+  AdminIngestionRun,
   HealthResponse,
   QualityStatus,
   SourceListResponse,
@@ -65,6 +67,19 @@ async function getJson<T>(url: string, fetchImpl: FetchLike): Promise<T> {
   const res = await fetchImpl(url, {
     headers: { Accept: 'application/json' },
   });
+  return parseJsonResponse<T>(res);
+}
+
+async function postJson<T>(url: string, fetchImpl: FetchLike): Promise<T> {
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  return parseJsonResponse<T>(res);
+}
+
+async function parseJsonResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -116,6 +131,20 @@ export class ApiClient {
 
   getHealth(): Promise<HealthResponse> {
     return getJson<HealthResponse>(`${this.base}/health`, this.fetchImpl);
+  }
+
+  startAdminIngestion(sourceSlug: string): Promise<AdminIngestionRun> {
+    return postJson<AdminIngestionRun>(
+      `${this.base}/admin/sources/${encodeURIComponent(sourceSlug)}/ingestions`,
+      this.fetchImpl,
+    );
+  }
+
+  getAdminIngestion(id: string): Promise<AdminIngestionDetail> {
+    return getJson<AdminIngestionDetail>(
+      `${this.base}/admin/ingestions/${encodeURIComponent(id)}`,
+      this.fetchImpl,
+    );
   }
 }
 

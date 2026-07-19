@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import type { SourceInfo } from '@pimm/contracts';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { AdminIngestionDetail, AdminIngestionRun, SourceInfo } from '@pimm/contracts';
+import { ApiError, type ApiClient } from '../src/api/client.js';
 import { AuditLogDialog } from '../src/components/AuditLogDialog.js';
 
 const source: SourceInfo = {
@@ -20,6 +22,51 @@ const source: SourceInfo = {
   publishedAssetCount: 1234,
 };
 
+const run: AdminIngestionRun = {
+  id: '00000000-0000-4000-8000-000000000001',
+  sourceSlug: 'sample-bridges',
+  startedAt: '2026-07-19T00:00:00.000Z',
+  finishedAt: null,
+  status: 'running',
+  fetchedCount: 10,
+  acceptedCount: 8,
+  rejectedCount: 2,
+  warningCount: 1,
+  errorCode: null,
+  errorSummary: null,
+  triggeredBy: 'admin@example.com',
+  correlationId: 'req-1',
+};
+
+const detail: AdminIngestionDetail = {
+  run,
+  qualityIssues: [
+    {
+      id: '00000000-0000-4000-8000-000000000101',
+      assetId: null,
+      runId: run.id,
+      ruleCode: 'Q005',
+      severity: 'warning',
+      fieldName: 'source_updated_at',
+      observedValue: null,
+      message: '更新日が不明です',
+      resolutionStatus: 'open',
+      createdAt: '2026-07-19T00:00:00.000Z',
+      resolvedAt: null,
+    },
+  ],
+};
+
+type AdminClient = Pick<ApiClient, 'startAdminIngestion' | 'getAdminIngestion'>;
+
+function makeClient(overrides: Partial<AdminClient> = {}): ApiClient & AdminClient {
+  return {
+    startAdminIngestion: vi.fn(async () => run),
+    getAdminIngestion: vi.fn(async () => detail),
+    ...overrides,
+  } as unknown as ApiClient & AdminClient;
+}
+
 function setup(overrides: Partial<Parameters<typeof AuditLogDialog>[0]> = {}) {
   const props = {
     sources: [source],
@@ -33,9 +80,10 @@ function setup(overrides: Partial<Parameters<typeof AuditLogDialog>[0]> = {}) {
 }
 
 describe('AuditLogDialog', () => {
-  it('discloses that admin authentication exists while detailed UI wiring is pending', () => {
+  it('discloses that admin actions are protected and explicit', () => {
     setup();
-    expect(screen.getByRole('note')).toHaveTextContent(/管理APIの認証ゲートは実装済み/);
+    expect(screen.getByRole('note')).toHaveTextContent(/Cloudflare Access/);
+    expect(screen.getByRole('note')).toHaveTextContent(/ボタン操作した場合だけ実行/);
   });
 
   it('renders per-source ingestion status', () => {
@@ -53,5 +101,38 @@ describe('AuditLogDialog', () => {
   it('shows an error state', () => {
     setup({ isError: true });
     expect(screen.getByRole('alert')).toHaveTextContent(/取込状況の取得に失敗/);
+  });
+
+  it('starts an admin ingestion and renders the returned run detail', async () => {
+    const user = userEvent.setup();
+    const client = makeClient();
+    setup({ client });
+
+    await user.click(screen.getByRole('button', { name: '取込記録' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '最新の取込記録' })).toBeInTheDocument();
+    });
+    expect(client.startAdminIngestion).toHaveBeenCalledWith('sample-bridges');
+    expect(client.getAdminIngestion).toHaveBeenCalledWith(run.id);
+    expect(screen.getByText(run.id)).toBeInTheDocument();
+    expect(screen.getByText('1 件')).toBeInTheDocument();
+  });
+
+  it('shows an authorization message when the admin API rejects the user', async () => {
+    const user = userEvent.setup();
+    setup({
+      client: makeClient({
+        startAdminIngestion: vi.fn(async () => {
+          throw new ApiError(403, 'Forbidden');
+        }),
+      }),
+    });
+
+    await user.click(screen.getByRole('button', { name: '取込記録' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/アクセス権がありません/);
+    });
   });
 });

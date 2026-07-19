@@ -5,6 +5,7 @@
   --color-text: #1f2937;
   --color-muted: #6b7280;
   --color-primary: #1d4ed8;
+  --color-danger: #b91c1c;
   --color-warn-bg: #fef3c7;
   --color-warn-border: #f59e0b;
   --header-h: 56px;
@@ -492,6 +493,35 @@ a {
   border-radius: 6px;
   font-size: 13px;
   line-height: 1.5;
+}
+
+.admin-error {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-danger);
+  border-radius: 6px;
+  color: var(--color-danger);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-action-button {
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  white-space: nowrap;
+}
+
+.admin-action-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.admin-run-detail {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
 }
 
 .settings-section {
