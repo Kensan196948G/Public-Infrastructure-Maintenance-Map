@@ -57,8 +57,6 @@ const detail: AdminIngestionDetail = {
   ],
 };
 
-type AdminClient = Pick<ApiClient, 'startAdminIngestion' | 'getAdminIngestion'>;
-
 type AuditClient = Pick<
   ApiClient,
   'startAdminIngestion' | 'getAdminIngestion' | 'resolveAdminQualityIssue'
