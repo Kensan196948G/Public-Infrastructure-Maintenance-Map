@@ -241,6 +241,17 @@ flowchart LR
 | 管理API・管理画面（UI-05/06/07・FR-13/14） | 🟡 管理APIゲート・基本操作実装済。管理UI接続は継続（Issue #4） |
 | UAT・本番公開判定 | ⏳ 未着手 |
 
+### 🚦 Release Gate（2026-07-19）
+
+| 項目 | 状態 |
+| --- | --- |
+| 🧩 統合検証PR | Draft PR [#32](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/pull/32) で #31 → #26 → #27 → #28 → #29 → #30 の順に統合済み |
+| ✅ 統合CI | #32 で lint / typecheck / test / build、Playwright E2E、PostGIS integration、publish PostGIS integration、secret scan、dependency scan、CodeRabbit が成功 |
+| 🧭 個別PR | #31、#26、#27、#28、#29、#30 は個別PRとして Ready / CLEAN / CI success。通常マージはユーザーの `Y` 判定後に実施 |
+| 🚫 本番操作 | Cloudflare / Neon 本番デプロイ、production migration、production publish は未実行。実行はリリース手順書に従い人間が手動で行う |
+
+推奨マージ順序は **#31 → #26 → #27 → #28 → #29 → #30** です。#32 は統合後状態の検証用Draft PRであり、通常の個別PRマージ承認を置き換えません。
+
 ### 実装済みの内容（Phase 1）
 
 - 🗺️ 地図・検索・絞り込み・一覧・詳細・出典表示（サンプルデータ）
