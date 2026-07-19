@@ -85,7 +85,7 @@ flowchart LR
 | 🗄️ | マイグレーション適用計画 | 未適用 `migrations/*.sql` を棚卸し（`0001_init.sql` / `0002_cross_column_checks.sql`） | 適用対象を把握 |
 | 🔁 | ロールバック確認 | §5 の手順・直前デプロイ・Neon 復元点を確認 | 手段を用意 |
 | 📄 | README / docs 最新 | 利用機能・手順の差分反映 | 反映済み |
-| ⚠️ | 受入基準の現状 | §8 の既知制約を確認（管理画面 #4 未実装 等） | リスク合意済み |
+| ⚠️ | 受入基準の現状 | §8 の既知制約を確認（管理UI #4 の残作業 等） | リスク合意済み |
 
 > 💡 CI にデプロイジョブは**ありません**（`ci.yml` は quality / secret-scan / dependency-scan の 3 ジョブのみ）。**本番反映は 100% 手動**です。
 
@@ -233,7 +233,7 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 
 | Issue | 内容 | 本番判断への影響 |
 |---|---|---|
-| 🔒 #4 | 管理画面（Cloudflare Access 認証）**未実装** | 管理系操作は不可。公開 GET API のみで運用する前提なら**公開リリースは可**。管理機能提供は次フェーズ |
+| 🔒 #4 | 管理画面（Cloudflare Access 認証）は段階実装中 | 管理APIの認証・基本操作に加え、監査ログ画面から取込記録作成・最新取込詳細確認までは接続済み。ソース編集、品質issue解決、資産公開停止のUIと管理系E2Eは次フェーズ。公開 GET API のみで運用する前提なら**公開リリースは可** |
 | 🧪 #12 | E2E（Playwright）**公開地図の主要回帰を導入済み** | `pnpm test:e2e` / CI `🗺️ Playwright E2E` で初期表示・検索・詳細表示・種別フィルタを検証。公開前は手動スモークテスト（§4④）も併用 |
 | 🗄️ #8 | `PostgresAssetRepository` の PostGIS 統合テストを CI に導入 | 読取経路の公開可視性・検索・bbox・`getAssetById` 契約は `🗄️ PostGIS integration` で検証。Neon dev branch を使った publish 一気通貫は #5/#16 で継続 |
 | 🔄 #5 / #16 | Publish 経路の PostGIS 統合テストを CI に導入 | `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証。実 Neon への流し込みは本 runbook の手動手順で実施 |
