@@ -111,5 +111,29 @@ export function registerAssetRepositoryContract(
       expect(res).toHaveLength(1);
       expect(res[0]!.source.licenseName).toBe('CC-BY-4.0');
     });
+
+    it('suspends every published asset for a source', async () => {
+      const { repo } = await setup();
+
+      const before = await repo.searchAssets({ limit: 20 });
+      expect(before.items.map((i) => i.name)).toEqual(
+        expect.arrayContaining(['都心橋', '都心第二橋', 'B川', 'C施設']),
+      );
+      const publicCount = before.items.length;
+
+      const result = await repo.suspendAssetsBySource(
+        'contract-source',
+        { reason: 'ライセンス変更のため再確認' },
+        'admin@example.com',
+      );
+      expect(result).toMatchObject({
+        sourceSlug: 'contract-source',
+        publicationStatus: 'suspended',
+        suspendedCount: publicCount,
+      });
+
+      const after = await repo.searchAssets({ limit: 20 });
+      expect(after.items).toHaveLength(0);
+    });
   });
 }

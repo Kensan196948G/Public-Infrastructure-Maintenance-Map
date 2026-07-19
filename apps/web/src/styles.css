@@ -749,6 +749,42 @@ a {
   flex-wrap: wrap;
 }
 
+.admin-danger-zone {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff7ed;
+}
+
+.admin-danger-zone h4 {
+  margin: 0 0 6px;
+  color: #9f1239;
+  font-size: 15px;
+}
+
+.admin-danger-zone p {
+  margin: 0 0 10px;
+  color: #7f1d1d;
+  font-size: 13px;
+}
+
+.admin-danger-button {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid #b91c1c;
+  border-radius: 8px;
+  background: #b91c1c;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.admin-danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 @media (max-width: 640px) {
   .admin-source-grid {
     grid-template-columns: 1fr;

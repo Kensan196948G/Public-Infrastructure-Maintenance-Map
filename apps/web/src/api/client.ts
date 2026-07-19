@@ -12,6 +12,7 @@ import type {
   AdminQualityIssueRecord,
   AdminResolveQualityIssue,
   AdminSourceResponse,
+  AdminSourcePublication,
   AdminUpdateSource,
   HealthResponse,
   QualityStatus,
@@ -202,6 +203,14 @@ export class ApiClient {
   suspendAdminAsset(id: string, reason: string): Promise<AdminAssetPublication> {
     return postJson<AdminAssetPublication>(
       `${this.base}/admin/assets/${encodeURIComponent(id)}/suspend`,
+      this.fetchImpl,
+      { reason },
+    );
+  }
+
+  suspendAdminSourceAssets(sourceSlug: string, reason: string): Promise<AdminSourcePublication> {
+    return postJson<AdminSourcePublication>(
+      `${this.base}/admin/sources/${encodeURIComponent(sourceSlug)}/suspend-assets`,
       this.fetchImpl,
       { reason },
     );

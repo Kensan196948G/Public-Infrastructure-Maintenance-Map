@@ -61,6 +61,11 @@ export const AdminSuspendAssetSchema = z.object({
 });
 export type AdminSuspendAsset = z.infer<typeof AdminSuspendAssetSchema>;
 
+export const AdminSuspendSourceAssetsSchema = z.object({
+  reason: z.string().trim().min(1).max(500),
+});
+export type AdminSuspendSourceAssets = z.infer<typeof AdminSuspendSourceAssetsSchema>;
+
 export const AdminIngestionListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -125,6 +130,14 @@ export const AdminAssetPublicationSchema = z.object({
   reason: z.string(),
 });
 export type AdminAssetPublication = z.infer<typeof AdminAssetPublicationSchema>;
+
+export const AdminSourcePublicationSchema = z.object({
+  sourceSlug: z.string(),
+  publicationStatus: PublicationStatusSchema,
+  suspendedCount: z.number().int().nonnegative(),
+  reason: z.string(),
+});
+export type AdminSourcePublication = z.infer<typeof AdminSourcePublicationSchema>;
 
 export const AdminSourceResponseSchema = SourceInfoSchema;
 export type AdminSourceResponse = z.infer<typeof AdminSourceResponseSchema>;

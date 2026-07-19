@@ -116,4 +116,35 @@ describe('SettingsDialog', () => {
     });
     expect(await screen.findByText(/sample-bridges を更新しました/)).toBeInTheDocument();
   });
+
+  it('suspends published assets for the selected source', async () => {
+    const user = userEvent.setup();
+    const suspendAdminSourceAssets = vi.fn().mockResolvedValue({
+      sourceSlug: 'sample-bridges',
+      publicationStatus: 'suspended',
+      suspendedCount: 10,
+      reason: 'ライセンス変更のため再確認',
+    });
+    const onSourcesChanged = vi.fn();
+    setup({
+      apiClient: { suspendAdminSourceAssets } as never,
+      onSourcesChanged,
+    });
+
+    const suspendButton = screen.getByRole('button', { name: /選択ソースの公開資産を一括停止/ });
+    expect(suspendButton).toBeDisabled();
+
+    await user.selectOptions(screen.getByLabelText('対象'), 'sample-bridges');
+    await user.type(screen.getByLabelText('一括公開停止理由'), 'ライセンス変更のため再確認');
+    await user.click(suspendButton);
+
+    await waitFor(() => {
+      expect(suspendAdminSourceAssets).toHaveBeenCalledWith(
+        'sample-bridges',
+        'ライセンス変更のため再確認',
+      );
+    });
+    expect(onSourcesChanged).toHaveBeenCalled();
+    expect(await screen.findByText(/公開中資産 10 件を停止しました/)).toBeInTheDocument();
+  });
 });

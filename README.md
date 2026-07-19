@@ -238,7 +238,7 @@ flowchart LR
 | MVP基盤実装（Phase 1: 地図・検索・詳細・出典表示・取込パイプライン・公開API・CI） | ✅ 実装済（全パッケージでテスト整備、CIで検証） |
 | 公開データソース選定・アダプター実装 | ✅ 実データ4ソース・3種別（公共施設／橋梁／道路） |
 | 実データ取込→公開DB反映（Phase 2） | ✅ 取込→Publish経路を実装（`ingest --publish`）。CI の disposable PostGIS で publish→公開Repository参照を検証 |
-| 管理API・管理画面（UI-05/06/07・FR-13/14） | 🟡 管理APIゲート・基本操作・取込履歴一覧・未解決品質issue一覧・監査ログ画面からの取込記録/詳細確認/品質issue解決・詳細画面からの個別資産公開停止を実装済。ライセンス変更時の一括公開停止UI、ソース登録/編集UI、管理系E2Eは継続（Issue #4） |
+| 管理API・管理画面（UI-05/06/07・FR-13/14） | 🟡 管理APIゲート・基本操作・取込履歴一覧・未解決品質issue一覧・監査ログ画面からの取込記録/詳細確認/品質issue解決・詳細画面からの個別資産公開停止・システム設定からのソース登録/編集とソース単位の公開一括停止を実装済。実 Cloudflare Access 認証済み管理E2Eは継続（Issue #4） |
 | UAT・本番公開判定 | ⏳ 未着手 |
 
 ### 🚦 Release Gate（2026-07-19）
@@ -267,7 +267,7 @@ PR [#33](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/
 - 🐘 `PostgresAssetRepository` は CI の `🗄️ PostGIS integration` で公開可視性・検索・bbox・`getAssetById` 契約を検証する。`PostgresAssetPublisher` の実 Neon 一気通貫検証は Issue #5/#16 の残課題。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作する
 - 🐘 `PostgresAssetPublisher` は CI の `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証する。Neon dev branch での接続先固有検証はリリース手順で実施
 - 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。公開前は runbook の手動 publish と API 件数突合を必須とする
-- 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込履歴一覧、取込詳細、未解決品質issue一覧、品質issue解決、個別資産公開停止の基本経路を実装済み。監査ログ画面からは取込履歴・未解決品質issueの一覧更新、ソース別の取込記録作成、取込詳細確認、理由入力付きの品質issue解決、詳細画面からは理由入力付きの個別資産公開停止、システム設定画面からはソース登録/編集まで接続済み。ライセンス変更時の一括公開停止UI、管理系の認証済みブラウザE2Eは継続課題（Issue #4）
+- 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込履歴一覧、取込詳細、未解決品質issue一覧、品質issue解決、個別資産公開停止、ソース単位の公開一括停止の基本経路を実装済み。監査ログ画面からは取込履歴・未解決品質issueの一覧更新、ソース別の取込記録作成、取込詳細確認、理由入力付きの品質issue解決、詳細画面からは理由入力付きの個別資産公開停止、システム設定画面からはソース登録/編集とライセンス変更時の公開一括停止まで接続済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタと管理系の未認証拒否を導入済み。実 Cloudflare Access 認証済み管理E2Eは継続課題（Issue #4）
 - 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。分散実行環境では isolate 数だけ実効上限が緩むため、本番環境の実効的な防御層は Cloudflare WAF が担う
 
 ## 🗺️ ロードマップ
@@ -281,6 +281,7 @@ PR [#33](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/
 
 - `Public-Infrastructure-Maintenance-Map_要件定義書_20260716.md` — 何を、なぜ、どこまで実現するか
 - `Public-Infrastructure-Maintenance-Map_詳細設計仕様書_20260716.md` — どのような構造・データ・処理で実装するか
+- `docs/DECISION_LOG.md` — CTO代行/Supervisor判断による暫定前提・技術判断・運用判断の記録
 
 ## ⚖️ 利用上の注意
 

@@ -7,7 +7,9 @@ import type {
   AdminQualityIssueList,
   AdminResolveQualityIssue,
   AdminSourceResponse,
+  AdminSourcePublication,
   AdminSuspendAsset,
+  AdminSuspendSourceAssets,
   AdminUpdateSource,
   AssetCountSummary,
   AssetDetail,
@@ -90,4 +92,9 @@ export interface AssetRepository {
     input: AdminSuspendAsset,
     actor: string,
   ): Promise<AdminAssetPublication | null>;
+  suspendAssetsBySource(
+    sourceSlug: string,
+    input: AdminSuspendSourceAssets,
+    actor: string,
+  ): Promise<AdminSourcePublication | null>;
 }

@@ -8,7 +8,9 @@ import type {
   AdminQualityIssueRecord,
   AdminResolveQualityIssue,
   AdminSourceResponse,
+  AdminSourcePublication,
   AdminSuspendAsset,
+  AdminSuspendSourceAssets,
   AdminUpdateSource,
   AssetCountSummary,
   AssetDetail,
@@ -259,5 +261,43 @@ export class InMemoryAssetRepository implements AssetRepository {
       resolvedAt: null,
     });
     return Promise.resolve({ id, publicationStatus: 'suspended', reason: input.reason });
+  }
+
+  suspendAssetsBySource(
+    sourceSlug: string,
+    input: AdminSuspendSourceAssets,
+    actor: string,
+  ): Promise<AdminSourcePublication | null> {
+    const source = this.sources.find((s) => s.slug === sourceSlug);
+    if (!source) return Promise.resolve(null);
+    const targets = this.assets.filter(
+      (a) =>
+        a.source.slug === sourceSlug &&
+        a.publicationStatus === 'published' &&
+        a.quality.status !== 'hidden',
+    );
+    for (const asset of targets) {
+      asset.publicationStatus = 'suspended';
+      asset.quality.openIssueCodes = Array.from(new Set([...asset.quality.openIssueCodes, 'Q007']));
+      this.qualityIssues.unshift({
+        id: crypto.randomUUID(),
+        assetId: asset.id,
+        runId: null,
+        ruleCode: 'Q007',
+        severity: 'warning',
+        fieldName: 'publication_status',
+        observedValue: 'suspended',
+        message: `Source publication suspended by ${actor}: ${input.reason}`,
+        resolutionStatus: 'open',
+        createdAt: new Date().toISOString(),
+        resolvedAt: null,
+      });
+    }
+    return Promise.resolve({
+      sourceSlug,
+      publicationStatus: 'suspended',
+      suspendedCount: targets.length,
+      reason: input.reason,
+    });
   }
 }

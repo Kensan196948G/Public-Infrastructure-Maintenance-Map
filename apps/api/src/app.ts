@@ -11,6 +11,7 @@ import {
   AdminQualityIssueListQuerySchema,
   AdminResolveQualityIssueSchema,
   AdminSuspendAssetSchema,
+  AdminSuspendSourceAssetsSchema,
   AdminUpdateSourceSchema,
   AssetSearchQuerySchema,
   AssetSummaryQuerySchema,
@@ -338,6 +339,24 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     }
     const result = await repo.suspendAsset(id.toLowerCase(), parsed.data, identity.email);
     if (!result) return fail(c, 'NOT_FOUND', '対象が見つかりません');
+    return c.json(result);
+  });
+
+  admin.post('/sources/:slug/suspend-assets', async (c) => {
+    const identity = adminIdentity(c, config)!;
+    if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
+    const parsed = AdminSuspendSourceAssetsSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'ソース単位の公開停止理由が不正です', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    const result = await repo.suspendAssetsBySource(
+      c.req.param('slug'),
+      parsed.data,
+      identity.email,
+    );
+    if (!result) return fail(c, 'NOT_FOUND', 'データソースが見つかりません');
     return c.json(result);
   });
 

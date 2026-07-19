@@ -263,6 +263,33 @@ describe('ApiClient', () => {
     });
   });
 
+  it('posts a source-wide suspend reason to the admin source publication endpoint', async () => {
+    const payload = {
+      sourceSlug: 'sample-bridges',
+      publicationStatus: 'suspended',
+      suspendedCount: 12,
+      reason: 'ライセンス変更のため再確認',
+    };
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(payload),
+    );
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(
+      client.suspendAdminSourceAssets(payload.sourceSlug, payload.reason),
+    ).resolves.toEqual(payload);
+
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      '/api/v1/admin/sources/sample-bridges/suspend-assets',
+    );
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ reason: payload.reason }),
+    });
+  });
+
   it('posts a resolution decision to the admin quality issue endpoint', async () => {
     const payload = {
       id: '00000000-0000-4000-8000-000000000101',

@@ -119,6 +119,8 @@ export function SettingsDialog({
   const [selectedSlug, setSelectedSlug] = useState('');
   const [form, setForm] = useState<SourceFormState>(emptySourceForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuspendingSource, setIsSuspendingSource] = useState(false);
+  const [sourceSuspendReason, setSourceSuspendReason] = useState('');
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [adminError, setAdminError] = useState<string | null>(null);
 
@@ -130,6 +132,7 @@ export function SettingsDialog({
   useEffect(() => {
     setAdminMessage(null);
     setAdminError(null);
+    setSourceSuspendReason('');
   }, [selectedSlug]);
 
   const apiStatus = isError
@@ -167,6 +170,31 @@ export function SettingsDialog({
       setAdminError(message);
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleSuspendSourceAssets() {
+    const reason = sourceSuspendReason.trim();
+    if (!selectedSlug || reason === '') return;
+    setAdminMessage(null);
+    setAdminError(null);
+    setIsSuspendingSource(true);
+    try {
+      const result = await apiClient.suspendAdminSourceAssets(selectedSlug, reason);
+      setAdminMessage(
+        `✅ ${result.sourceSlug} の公開中資産 ${result.suspendedCount.toLocaleString(
+          'ja-JP',
+        )} 件を停止しました`,
+      );
+      onSourcesChanged?.();
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? `${error.status}: ${error.message}`
+          : 'ソース単位の公開停止を記録できませんでした';
+      setAdminError(message);
+    } finally {
+      setIsSuspendingSource(false);
     }
   }
 
@@ -368,6 +396,31 @@ export function SettingsDialog({
             </button>
           </div>
         </form>
+
+        <div className="admin-danger-zone" aria-labelledby="source-suspend-heading">
+          <h4 id="source-suspend-heading">🛑 ライセンス変更時の公開停止</h4>
+          <p>選択中ソースの公開中資産を一括で停止し、Q007の品質issueとして監査記録します。</p>
+          <label className="admin-source-field" htmlFor="source-suspend-reason">
+            一括公開停止理由
+            <textarea
+              id="source-suspend-reason"
+              value={sourceSuspendReason}
+              onChange={(event) => setSourceSuspendReason(event.target.value)}
+              disabled={!selectedSlug || isSuspendingSource}
+              rows={2}
+              placeholder="例: ライセンス条件変更のため再確認が必要"
+            />
+          </label>
+          <button
+            type="button"
+            className="admin-danger-button"
+            disabled={!selectedSlug || sourceSuspendReason.trim() === '' || isSuspendingSource}
+            onClick={() => void handleSuspendSourceAssets()}
+          >
+            {isSuspendingSource ? '一括停止中…' : '選択ソースの公開資産を一括停止'}
+          </button>
+        </div>
+
         {adminMessage ? (
           <p className="detail-admin-success" role="status">
             {adminMessage}
