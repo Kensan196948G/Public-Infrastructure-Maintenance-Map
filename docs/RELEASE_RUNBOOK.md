@@ -230,7 +230,7 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 | Issue | 内容 | 本番判断への影響 |
 |---|---|---|
 | 🔒 #4 | 管理画面（Cloudflare Access 認証）**未実装** | 管理系操作は不可。公開 GET API のみで運用する前提なら**公開リリースは可**。管理機能提供は次フェーズ |
-| 🧪 #12 | E2E（Playwright）**未導入** | ブラウザ実操作の自動回帰なし。**手動スモークテスト（§4④ の検証）で代替** |
+| 🧪 #12 | E2E（Playwright）**公開地図の主要回帰を導入済み** | `pnpm test:e2e` / CI `🗺️ Playwright E2E` で初期表示・検索・詳細表示・種別フィルタを検証。公開前は手動スモークテスト（§4④）も併用 |
 | 🗄️ #8 | 実 Neon/PostGIS **統合テスト未整備** | DB 経路は本番相当の自動検証がない。**デプロイ後の件数突合・health 確認を必須**に |
 
 ### 🚦 リリース判断（Deploy Gate）
