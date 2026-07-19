@@ -252,13 +252,10 @@ flowchart LR
 
 | 項目 | 状態 |
 | --- | --- |
-| ✅ main CI | 最新 main run `29682975249` で lint / typecheck / test / build、Playwright E2E、PostGIS integration、publish PostGIS integration、secret scan、dependency scan が成功（テスト 289 pass / 17 skip） |
+| ✅ main CI | 最新 main run `29676725911` で lint / typecheck / test / build、Playwright E2E、PostGIS integration、publish PostGIS integration、secret scan、dependency scan が成功 |
 | ✅ 管理UI Scope | PR #34 / #36 / #37 を main へ統合済み。Issue #4 は完了・close 済み |
-| 🔐 管理API認証 | PR #40 で Worker 側の Cloudflare Access JWT 検証を実装。詐称可能な `CF-Access-Authenticated-User-Email` ヘッダへの依存を解消し、`workers_dev = false` を既定・production 双方に宣言 |
 | 🧪 本番スモーク | Issue [#38](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/issues/38) で `pimm.mirai-dx-platform.com` / `api.pimm.mirai-dx-platform.com` のDNS、Cloudflare Access、公開API/Webを検証 |
 | 🚫 本番操作 | Cloudflare / Neon 本番デプロイ、production migration、production publish は未実行。実行はリリース手順書に従い人間が手動で行う |
-
-> 📌 **2026-07-19 実測**: Cloudflare account に Worker `pimm-api` は未作成、Pages プロジェクトは 0 件、`pimm` / `api.pimm` サブドメインは未解決（NXDOMAIN）、Neon に本システム用 project は未作成です。zone `mirai-dx-platform.com` は active、wrangler は認証済みのため、`docs/RELEASE_RUNBOOK.md` に沿えばデプロイ着手可能な状態です。
 
 本番デプロイ前の機械確認は `pnpm smoke:cloudflare` で行います。Cloudflare認証またはサブドメインDNS反映前の事前確認だけなら `pnpm smoke:cloudflare:preflight` を使用します。
 
