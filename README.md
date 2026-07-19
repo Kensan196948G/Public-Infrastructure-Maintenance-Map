@@ -238,7 +238,7 @@ flowchart LR
 | MVP基盤実装（Phase 1: 地図・検索・詳細・出典表示・取込パイプライン・公開API・CI） | ✅ 実装済（全パッケージでテスト整備、CIで検証） |
 | 公開データソース選定・アダプター実装 | ✅ 実データ4ソース・3種別（公共施設／橋梁／道路） |
 | 実データ取込→公開DB反映（Phase 2） | ✅ 取込→Publish経路を実装（`ingest --publish`）。CI の disposable PostGIS で publish→公開Repository参照を検証 |
-| 管理API・管理画面（UI-05/06/07・FR-13/14） | 🟡 管理APIゲート・基本操作・監査ログ画面からの取込記録/詳細確認を実装済。残りの管理UI接続は継続（Issue #4） |
+| 管理API・管理画面（UI-05/06/07・FR-13/14） | 🟡 管理APIゲート・基本操作・監査ログ画面からの取込記録/詳細確認・詳細画面からの資産公開停止を実装済。残りの管理UI接続は継続（Issue #4） |
 | UAT・本番公開判定 | ⏳ 未着手 |
 
 ### 🚦 Release Gate（2026-07-19）
@@ -252,7 +252,7 @@ flowchart LR
 
 推奨マージ順序は **#31 → #26 → #27 → #28 → #29 → #30** です。#32 は統合後状態の検証用Draft PRであり、通常の個別PRマージ承認を置き換えません。
 
-Draft PR [#33](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/pull/33) では、#32 の統合状態に加えて監査ログ画面から管理APIの取込記録作成・最新取込詳細確認を接続し、全CI成功を確認しています。#33 は #31/#26-#30 の承認・マージ後に通常PRとして整理する後続候補です。
+Draft PR [#33](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/pull/33) では、#32 の統合状態に加えて監査ログ画面から管理APIの取込記録作成・最新取込詳細確認、詳細画面から理由入力付きの資産公開停止を接続し、全CI成功を確認しています。#33 は #31/#26-#30 の承認・マージ後に通常PRとして整理する後続候補です。
 
 ### 実装済みの内容（Phase 1）
 
@@ -267,7 +267,7 @@ Draft PR [#33](https://github.com/Kensan196948G/Public-Infrastructure-Maintenanc
 - 🐘 `PostgresAssetRepository` は CI の `🗄️ PostGIS integration` で公開可視性・検索・bbox・`getAssetById` 契約を検証する。`PostgresAssetPublisher` の実 Neon 一気通貫検証は Issue #5/#16 の残課題。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作する
 - 🐘 `PostgresAssetPublisher` は CI の `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証する。Neon dev branch での接続先固有検証はリリース手順で実施
 - 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。公開前は runbook の手動 publish と API 件数突合を必須とする
-- 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込詳細、品質issue解決、資産公開停止の基本経路を実装済み。監査ログ画面からはソース別の取込記録作成と最新取込詳細確認まで接続済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタを導入済み。管理画面でのソース編集、品質issue解決、資産公開停止、管理系ブラウザE2Eは継続課題（Issue #4）
+- 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込詳細、品質issue解決、資産公開停止の基本経路を実装済み。監査ログ画面からはソース別の取込記録作成と最新取込詳細確認、詳細画面からは理由入力付きの資産公開停止まで接続済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタを導入済み。管理画面でのソース編集、品質issue解決、管理系ブラウザE2Eは継続課題（Issue #4）
 - 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。分散実行環境では isolate 数だけ実効上限が緩むため、本番環境の実効的な防御層は Cloudflare WAF が担う
 
 ## 🗺️ ロードマップ

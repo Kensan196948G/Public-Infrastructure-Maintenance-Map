@@ -1,12 +1,32 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ApiError, type ApiClient } from '../src/api/client.js';
 import { DetailPanel } from '../src/components/DetailPanel.js';
 import { detailWithGaps } from './fixtures.js';
 
-function renderDetail() {
+type DetailClient = Pick<ApiClient, 'suspendAdminAsset'>;
+
+function makeClient(overrides: Partial<DetailClient> = {}): ApiClient & DetailClient {
+  return {
+    suspendAdminAsset: vi.fn(async () => ({
+      id: detailWithGaps.id,
+      publicationStatus: 'suspended',
+      reason: 'ライセンス確認中',
+    })),
+    ...overrides,
+  } as unknown as ApiClient & DetailClient;
+}
+
+function renderDetail(client?: ApiClient) {
   return render(
-    <DetailPanel detail={detailWithGaps} isLoading={false} isError={false} onClose={() => {}} />,
+    <DetailPanel
+      detail={detailWithGaps}
+      isLoading={false}
+      isError={false}
+      onClose={() => {}}
+      client={client}
+    />,
   );
 }
 
@@ -21,6 +41,7 @@ describe('DetailPanel', () => {
       '品質・鮮度',
       '出典・利用条件',
       '注意事項',
+      '管理操作',
     ]);
   });
 
@@ -75,5 +96,35 @@ describe('DetailPanel', () => {
   it('renders an error state', () => {
     render(<DetailPanel detail={null} isLoading={false} isError onClose={() => {}} />);
     expect(screen.getByRole('alert')).toHaveTextContent(/取得に失敗/);
+  });
+
+  it('requires a suspend reason before calling the admin API', async () => {
+    const client = makeClient();
+    renderDetail(client);
+
+    expect(screen.getByRole('button', { name: '公開停止を記録' })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('公開停止理由'), 'ライセンス確認中');
+    await userEvent.click(screen.getByRole('button', { name: '公開停止を記録' }));
+
+    await waitFor(() => {
+      expect(client.suspendAdminAsset).toHaveBeenCalledWith(detailWithGaps.id, 'ライセンス確認中');
+    });
+    expect(screen.getByRole('status')).toHaveTextContent(/suspended/);
+  });
+
+  it('shows an authorization message when suspend is rejected', async () => {
+    const client = makeClient({
+      suspendAdminAsset: vi.fn(async () => {
+        throw new ApiError(403, 'Forbidden');
+      }),
+    });
+    renderDetail(client);
+
+    await userEvent.type(screen.getByLabelText('公開停止理由'), '確認中');
+    await userEvent.click(screen.getByRole('button', { name: '公開停止を記録' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/管理APIへのアクセス権が必要/);
+    });
   });
 });

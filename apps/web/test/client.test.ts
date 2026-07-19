@@ -103,4 +103,28 @@ describe('ApiClient', () => {
       credentials: 'include',
     });
   });
+
+  it('posts a suspend reason to the admin asset publication endpoint', async () => {
+    const payload = {
+      id: '11111111-1111-4111-8111-111111111111',
+      publicationStatus: 'suspended',
+      reason: 'ライセンス確認中',
+    };
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(payload),
+    );
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(client.suspendAdminAsset(payload.id, payload.reason)).resolves.toEqual(payload);
+
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      '/api/v1/admin/assets/11111111-1111-4111-8111-111111111111/suspend',
+    );
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ reason: payload.reason }),
+    });
+  });
 });

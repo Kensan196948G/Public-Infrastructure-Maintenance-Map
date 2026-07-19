@@ -3,6 +3,7 @@ import type {
   AssetDetail,
   AssetSearchResponse,
   AssetType,
+  AdminAssetPublication,
   AdminIngestionDetail,
   AdminIngestionRun,
   HealthResponse,
@@ -70,10 +71,14 @@ async function getJson<T>(url: string, fetchImpl: FetchLike): Promise<T> {
   return parseJsonResponse<T>(res);
 }
 
-async function postJson<T>(url: string, fetchImpl: FetchLike): Promise<T> {
+async function postJson<T>(url: string, fetchImpl: FetchLike, body?: unknown): Promise<T> {
   const res = await fetchImpl(url, {
     method: 'POST',
-    headers: { Accept: 'application/json' },
+    headers:
+      body === undefined
+        ? { Accept: 'application/json' }
+        : { Accept: 'application/json', 'Content-Type': 'application/json' },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     credentials: 'include',
   });
   return parseJsonResponse<T>(res);
@@ -144,6 +149,14 @@ export class ApiClient {
     return getJson<AdminIngestionDetail>(
       `${this.base}/admin/ingestions/${encodeURIComponent(id)}`,
       this.fetchImpl,
+    );
+  }
+
+  suspendAdminAsset(id: string, reason: string): Promise<AdminAssetPublication> {
+    return postJson<AdminAssetPublication>(
+      `${this.base}/admin/assets/${encodeURIComponent(id)}/suspend`,
+      this.fetchImpl,
+      { reason },
     );
   }
 }

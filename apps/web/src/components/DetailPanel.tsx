@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { AssetDetail } from '@pimm/contracts';
+import { ApiClient, ApiError } from '../api/client.js';
 import { ASSET_TYPE_META, UNKNOWN_LABEL } from '../lib/asset-meta.js';
 import { formatAttributeValue, formatDate, formatLatLon, orUnknown } from '../lib/format.js';
 import { QualityBadge } from './QualityBadge.js';
@@ -8,14 +10,23 @@ interface DetailPanelProps {
   isLoading: boolean;
   isError: boolean;
   onClose: () => void;
+  client?: ApiClient;
 }
+
+const defaultClient = new ApiClient();
 
 /**
  * Asset detail (UI-02). Section order is fixed by 設計書 §8.2:
  * 概要 → 位置 → 公開属性 → 品質・鮮度 → 出典・利用条件 → 注意事項.
  * Missing values are shown as 「不明」 — never inferred.
  */
-export function DetailPanel({ detail, isLoading, isError, onClose }: DetailPanelProps) {
+export function DetailPanel({
+  detail,
+  isLoading,
+  isError,
+  onClose,
+  client = defaultClient,
+}: DetailPanelProps) {
   return (
     <section className="detail-panel" role="complementary" aria-label="詳細情報">
       <header className="detail-header">
@@ -36,14 +47,42 @@ export function DetailPanel({ detail, isLoading, isError, onClose }: DetailPanel
           読み込み中…
         </p>
       ) : (
-        <DetailBody detail={detail} />
+        <DetailBody detail={detail} client={client} />
       )}
     </section>
   );
 }
 
-function DetailBody({ detail }: { detail: AssetDetail }) {
+function DetailBody({ detail, client }: { detail: AssetDetail; client: ApiClient }) {
   const typeMeta = ASSET_TYPE_META[detail.type];
+  const [suspendReason, setSuspendReason] = useState('');
+  const [isSuspending, setIsSuspending] = useState(false);
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
+
+  const suspendAsset = async () => {
+    const reason = suspendReason.trim();
+    if (reason === '') return;
+    setIsSuspending(true);
+    setAdminError(null);
+    setAdminMessage(null);
+    try {
+      const result = await client.suspendAdminAsset(detail.id, reason);
+      setAdminMessage(`公開状態を ${result.publicationStatus} に更新しました。`);
+      setSuspendReason('');
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        setAdminError(
+          '公開停止には管理APIへのアクセス権が必要です。Cloudflare Access の認証状態を確認してください。',
+        );
+      } else {
+        setAdminError('公開停止を記録できませんでした。');
+      }
+    } finally {
+      setIsSuspending(false);
+    }
+  };
+
   return (
     <div className="detail-body">
       {/* 概要 */}
@@ -172,6 +211,45 @@ function DetailBody({ detail }: { detail: AssetDetail }) {
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="detail-section" aria-labelledby="detail-admin">
+        <h3 id="detail-admin" className="detail-section-title">
+          管理操作
+        </h3>
+        <p className="detail-admin-note">
+          🔒 公開停止は Cloudflare Access とサーバー側 allowlist
+          で保護された管理APIへ、理由入力後のボタン操作時だけ送信します。
+        </p>
+        <label className="detail-admin-label" htmlFor="suspend-reason">
+          公開停止理由
+        </label>
+        <textarea
+          id="suspend-reason"
+          className="detail-admin-textarea"
+          value={suspendReason}
+          onChange={(e) => setSuspendReason(e.target.value)}
+          rows={3}
+          placeholder="例: ライセンス条件変更の確認が必要"
+        />
+        <button
+          type="button"
+          className="detail-admin-button"
+          disabled={isSuspending || suspendReason.trim() === ''}
+          onClick={() => void suspendAsset()}
+        >
+          {isSuspending ? '公開停止中…' : '公開停止を記録'}
+        </button>
+        {adminMessage ? (
+          <p className="detail-admin-success" role="status">
+            {adminMessage}
+          </p>
+        ) : null}
+        {adminError ? (
+          <p className="detail-admin-error" role="alert">
+            {adminError}
+          </p>
+        ) : null}
       </section>
     </div>
   );
