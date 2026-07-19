@@ -236,7 +236,7 @@ flowchart LR
 | 詳細設計 | ✅ 初版作成 |
 | MVP基盤実装（Phase 1: 地図・検索・詳細・出典表示・取込パイプライン・公開API・CI） | ✅ 実装済（全パッケージでテスト整備、CIで検証） |
 | 公開データソース選定・アダプター実装 | ✅ 実データ4ソース・3種別（公共施設／橋梁／道路） |
-| 実データ取込→公開DB反映（Phase 2） | ✅ 取込→Publish経路を実装（`ingest --publish`。実Neon統合テストは Issue #8） |
+| 実データ取込→公開DB反映（Phase 2） | ✅ 取込→Publish経路を実装（`ingest --publish`）。CI の disposable PostGIS で publish→公開Repository参照を検証 |
 | 管理API・管理画面（UI-05/06/07・FR-13/14） | ⏳ 未実装（Issue #4） |
 | UAT・本番公開判定 | ⏳ 未着手 |
 
@@ -250,8 +250,8 @@ flowchart LR
 
 ### 既知の制約（現時点）
 
-- 🐘 `PostgresAssetRepository`／`PostgresAssetPublisher` は型検査・単体テスト済だが、実 Neon/PostGIS への統合テストは未整備（Issue #8）。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作する
-- 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。実データでの一気通貫検証は Issue #8 で整備予定
+- 🐘 `PostgresAssetPublisher` は CI の `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback を検証する。Neon dev branch での並行 publish 検証は Issue #16 で継続
+- 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。公開前は runbook の手動 publish と API 件数突合を必須とする
 - 🛠️ 管理 API・管理画面（UI-05/06/07、取込監査の閲覧・公開停止制御）、Playwright E2E は未着手（Issue #4／#12）
 - 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。分散実行環境では isolate 数だけ実効上限が緩むため、本番環境の実効的な防御層は Cloudflare WAF が担う
 

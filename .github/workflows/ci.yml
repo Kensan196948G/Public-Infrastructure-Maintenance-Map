@@ -42,6 +42,47 @@ jobs:
       - name: 🏗️ Build
         run: pnpm build
 
+  publish-integration:
+    name: 📤 Publish PostGIS integration
+    runs-on: ubuntu-latest
+    services:
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: pimm
+          POSTGRES_PASSWORD: pimm
+          POSTGRES_DB: pimm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pimm -d pimm_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://pimm:pimm@localhost:5432/pimm_test
+      PIMM_RUN_POSTGRES_PUBLISH_INTEGRATION: '1'
+      PIMM_TEST_DATABASE_URL: postgresql://pimm:pimm@localhost:5432/pimm_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        # version is taken from packageManager in package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: 📦 Install
+        run: pnpm install --frozen-lockfile
+
+      - name: 🧱 Apply migrations
+        run: pnpm db:migrate
+
+      - name: 📤 Run publish integration tests
+        run: pnpm --filter @pimm/database test -- test/publisher.integration.test.ts
+
   secret-scan:
     name: 🔐 Secret scan
     runs-on: ubuntu-latest
