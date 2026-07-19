@@ -55,14 +55,14 @@ flowchart LR
 | 変数 | 設定場所 | 必須 | 説明 |
 |---|---|:--:|---|
 | 🔒 `DATABASE_URL` | **Worker Secret**（`wrangler secret put DATABASE_URL`）／取込時はローカル環境変数 | ✅ 本番 | Neon 接続文字列（`sslmode=require`）。未設定だとサンプルモードで公開されるため要注意 |
-| 🛡️ `REQUIRE_DATABASE_URL` | Worker Secret / 環境変数（`true`/`1`） | 推奨（本番） | `DATABASE_URL` 未設定時に fail-fast させ、サンプルデータの誤公開を防ぐ。**対応 PR #20（レビュー中）で実装** |
+| 🛡️ `REQUIRE_DATABASE_URL` | Worker Secret / 環境変数（`true`/`1`） | ✅ 本番 | `DATABASE_URL` 未設定時に fail-fast させ、サンプルデータの誤公開を防ぐ。本番 Workers では `DATABASE_URL` とセットで有効化する |
 | 🌐 `ALLOWED_ORIGIN` | `apps/api/wrangler.toml` `[vars]`（既定 `"*"`） | 推奨変更 | 本番の Web 固定オリジンに絞るとAPIのクロスサイト収集を抑制できる（現状 `"*"`） |
 | 🔢 `RATE_LIMIT_PER_MINUTE` | `wrangler.toml` `[vars]`（既定 `"120"`） | 任意 | in-isolate レート制限の分あたり上限 |
 | 🌐 `VITE_API_BASE_URL` | **Cloudflare Pages の環境変数**（ビルド時） | 別オリジン配信時のみ | Web と API を別ドメインで配信する場合に API ベースURLを指定。未設定なら同一オリジン `/api/v1` |
 
-> ⚠️ **実装状況の注記（open PR で対応中）**
-> - Web 向け環境変数はコード上 `VITE_API_BASE_URL`（`apps/web/src/api/client.ts`）が正。`.env.example`/README の `PUBLIC_API_BASE_URL` 記載は **対応 PR #19（レビュー中）で `VITE_API_BASE_URL` に統一**。Pages 側では `VITE_API_BASE_URL` を設定してください。
-> - `REQUIRE_DATABASE_URL`（未設定時 fail-fast）と、サンプルモード転落の警告ログは **対応 PR #20（レビュー中）で実装**。マージ前は §6 の「件数検証」で代替してください。
+> ✅ **実装状況の注記**
+> - Web 向け環境変数は `VITE_API_BASE_URL`（`apps/web/src/api/client.ts`）に統一済みです。Pages 側でも `VITE_API_BASE_URL` を設定してください。
+> - `REQUIRE_DATABASE_URL`（未設定時 fail-fast）と、サンプルモード転落時の `sample_mode_fallback` 警告ログは実装済みです。本番では `REQUIRE_DATABASE_URL=true` を設定し、DB未接続のままサンプルデータを公開しない運用にしてください。
 
 ---
 
@@ -183,7 +183,7 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 1. 🩺 `curl https://<api>/api/v1/health` → 応答するか（プロセス生存確認）
 2. 📊 Workers Observability のログ（`wrangler.toml [observability] enabled=true`）
    - `wrangler tail` またはダッシュボードで**構造化 JSON ログ**を確認
-   - 実在する `event`: **`request`**（アクセスログ: `request_id/method/path/status_code/duration_ms`）と **`unhandled_error`**（想定外例外）。加えて、対応 PR #20 マージ後は **`sample_mode_fallback`**（DBフォールバック警告）も出力される
+   - 実在する `event`: **`request`**（アクセスログ: `request_id/method/path/status_code/duration_ms`）、**`unhandled_error`**（想定外例外）、**`sample_mode_fallback`**（DBフォールバック警告）
 3. 🗄️ データ異常なら `/api/v1/assets/summary`・`/api/v1/sources` の件数を期待値と突合
 
 ### 6.2 症状別
@@ -195,7 +195,7 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 | 5xx 増加 | `unhandled_error` ログに詳細 | ログの `request_id` で追跡し原因修正 → 再デプロイ |
 | 取込失敗 | 上流データ変化・品質チェック不合格 | dry-run で再現・原因除去後、**同一ソースを `--publish` 再実行**（既存公開データは非破壊） |
 
-> ⚠️ **サンプルモード転落の検知**: 現状 main では専用の警告ログや `/health` シグナルが無いため、切替検知は「公開データ件数の突合」に依存します。**対応 PR #20** で `REQUIRE_DATABASE_URL`（fail-fast）と `sample_mode_fallback` 警告ログを追加し、検知性を改善します。マージ前は **デプロイ直後の件数検証を必須**としてください。
+> ⚠️ **サンプルモード転落の検知**: `DATABASE_URL` が未設定で `REQUIRE_DATABASE_URL` も無効な環境では、API はローカル開発用のサンプルモードで起動します。本番では `REQUIRE_DATABASE_URL=true` による fail-fast を必須とし、あわせて `/api/v1/assets/summary`・`/api/v1/sources` の件数突合で接続先と公開件数を確認してください。
 
 ---
 
