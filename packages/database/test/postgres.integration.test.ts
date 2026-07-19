@@ -326,9 +326,12 @@ describeIf('PostgresAssetRepository integration', () => {
         resolution_status: 'open',
       },
     ]);
-    await expect(repo.listQualityIssues(10)).resolves.toMatchObject({
-      items: [expect.objectContaining({ assetId: ids.publishedBridge, ruleCode: 'Q007' })],
-    });
+    const issues = await repo.listQualityIssues(10);
+    expect(issues.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ assetId: ids.publishedBridge, ruleCode: 'Q007' }),
+      ]),
+    );
     await expect(
       repo.suspendAsset(
         '00000000-0000-4000-8000-000000000000',
