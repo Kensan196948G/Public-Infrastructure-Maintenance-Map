@@ -251,8 +251,8 @@ flowchart LR
 
 ### 既知の制約（現時点）
 
-- 🐘 `PostgresAssetRepository`／`PostgresAssetPublisher` は型検査・単体テスト済だが、実 Neon/PostGIS への統合テストは未整備（Issue #8）。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作する
-- 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。実データでの一気通貫検証は Issue #8 で整備予定
+- 🐘 `PostgresAssetRepository` は CI の `🗄️ PostGIS integration` で公開可視性・検索・bbox・`getAssetById` 契約を検証する。`PostgresAssetPublisher` の実 Neon 一気通貫検証は Issue #5/#16 の残課題。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作する
+- 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。実データでの publish 一気通貫検証は Issue #5/#16 で継続
 - 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込詳細、品質issue解決、資産公開停止の基本経路を実装済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタを導入済み。管理画面からの操作接続と管理系ブラウザE2Eは継続課題（Issue #4）
 - 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。分散実行環境では isolate 数だけ実効上限が緩むため、本番環境の実効的な防御層は Cloudflare WAF が担う
 
