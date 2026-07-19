@@ -281,6 +281,7 @@ Draft PR [#33](https://github.com/Kensan196948G/Public-Infrastructure-Maintenanc
 
 - `Public-Infrastructure-Maintenance-Map_要件定義書_20260716.md` — 何を、なぜ、どこまで実現するか
 - `Public-Infrastructure-Maintenance-Map_詳細設計仕様書_20260716.md` — どのような構造・データ・処理で実装するか
+- `docs/DECISION_LOG.md` — CTO代行/Supervisor判断による暫定前提・技術判断・運用判断の記録
 
 ## ⚖️ 利用上の注意
 
