@@ -300,6 +300,27 @@ describe('admin API (Issue #4 / FR-13 / FR-14)', () => {
     expect(suspend.status).toBe(200);
     expect((await get(`/api/v1/assets/${id}`)).status).toBe(404);
   });
+
+  it('suspends all published assets for a source when a license changes', async () => {
+    const before = (await (await get('/api/v1/assets?limit=100')).json()) as AssetSearchResponse;
+    expect(before.items.some((a) => a.sourceSlug === 'sample-bridges')).toBe(true);
+
+    const suspend = await app.request(
+      'http://localhost/api/v1/admin/sources/sample-bridges/suspend-assets',
+      {
+        method: 'POST',
+        headers: { ...adminHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'ライセンス変更のため再確認' }),
+      },
+    );
+    expect(suspend.status).toBe(200);
+    const body = (await suspend.json()) as { sourceSlug: string; suspendedCount: number };
+    expect(body.sourceSlug).toBe('sample-bridges');
+    expect(body.suspendedCount).toBeGreaterThan(0);
+
+    const after = (await (await get('/api/v1/assets?limit=100')).json()) as AssetSearchResponse;
+    expect(after.items.some((a) => a.sourceSlug === 'sample-bridges')).toBe(false);
+  });
 });
 
 describe('security', () => {

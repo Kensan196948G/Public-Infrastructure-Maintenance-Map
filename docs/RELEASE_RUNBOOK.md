@@ -219,13 +219,14 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 - 🗓️ **月次棚卸し**: 公開ソースの一覧・鮮度・ライセンス状態を点検。
 - 🔐 依存/シークレットスキャンの CI 結果を定期確認。
 
-### 7.3 ライセンス変更時の公開停止（暫定運用）
+### 7.3 ライセンス変更時の公開停止
 
-> ⚠️ 要件の FR-14（ライセンス変更時の公開停止制御 UI）は **未実装（Issue #4）**。現状の暫定手段:
+Cloudflare Access で `admin` 権限を持つ運用者が、システム設定から対象ソースを選択し、理由を入力して公開中資産を一括停止する。
 
 - 🛑 該当ソースの**取込を停止**（`--publish` を流さない）
-- 🗄️ `data_sources` の `enabled` / `infrastructure_assets` の `publication_status` を**手動更新**して当該データを非公開化
-- 必要に応じ是正用マイグレーションで対応（§5 の前方修正）
+- 🖥️ WebUI: `システム設定` → `対象` でソース選択 → `一括公開停止理由` 入力 → `選択ソースの公開資産を一括停止`
+- 🔌 API: `POST /api/v1/admin/sources/:slug/suspend-assets`
+- 🧾 監査: 対象資産ごとに Q007 の品質issueを記録し、公開GET/APIから除外されることを確認
 
 ---
 
@@ -233,7 +234,7 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 
 | Issue | 内容 | 本番判断への影響 |
 |---|---|---|
-| 🔒 #4 | 管理画面（Cloudflare Access 認証）は段階実装中 | 管理APIの認証・基本操作に加え、監査ログ画面から取込記録作成・最新取込詳細確認・理由入力付きの品質issue解決、詳細画面から理由入力付きの資産公開停止までは接続済み。ソース登録/編集UIと管理系E2Eは次フェーズ。公開 GET API のみで運用する前提なら**公開リリースは可** |
+| 🔒 #4 | 管理画面（Cloudflare Access 認証）は段階実装中 | 管理APIの認証・基本操作に加え、監査ログ画面から取込記録作成・最新取込詳細確認・理由入力付きの品質issue解決、詳細画面から理由入力付きの資産公開停止、システム設定からソース登録/編集とソース単位の公開一括停止までは接続済み。実 Cloudflare Access 認証済み管理E2Eは次フェーズ。公開 GET API のみで運用する前提なら**公開リリースは可** |
 | 🧪 #12 | E2E（Playwright）**公開地図の主要回帰を導入済み** | `pnpm test:e2e` / CI `🗺️ Playwright E2E` で初期表示・検索・詳細表示・種別フィルタを検証。公開前は手動スモークテスト（§4④）も併用 |
 | 🗄️ #8 | `PostgresAssetRepository` の PostGIS 統合テストを CI に導入 | 読取経路の公開可視性・検索・bbox・`getAssetById` 契約は `🗄️ PostGIS integration` で検証。Neon dev branch を使った publish 一気通貫は #5/#16 で継続 |
 | 🔄 #5 / #16 | Publish 経路の PostGIS 統合テストを CI に導入 | `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証。実 Neon への流し込みは本 runbook の手動手順で実施 |

@@ -15,7 +15,9 @@ import type {
   AdminQualityIssueRecord,
   AdminResolveQualityIssue,
   AdminSourceResponse,
+  AdminSourcePublication,
   AdminSuspendAsset,
+  AdminSuspendSourceAssets,
   AdminUpdateSource,
   AssetCountSummary,
   AssetDetail,
@@ -521,6 +523,49 @@ export class PostgresAssetRepository implements AssetRepository {
     return {
       id: String(row['id']),
       publicationStatus: row['publication_status'] as AdminAssetPublication['publicationStatus'],
+      reason: input.reason,
+    };
+  }
+
+  async suspendAssetsBySource(
+    sourceSlug: string,
+    input: AdminSuspendSourceAssets,
+    actor: string,
+  ): Promise<AdminSourcePublication | null> {
+    const rows = (await this.sql`
+      WITH selected_source AS (
+        SELECT id, slug
+          FROM data_sources
+         WHERE slug = ${sourceSlug}
+         LIMIT 1
+      ),
+      updated AS (
+        UPDATE infrastructure_assets AS a SET
+          publication_status = 'suspended',
+          updated_at = now()
+        FROM selected_source AS s
+        WHERE a.source_id = s.id
+          AND a.publication_status = 'published'
+        RETURNING a.id, s.slug
+      ),
+      inserted AS (
+        INSERT INTO quality_issues
+          (asset_id, rule_code, severity, field_name, observed_value, message, resolution_status)
+        SELECT id, 'Q007', 'warning', 'publication_status', 'suspended',
+               ${`Source publication suspended by ${actor}: ${input.reason}`}, 'open'
+          FROM updated
+        RETURNING id
+      )
+      SELECT s.slug AS source_slug, count(u.id)::int AS suspended_count
+        FROM selected_source AS s
+        LEFT JOIN updated AS u ON true
+       GROUP BY s.slug`) as Row[];
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      sourceSlug: String(row['source_slug']),
+      publicationStatus: 'suspended',
+      suspendedCount: Number(row['suspended_count'] ?? 0),
       reason: input.reason,
     };
   }

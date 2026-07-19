@@ -68,3 +68,17 @@ test('rejects unauthenticated source registration from the settings form', async
 
   await expect(dialog.getByRole('alert')).toContainText('401');
 });
+
+test('rejects unauthenticated source-wide suspension from the settings form', async ({ page }) => {
+  await page.goto('/');
+  await waitForPublicResults(page);
+
+  await page.getByRole('button', { name: /システム設定/ }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'システム設定' });
+  await dialog.getByLabel('対象').selectOption('sample-bridges');
+  await dialog.getByLabel('一括公開停止理由').fill('ライセンス変更のため再確認');
+  await dialog.getByRole('button', { name: /選択ソースの公開資産を一括停止/ }).click();
+
+  await expect(dialog.getByRole('alert')).toContainText('401');
+});
