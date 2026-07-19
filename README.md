@@ -177,11 +177,9 @@ pnpm dev
 | `pnpm lint` | コード規約検査 |
 | `pnpm typecheck` | 型検査 |
 | `pnpm test` | 単体・統合テスト |
+| `pnpm test:e2e` | Playwright Chromium で API/Web dev server を起動し、公開地図の初期表示・検索・詳細表示・種別フィルタを検証 |
 | `pnpm db:migrate` | DB migration（`DATABASE_URL` 必須） |
 | `pnpm ingest --source <slug>` | 指定公開ソースの取込（dry-run。`--publish` で本番DBへ反映） |
-
-> [!NOTE]
-> ブラウザE2E（Playwright）は未導入です（Issue #12）。導入後に `pnpm test:e2e` を追加します。
 
 ## 🔐 環境変数
 
@@ -255,7 +253,7 @@ flowchart LR
 
 - 🐘 `PostgresAssetRepository`／`PostgresAssetPublisher` は型検査・単体テスト済だが、実 Neon/PostGIS への統合テストは未整備（Issue #8）。`DATABASE_URL` 未設定時はサンプルモード（実パイプラインで生成した in-memory データ）で動作する
 - 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。実データでの一気通貫検証は Issue #8 で整備予定
-- 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込詳細、品質issue解決、資産公開停止の基本経路を実装済み。管理画面からの操作接続とブラウザE2Eは継続課題（Issue #4／#12）
+- 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込詳細、品質issue解決、資産公開停止の基本経路を実装済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタを導入済み。管理画面からの操作接続と管理系ブラウザE2Eは継続課題（Issue #4）
 - 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。分散実行環境では isolate 数だけ実効上限が緩むため、本番環境の実効的な防御層は Cloudflare WAF が担う
 
 ## 🗺️ ロードマップ
