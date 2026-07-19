@@ -40,7 +40,9 @@ export function AuditLogDialog({
       setDetail(await client.getAdminIngestion(run.id));
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
-        setAdminError('管理APIへのアクセス権がありません。Cloudflare Access の認証状態を確認してください。');
+        setAdminError(
+          '管理APIへのアクセス権がありません。Cloudflare Access の認証状態を確認してください。',
+        );
       } else {
         setAdminError('管理APIで取込実行を記録できませんでした。');
       }
@@ -52,8 +54,8 @@ export function AuditLogDialog({
   return (
     <Modal title="監査ログ（取込状況）" onClose={onClose}>
       <p className="admin-note" role="note">
-        🔒
-        管理APIは Cloudflare Access とサーバー側 allowlist で保護されます。取込記録の作成は管理者がボタン操作した場合だけ実行します。
+        🔒 管理APIは Cloudflare Access とサーバー側 allowlist
+        で保護されます。取込記録の作成は管理者がボタン操作した場合だけ実行します。
       </p>
       {adminError ? (
         <p className="admin-error" role="alert">
@@ -129,7 +131,9 @@ export function AuditLogDialog({
             <dt>公開候補</dt>
             <dd>{latestRun.acceptedCount.toLocaleString('ja-JP')}</dd>
             <dt>品質issue</dt>
-            <dd>{detail ? `${detail.qualityIssues.length.toLocaleString('ja-JP')} 件` : '読み込み中…'}</dd>
+            <dd>
+              {detail ? `${detail.qualityIssues.length.toLocaleString('ja-JP')} 件` : '読み込み中…'}
+            </dd>
           </dl>
         </section>
       ) : null}
