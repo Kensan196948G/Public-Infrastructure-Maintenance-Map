@@ -25,7 +25,7 @@ function renderDetail(client?: ApiClient) {
       isLoading={false}
       isError={false}
       onClose={() => {}}
-      client={client}
+      {...(client ? { client } : {})}
     />,
   );
 }
