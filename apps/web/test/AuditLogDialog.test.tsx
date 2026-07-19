@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { AdminIngestionDetail, AdminIngestionRun, SourceInfo } from '@pimm/contracts';
+import type {
+  AdminIngestionDetail,
+  AdminIngestionRun,
+  AdminQualityIssueRecord,
+  SourceInfo,
+} from '@pimm/contracts';
 import { ApiError, type ApiClient } from '../src/api/client.js';
 import { AuditLogDialog } from '../src/components/AuditLogDialog.js';
 
@@ -57,15 +62,35 @@ const detail: AdminIngestionDetail = {
   ],
 };
 
+const openIssue: AdminQualityIssueRecord = {
+  id: '00000000-0000-4000-8000-000000000202',
+  assetId: '00000000-0000-4000-8000-000000000303',
+  runId: null,
+  ruleCode: 'Q007',
+  severity: 'warning',
+  fieldName: 'publication_status',
+  observedValue: 'suspended',
+  message: '公開停止中です',
+  resolutionStatus: 'open',
+  createdAt: '2026-07-19T00:20:00.000Z',
+  resolvedAt: null,
+};
+
 type AuditClient = Pick<
   ApiClient,
-  'startAdminIngestion' | 'getAdminIngestion' | 'resolveAdminQualityIssue'
+  | 'startAdminIngestion'
+  | 'getAdminIngestion'
+  | 'listAdminIngestions'
+  | 'listAdminQualityIssues'
+  | 'resolveAdminQualityIssue'
 >;
 
 function makeClient(overrides: Partial<AuditClient> = {}): ApiClient & AuditClient {
   return {
     startAdminIngestion: vi.fn(async () => run),
     getAdminIngestion: vi.fn(async () => detail),
+    listAdminIngestions: vi.fn(async () => ({ items: [run] })),
+    listAdminQualityIssues: vi.fn(async () => ({ items: [openIssue] })),
     resolveAdminQualityIssue: vi.fn(async () => ({
       ...detail.qualityIssues[0]!,
       resolutionStatus: 'accepted',
@@ -126,6 +151,21 @@ describe('AuditLogDialog', () => {
     expect(screen.getByText(run.id)).toBeInTheDocument();
     expect(screen.getByText('1 件')).toBeInTheDocument();
     expect(screen.getByText('更新日が不明です')).toBeInTheDocument();
+  });
+
+  it('loads admin ingestion history and open quality issue lists', async () => {
+    const user = userEvent.setup();
+    const client = makeClient();
+    setup({ client });
+
+    await user.click(screen.getByRole('button', { name: '一覧を更新' }));
+
+    await waitFor(() => {
+      expect(client.listAdminIngestions).toHaveBeenCalledWith(20);
+      expect(screen.getByRole('button', { name: /sample-bridges \/ running/ })).toBeInTheDocument();
+      expect(screen.getByText('公開停止中です')).toBeInTheDocument();
+    });
+    expect(client.listAdminQualityIssues).toHaveBeenCalledWith(50);
   });
 
   it('shows an authorization message when the admin API rejects the user', async () => {

@@ -221,6 +221,24 @@ describe('ApiClient', () => {
     });
   });
 
+  it('gets admin ingestion history and quality issue lists with credentials', async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/admin/ingestions?')) return jsonResponse({ items: [] });
+      if (url.includes('/admin/quality-issues?')) return jsonResponse({ items: [] });
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(client.listAdminIngestions(20)).resolves.toEqual({ items: [] });
+    await expect(client.listAdminQualityIssues(50)).resolves.toEqual({ items: [] });
+
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('/api/v1/admin/ingestions?limit=20');
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({ credentials: 'include' });
+    expect(String(fetchImpl.mock.calls[1]?.[0])).toBe('/api/v1/admin/quality-issues?limit=50');
+    expect(fetchImpl.mock.calls[1]?.[1]).toMatchObject({ credentials: 'include' });
+  });
+
   it('posts a suspend reason to the admin asset publication endpoint', async () => {
     const payload = {
       id: '11111111-1111-4111-8111-111111111111',

@@ -7,6 +7,8 @@ import { cors } from 'hono/cors';
 import type { ErrorCode, ProblemDetails } from '@pimm/contracts';
 import {
   AdminCreateSourceSchema,
+  AdminIngestionListQuerySchema,
+  AdminQualityIssueListQuerySchema,
   AdminResolveQualityIssueSchema,
   AdminSuspendAssetSchema,
   AdminSuspendSourceAssetsSchema,
@@ -281,12 +283,32 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     return c.json(run, 202);
   });
 
+  admin.get('/ingestions', async (c) => {
+    const parsed = AdminIngestionListQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'limit は 1〜100 の整数で指定してください', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    return c.json(await repo.listIngestions(parsed.data.limit));
+  });
+
   admin.get('/ingestions/:id', async (c) => {
     const id = c.req.param('id');
     if (!UUID_RE.test(id)) return fail(c, 'VALIDATION_ERROR', 'id の形式が不正です');
     const detail = await repo.getIngestionDetail(id.toLowerCase());
     if (!detail) return fail(c, 'NOT_FOUND', '取込実行が見つかりません');
     return c.json(detail);
+  });
+
+  admin.get('/quality-issues', async (c) => {
+    const parsed = AdminQualityIssueListQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'limit は 1〜200 の整数で指定してください', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    return c.json(await repo.listQualityIssues(parsed.data.limit));
   });
 
   admin.post('/quality-issues/:id/resolve', async (c) => {

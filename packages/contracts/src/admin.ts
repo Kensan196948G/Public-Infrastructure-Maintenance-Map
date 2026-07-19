@@ -66,6 +66,16 @@ export const AdminSuspendSourceAssetsSchema = z.object({
 });
 export type AdminSuspendSourceAssets = z.infer<typeof AdminSuspendSourceAssetsSchema>;
 
+export const AdminIngestionListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+export type AdminIngestionListQuery = z.infer<typeof AdminIngestionListQuerySchema>;
+
+export const AdminQualityIssueListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type AdminQualityIssueListQuery = z.infer<typeof AdminQualityIssueListQuerySchema>;
+
 export const AdminIngestionRunSchema = z.object({
   id: z.uuid(),
   sourceSlug: z.string(),
@@ -103,6 +113,16 @@ export const AdminIngestionDetailSchema = z.object({
   qualityIssues: z.array(AdminQualityIssueRecordSchema),
 });
 export type AdminIngestionDetail = z.infer<typeof AdminIngestionDetailSchema>;
+
+export const AdminIngestionListSchema = z.object({
+  items: z.array(AdminIngestionRunSchema),
+});
+export type AdminIngestionList = z.infer<typeof AdminIngestionListSchema>;
+
+export const AdminQualityIssueListSchema = z.object({
+  items: z.array(AdminQualityIssueRecordSchema),
+});
+export type AdminQualityIssueList = z.infer<typeof AdminQualityIssueListSchema>;
 
 export const AdminAssetPublicationSchema = z.object({
   id: z.uuid(),

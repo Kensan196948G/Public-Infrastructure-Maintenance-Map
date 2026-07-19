@@ -2,7 +2,9 @@ import type {
   AdminAssetPublication,
   AdminCreateSource,
   AdminIngestionDetail,
+  AdminIngestionList,
   AdminIngestionRun,
+  AdminQualityIssueList,
   AdminResolveQualityIssue,
   AdminSourceResponse,
   AdminSourcePublication,
@@ -77,7 +79,9 @@ export interface AssetRepository {
     actor: string,
     correlationId: string,
   ): Promise<AdminIngestionRun | null>;
+  listIngestions(limit: number): Promise<AdminIngestionList>;
   getIngestionDetail(id: string): Promise<AdminIngestionDetail | null>;
+  listQualityIssues(limit: number): Promise<AdminQualityIssueList>;
   resolveQualityIssue(
     id: string,
     input: AdminResolveQualityIssue,
