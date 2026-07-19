@@ -1,9 +1,10 @@
 /**
  * Neon PostgreSQL + PostGIS repository.
  *
- * ⚠️ Compile-checked but NOT yet integration-tested against a live database
- * (no local PostGIS in the build environment). Tracked as a known limitation;
- * run the integration suite against a Neon branch before first production use.
+ * Read-side SQL is covered by the PostGIS integration suite in CI. Production
+ * uses Neon HTTP; the integration suite injects a postgres.js-compatible SQL tag
+ * against a disposable PostGIS service so the same repository contract is tested
+ * without requiring production or preview Neon credentials.
  */
 import { neon } from '@neondatabase/serverless';
 import type {
@@ -169,8 +170,8 @@ function buildConditions(sql: Sql, filters: AssetQueryFilters) {
 export class PostgresAssetRepository implements AssetRepository {
   private readonly sql: Sql;
 
-  constructor(databaseUrl: string) {
-    this.sql = neon(databaseUrl);
+  constructor(databaseUrl: string, sqlOverride?: Sql) {
+    this.sql = sqlOverride ?? neon(databaseUrl);
   }
 
   private summarySelect(filters: AssetQueryFilters) {

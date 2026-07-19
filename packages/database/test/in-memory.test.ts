@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryAssetRepository, InvalidCursorError } from '../src/index.js';
 import { makeAsset, makeSource } from './helpers.js';
+import { registerAssetRepositoryContract } from './repository-contract.js';
 
 function repoWith(assets: ReturnType<typeof makeAsset>[]) {
   return new InMemoryAssetRepository({
@@ -11,6 +12,70 @@ function repoWith(assets: ReturnType<typeof makeAsset>[]) {
     ],
   });
 }
+
+registerAssetRepositoryContract('InMemoryAssetRepository', async () => {
+  const publishedBridge = makeAsset({
+    name: '都心橋',
+    lon: 139.7,
+    lat: 35.68,
+    sourceSlug: 'contract-source',
+    sourceUpdatedAt: '2026-06-01T00:00:00.000Z',
+  });
+  const secondBridge = makeAsset({
+    name: '都心第二橋',
+    lon: 139.8,
+    lat: 35.69,
+    sourceSlug: 'contract-source',
+    sourceUpdatedAt: '2026-06-02T00:00:00.000Z',
+  });
+  const river = makeAsset({
+    name: 'B川',
+    type: 'river',
+    lon: 139.75,
+    lat: 35.67,
+    quality: 'review',
+    sourceSlug: 'contract-source',
+    sourceUpdatedAt: '2020-01-01T00:00:00.000Z',
+  });
+  const facility = makeAsset({
+    name: 'C施設',
+    type: 'public_facility',
+    lon: 135.5,
+    lat: 34.7,
+    quality: 'reference',
+    sourceSlug: 'contract-source',
+    sourceUpdatedAt: null,
+  });
+  const hiddenBridge = makeAsset({
+    name: '非公開橋',
+    lon: 139.71,
+    lat: 35.681,
+    quality: 'hidden',
+    sourceSlug: 'contract-source',
+  });
+  const draftBridge = makeAsset({
+    name: '下書き橋',
+    lon: 139.72,
+    lat: 35.682,
+    published: false,
+    sourceSlug: 'contract-source',
+  });
+
+  return {
+    repo: new InMemoryAssetRepository({
+      assets: [publishedBridge, secondBridge, river, facility, hiddenBridge, draftBridge],
+      sources: [
+        makeSource({ slug: 'contract-source' }),
+        makeSource({ slug: 'disabled-source', enabled: false }),
+      ],
+    }),
+    ids: {
+      publishedBridge: publishedBridge.id,
+      hiddenBridge: hiddenBridge.id,
+      draftBridge: draftBridge.id,
+    },
+  };
+});
 
 describe('InMemoryAssetRepository.searchAssets', () => {
   it('filters by bbox', async () => {
