@@ -95,7 +95,7 @@ flowchart LR
 | 🗄️ | マイグレーション適用計画 | 未適用 `migrations/*.sql` を棚卸し（`0001_init.sql` / `0002_cross_column_checks.sql`） | 適用対象を把握 |
 | 🔁 | ロールバック確認 | §5 の手順・直前デプロイ・Neon 復元点を確認 | 手段を用意 |
 | 📄 | README / docs 最新 | 利用機能・手順の差分反映 | 反映済み |
-| ⚠️ | 受入基準の現状 | §8 の既知制約を確認（管理UI #4 の残作業 等） | リスク合意済み |
+| ⚠️ | 受入基準の現状 | §8 の既知制約を確認（Cloudflare 本番スモーク #38 等） | リスク合意済み |
 
 > 💡 CI にデプロイジョブは**ありません**（`ci.yml` は quality / secret-scan / dependency-scan の 3 ジョブのみ）。**本番反映は 100% 手動**です。
 
@@ -180,6 +180,19 @@ pnpm --filter @pimm/web build     # or: pnpm build（apps/web/dist を生成）
 - 🌐 **本番URL**: `https://pimm.mirai-dx-platform.com`
 - 💡 dev では Vite(:5173) が `/api` → `http://localhost:8787` を proxy しますが、これは開発専用です。
 
+### ⑤ 🧪 Cloudflare 本番スモーク検証
+
+```bash
+# Cloudflare login / custom domain / DNS / API / Web / Access境界を厳格に確認
+pnpm smoke:cloudflare
+
+# DNS反映前またはwrangler未認証環境で、zone NS と手順だけを事前確認
+pnpm smoke:cloudflare:preflight
+```
+
+- ✅ 厳格モードは `wrangler whoami`、`pimm.mirai-dx-platform.com` / `api.pimm.mirai-dx-platform.com` のDNS、`/api/v1/health`、`/api/v1/assets/summary`、管理APIの未認証拒否、Webアプリ shell を検証します。
+- ⚠️ `pnpm smoke:cloudflare` が失敗する状態では、CTO/Supervisor は本番リリース完了を判定しません。
+
 ---
 
 ## 🔁 5. ロールバック手順
@@ -250,7 +263,7 @@ Cloudflare Access で `admin` 権限を持つ運用者が、システム設定�
 
 | Issue | 内容 | 本番判断への影響 |
 |---|---|---|
-| 🔒 #4 | 管理画面（Cloudflare Access 認証）は段階実装中 | 管理APIの認証・基本操作に加え、監査ログ画面から取込履歴一覧・未解決品質issue一覧・取込記録作成・取込詳細確認・理由入力付きの品質issue解決、詳細画面から理由入力付きの個別資産公開停止、システム設定からソース登録/編集とソース単位の公開一括停止までは接続済み。実 Cloudflare Access 認証済み管理E2Eは次フェーズ。公開 GET API のみで運用する前提なら**公開リリースは可** |
+| 🚀 #38 | Cloudflare custom domain / Access 本番スモーク未完了 | `pimm.mirai-dx-platform.com` / `api.pimm.mirai-dx-platform.com` のDNS、Cloudflare Access、公開API/Webを `pnpm smoke:cloudflare` で検証する。本番デプロイ直前の停止条件 |
 | 🧪 #12 | E2E（Playwright）**公開地図の主要回帰を導入済み** | `pnpm test:e2e` / CI `🗺️ Playwright E2E` で初期表示・検索・詳細表示・種別フィルタを検証。公開前は手動スモークテスト（§4④）も併用 |
 | 🗄️ #8 | `PostgresAssetRepository` の PostGIS 統合テストを CI に導入 | 読取経路の公開可視性・検索・bbox・`getAssetById` 契約は `🗄️ PostGIS integration` で検証。Neon dev branch を使った publish 一気通貫は #5/#16 で継続 |
 | 🔄 #5 / #16 | Publish 経路の PostGIS 統合テストを CI に導入 | `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証。実 Neon への流し込みは本 runbook の手動手順で実施 |
@@ -261,9 +274,9 @@ Cloudflare Access で `admin` 権限を持つ運用者が、システム設定�
 ✅ CI success（quality / secret-scan / dependency-scan）
 ✅ test/lint/type/build 全通過・error 0・Critical 脆弱性 0
 ✅ §3 チェックリスト充足・§4 の各検証合格
-⚠️ 既知制約 #4/#12/#8 を関係者が受容済み
+⚠️ #38 が未完了なら本番リリース直前で停止
 ──────────────────────────────
-→ CTO/Supervisor は「Deploy Ready」を判定。実デプロイは人間が §4 を手動実行。
+→ CTO/Supervisor は「Release Ready（本番デプロイ承認待ち）」まで判定。実デプロイは人間が §4 を手動実行。
 ```
 
 > 🔐 **最終原則**: 本番デプロイ・シークレット投入・破壊的変更・データ削除/移行の確定は**人間の最終決断**。自動化はここまで。

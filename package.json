@@ -19,7 +19,10 @@
     "test": "pnpm -r test",
     "test:e2e": "playwright test",
     "db:migrate": "node scripts/db/migrate.mjs",
-    "ingest": "pnpm --filter @pimm/api ingest"
+    "ingest": "pnpm --filter @pimm/api ingest",
+    "smoke:cloudflare": "node scripts/tools/cloudflare-production-smoke.mjs",
+    "smoke:cloudflare:pending": "node scripts/tools/cloudflare-production-smoke.mjs --allow-pending-dns",
+    "smoke:cloudflare:preflight": "node scripts/tools/cloudflare-production-smoke.mjs --allow-pending-dns --skip-wrangler"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

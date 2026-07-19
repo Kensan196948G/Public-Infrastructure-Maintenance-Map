@@ -37,3 +37,11 @@ secret、credential、connection string、PII は記載しない。
 - 影響: Cloudflare CLI/アカウント接続が確認できるまで、実DNS変更・production route変更は行わない。
 - 検証: Approval PR の CI と dry-run 相当確認まで。実Cloudflare上の存在確認は認証接続後に実施する。
 - Rollback: Approval PR に記載した route/domain削除と前設定復元手順に従う。
+
+### DL-005: Cloudflare本番スモークをRelease Gateへ追加
+
+- 判断: 本番デプロイ完了判定は、`pnpm smoke:cloudflare` による custom domain / DNS / API / Web / 管理API未認証拒否の確認後に限定する。
+- 理由: `mirai-dx-platform.com` はCloudflare NSへ委任済みだが、`pimm.mirai-dx-platform.com` と `api.pimm.mirai-dx-platform.com` は本番反映前に未解決であり、DNS・Access・公開経路の実証をRelease Gateへ明示する必要があるため。
+- 影響: 本番前の未完了作業は Issue #38 に集約し、Cloudflare認証・DNS反映・本番スモークの結果を同Issueへ記録する。
+- 検証: 認証/DNS反映前は `pnpm smoke:cloudflare:preflight`、反映後は `pnpm smoke:cloudflare` を使用する。
+- Rollback: スモーク検証ツールは削除またはPR単位でrevert可能。本番route/domainのrollbackは Cloudflare Domain Approval PR の手順に従う。
