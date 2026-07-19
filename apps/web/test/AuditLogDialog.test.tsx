@@ -33,9 +33,9 @@ function setup(overrides: Partial<Parameters<typeof AuditLogDialog>[0]> = {}) {
 }
 
 describe('AuditLogDialog', () => {
-  it('discloses that authentication is not yet implemented', () => {
+  it('discloses that admin authentication exists while detailed UI wiring is pending', () => {
     setup();
-    expect(screen.getByRole('note')).toHaveTextContent(/認証は未実装/);
+    expect(screen.getByRole('note')).toHaveTextContent(/管理APIの認証ゲートは実装済み/);
   });
 
   it('renders per-source ingestion status', () => {

@@ -11,16 +11,14 @@ interface AuditLogDialogProps {
 
 /**
  * 監査ログ (取込監査, FR-13) — 現状はソース単位の取込状況を表示する。
- * ジョブ単位の実行履歴 (ingestion_runs) は管理API (Issue #4) の実装後に拡張する。
- * 認証は未実装のため、当面は公開データソースの取得状況のみを扱う。
+ * ジョブ単位の実行履歴 (ingestion_runs) への接続は管理UIの後続実装で拡張する。
  */
 export function AuditLogDialog({ sources, isLoading, isError, onClose }: AuditLogDialogProps) {
   return (
     <Modal title="監査ログ（取込状況）" onClose={onClose}>
       <p className="admin-note" role="note">
-        ⚠️
-        認証は未実装です。現状はソース単位の取込状況を表示します。ジョブ単位の実行履歴・品質検査結果は管理API（Issue
-        #4）実装後に拡張します。
+        🔒
+        管理APIの認証ゲートは実装済みです。現状の画面は公開ソース概要の読み取り中心で、ジョブ単位の実行履歴・品質検査結果は後続UIで接続します。
       </p>
       {isError ? (
         <p className="detail-state" role="alert">

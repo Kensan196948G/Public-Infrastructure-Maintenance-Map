@@ -7,6 +7,15 @@
  */
 import { neon } from '@neondatabase/serverless';
 import type {
+  AdminAssetPublication,
+  AdminCreateSource,
+  AdminIngestionDetail,
+  AdminIngestionRun,
+  AdminQualityIssueRecord,
+  AdminResolveQualityIssue,
+  AdminSourceResponse,
+  AdminSuspendAsset,
+  AdminUpdateSource,
   AssetCountSummary,
   AssetDetail,
   AssetSearchResponse,
@@ -130,6 +139,40 @@ function rowToSource(row: Row): SourceInfo {
     lastFetchedAt: toIso(row['last_fetched_at']),
     sourceUpdatedAt: toIso(row['source_updated_at']),
     publishedAssetCount: Number(row['published_asset_count'] ?? 0),
+  };
+}
+
+function rowToAdminRun(row: Row): AdminIngestionRun {
+  return {
+    id: String(row['id']),
+    sourceSlug: String(row['source_slug']),
+    startedAt: toIso(row['started_at']) ?? new Date(0).toISOString(),
+    finishedAt: toIso(row['finished_at']),
+    status: row['status'] as AdminIngestionRun['status'],
+    fetchedCount: Number(row['fetched_count'] ?? 0),
+    acceptedCount: Number(row['accepted_count'] ?? 0),
+    rejectedCount: Number(row['rejected_count'] ?? 0),
+    warningCount: Number(row['warning_count'] ?? 0),
+    errorCode: (row['error_code'] as string | null) ?? null,
+    errorSummary: (row['error_summary'] as string | null) ?? null,
+    triggeredBy: (row['triggered_by'] as string | null) ?? null,
+    correlationId: (row['correlation_id'] as string | null) ?? null,
+  };
+}
+
+function rowToAdminIssue(row: Row): AdminQualityIssueRecord {
+  return {
+    id: String(row['id']),
+    assetId: (row['asset_id'] as string | null) ?? null,
+    runId: (row['run_id'] as string | null) ?? null,
+    ruleCode: row['rule_code'] as AdminQualityIssueRecord['ruleCode'],
+    severity: row['severity'] as AdminQualityIssueRecord['severity'],
+    fieldName: (row['field_name'] as string | null) ?? null,
+    observedValue: (row['observed_value'] as string | null) ?? null,
+    message: String(row['message']),
+    resolutionStatus: row['resolution_status'] as AdminQualityIssueRecord['resolutionStatus'],
+    createdAt: toIso(row['created_at']) ?? new Date(0).toISOString(),
+    resolvedAt: toIso(row['resolved_at']),
   };
 }
 
@@ -312,6 +355,157 @@ export class PostgresAssetRepository implements AssetRepository {
     }
 
     return rows.map((row) => rowToDetail(row, attrsByAsset.get(String(row['id'])) ?? []));
+  }
+
+  private async getAdminSourceBySlug(slug: string): Promise<AdminSourceResponse | null> {
+    const rows = (await this.sql`
+      SELECT s.*,
+             (SELECT max(v.fetched_at) FROM dataset_versions v WHERE v.source_id = s.id) AS last_fetched_at,
+             (SELECT max(v.source_updated_at) FROM dataset_versions v WHERE v.source_id = s.id) AS source_updated_at,
+             (SELECT count(*)::int FROM infrastructure_assets a
+               WHERE a.source_id = s.id AND a.publication_status = 'published'
+                 AND a.quality_status <> 'hidden') AS published_asset_count
+        FROM data_sources s
+       WHERE s.slug = ${slug}
+       LIMIT 1`) as Row[];
+    const row = rows[0];
+    return row ? rowToSource(row) : null;
+  }
+
+  async createSource(input: AdminCreateSource): Promise<AdminSourceResponse> {
+    await this.sql`
+      INSERT INTO data_sources
+        (slug, name, provider_name, source_url, access_type, format, license_name,
+         license_url, redistribution, attribution_text, refresh_cron, enabled)
+      VALUES
+        (${input.slug}, ${input.name}, ${input.providerName}, ${input.sourceUrl}, ${input.accessType},
+         ${input.format}, ${input.licenseName}, ${input.licenseUrl ?? null}, ${input.redistribution},
+         ${input.attributionText ?? null}, ${input.refreshCron ?? null}, ${input.enabled})
+      ON CONFLICT (slug) DO UPDATE SET
+        name = EXCLUDED.name,
+        provider_name = EXCLUDED.provider_name,
+        source_url = EXCLUDED.source_url,
+        access_type = EXCLUDED.access_type,
+        format = EXCLUDED.format,
+        license_name = EXCLUDED.license_name,
+        license_url = EXCLUDED.license_url,
+        redistribution = EXCLUDED.redistribution,
+        attribution_text = EXCLUDED.attribution_text,
+        refresh_cron = EXCLUDED.refresh_cron,
+        enabled = EXCLUDED.enabled,
+        updated_at = now()`;
+    const source = await this.getAdminSourceBySlug(input.slug);
+    if (!source) throw new Error('source upsert did not return a readable row');
+    return source;
+  }
+
+  async updateSource(slug: string, input: AdminUpdateSource): Promise<AdminSourceResponse | null> {
+    const current = await this.getAdminSourceBySlug(slug);
+    if (!current) return null;
+    await this.sql`
+      UPDATE data_sources SET
+        name = ${input.name ?? current.name},
+        provider_name = ${input.providerName ?? current.providerName},
+        source_url = ${input.sourceUrl ?? current.sourceUrl},
+        access_type = ${input.accessType ?? current.accessType},
+        format = ${input.format ?? current.format},
+        license_name = ${input.licenseName ?? current.licenseName},
+        license_url = ${input.licenseUrl === undefined ? current.licenseUrl : input.licenseUrl},
+        redistribution = ${input.redistribution ?? current.redistribution},
+        attribution_text = ${
+          input.attributionText === undefined ? current.attributionText : input.attributionText
+        },
+        refresh_cron = CASE
+          WHEN ${input.refreshCron === undefined} THEN refresh_cron
+          ELSE ${input.refreshCron ?? null}
+        END,
+        enabled = ${input.enabled ?? current.enabled},
+        updated_at = now()
+      WHERE slug = ${slug}`;
+    return this.getAdminSourceBySlug(slug);
+  }
+
+  async startIngestion(
+    sourceSlug: string,
+    actor: string,
+    correlationId: string,
+  ): Promise<AdminIngestionRun | null> {
+    const sourceRows = (await this.sql`
+      SELECT id FROM data_sources WHERE slug = ${sourceSlug} LIMIT 1`) as Row[];
+    const sourceId = sourceRows[0]?.['id'];
+    if (!sourceId) return null;
+    const runId = crypto.randomUUID();
+    const rows = (await this.sql`
+      INSERT INTO ingestion_runs
+        (id, source_id, status, triggered_by, correlation_id)
+      VALUES
+        (${runId}, ${String(sourceId)}, 'running', ${actor}, ${correlationId})
+      RETURNING id, started_at, finished_at, status, fetched_count, accepted_count,
+                rejected_count, warning_count, error_code, error_summary,
+                triggered_by, correlation_id, ${sourceSlug} AS source_slug`) as Row[];
+    return rowToAdminRun(rows[0]!);
+  }
+
+  async getIngestionDetail(id: string): Promise<AdminIngestionDetail | null> {
+    const runs = (await this.sql`
+      SELECT r.*, s.slug AS source_slug
+        FROM ingestion_runs r
+        JOIN data_sources s ON s.id = r.source_id
+       WHERE r.id = ${id}
+       LIMIT 1`) as Row[];
+    const run = runs[0];
+    if (!run) return null;
+    const issues = (await this.sql`
+      SELECT id, asset_id, run_id, rule_code, severity, field_name, observed_value,
+             message, resolution_status, created_at, resolved_at
+        FROM quality_issues
+       WHERE run_id = ${id}
+       ORDER BY created_at DESC, id`) as Row[];
+    return { run: rowToAdminRun(run), qualityIssues: issues.map(rowToAdminIssue) };
+  }
+
+  async resolveQualityIssue(
+    id: string,
+    input: AdminResolveQualityIssue,
+    actor: string,
+  ): Promise<AdminQualityIssueRecord | null> {
+    const rows = (await this.sql`
+      UPDATE quality_issues SET
+        resolution_status = ${input.resolutionStatus},
+        resolved_by = ${actor},
+        resolved_at = now(),
+        message = message || ${`\nResolution: ${input.reason}`}
+      WHERE id = ${id}
+      RETURNING id, asset_id, run_id, rule_code, severity, field_name, observed_value,
+                message, resolution_status, created_at, resolved_at`) as Row[];
+    const row = rows[0];
+    return row ? rowToAdminIssue(row) : null;
+  }
+
+  async suspendAsset(
+    id: string,
+    input: AdminSuspendAsset,
+    actor: string,
+  ): Promise<AdminAssetPublication | null> {
+    const rows = (await this.sql`
+      UPDATE infrastructure_assets SET
+        publication_status = 'suspended',
+        updated_at = now()
+      WHERE id = ${id}
+      RETURNING id, publication_status`) as Row[];
+    const row = rows[0];
+    if (!row) return null;
+    await this.sql`
+      INSERT INTO quality_issues
+        (asset_id, rule_code, severity, field_name, observed_value, message, resolution_status)
+      VALUES
+        (${id}, 'Q007', 'warning', 'publication_status', 'suspended',
+         ${`Publication suspended by ${actor}: ${input.reason}`}, 'open')`;
+    return {
+      id: String(row['id']),
+      publicationStatus: row['publication_status'] as AdminAssetPublication['publicationStatus'],
+      reason: input.reason,
+    };
   }
 }
 

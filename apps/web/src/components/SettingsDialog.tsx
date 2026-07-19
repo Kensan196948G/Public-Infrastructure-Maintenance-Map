@@ -13,7 +13,7 @@ interface SettingsDialogProps {
 
 /**
  * システム設定 (UI-06 相当) — 接続先・稼働状態・データソース概要・機能状態を表示。
- * 認証は未実装のため設定の変更は行わず、現状は読み取り専用の状況表示に限定する。
+ * 管理APIの認証ゲートは実装済みだが、画面からの設定変更は後続UIで接続する。
  */
 export function SettingsDialog({
   health,
@@ -36,8 +36,8 @@ export function SettingsDialog({
   return (
     <Modal title="システム設定" onClose={onClose}>
       <p className="admin-note" role="note">
-        ⚠️ 認証は未実装です。現状は読み取り専用の状況表示です。設定変更・ソース管理は管理API（Issue
-        #4）実装後に提供します。
+        🔒
+        管理APIの認証ゲートは実装済みです。現状の画面は読み取り専用で、設定変更・ソース管理操作は後続UIで接続します。
       </p>
 
       <section className="settings-section">
@@ -70,7 +70,7 @@ export function SettingsDialog({
           <dt>データ方針</dt>
           <dd>公開データ・公開API・検証用サンプルのみ</dd>
           <dt>ログイン認証</dt>
-          <dd>⏳ 未実装（Issue #4）</dd>
+          <dd>🟡 管理APIゲート実装済（UI接続は後続）</dd>
           <dt>レート制限</dt>
           <dd>🟢 有効（本番は Cloudflare WAF）</dd>
           <dt>エクスポート</dt>

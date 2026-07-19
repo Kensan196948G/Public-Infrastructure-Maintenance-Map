@@ -1,4 +1,13 @@
 import type {
+  AdminAssetPublication,
+  AdminCreateSource,
+  AdminIngestionDetail,
+  AdminIngestionRun,
+  AdminQualityIssueRecord,
+  AdminResolveQualityIssue,
+  AdminSourceResponse,
+  AdminSuspendAsset,
+  AdminUpdateSource,
   AssetCountSummary,
   AssetDetail,
   AssetSearchResponse,
@@ -55,19 +64,27 @@ function matches(asset: AssetDetail, filters: AssetQueryFilters): boolean {
 export class InMemoryAssetRepository implements AssetRepository {
   private readonly assets: AssetDetail[];
   private readonly sources: SourceInfo[];
+  private readonly ingestionRuns: AdminIngestionRun[] = [];
+  private readonly qualityIssues: AdminQualityIssueRecord[] = [];
 
   constructor(seed: { assets: AssetDetail[]; sources: SourceInfo[] }) {
-    this.assets = seed.assets
-      .filter((a) => a.publicationStatus === 'published' && a.quality.status !== 'hidden')
-      .sort((a, b) => a.name.localeCompare(b.name, 'ja') || a.id.localeCompare(b.id));
+    this.assets = [...seed.assets].sort(
+      (a, b) => a.name.localeCompare(b.name, 'ja') || a.id.localeCompare(b.id),
+    );
     this.sources = [...seed.sources].sort((a, b) => a.slug.localeCompare(b.slug));
+  }
+
+  private visibleAssets(): AssetDetail[] {
+    return this.assets.filter(
+      (a) => a.publicationStatus === 'published' && a.quality.status !== 'hidden',
+    );
   }
 
   async searchAssets(input: AssetSearchInput): Promise<AssetSearchResponse> {
     const offset = input.cursor === undefined ? 0 : decodeCursor(input.cursor)?.offset;
     if (offset === undefined) throw new InvalidCursorError();
 
-    const filtered = this.assets.filter((a) => matches(a, input));
+    const filtered = this.visibleAssets().filter((a) => matches(a, input));
     const page = filtered.slice(offset, offset + input.limit);
     const nextOffset = offset + page.length;
     const summaries = page.map(
@@ -87,13 +104,13 @@ export class InMemoryAssetRepository implements AssetRepository {
   }
 
   getAssetById(id: string): Promise<AssetDetail | null> {
-    return Promise.resolve(this.assets.find((a) => a.id === id) ?? null);
+    return Promise.resolve(this.visibleAssets().find((a) => a.id === id) ?? null);
   }
 
   countByType(filters: Pick<AssetQueryFilters, 'bbox' | 'types'>): Promise<AssetCountSummary> {
     const byType: Partial<Record<AssetType, number>> = {};
     let total = 0;
-    for (const asset of this.assets) {
+    for (const asset of this.visibleAssets()) {
       if (!matches(asset, filters)) continue;
       total += 1;
       byType[asset.type] = (byType[asset.type] ?? 0) + 1;
@@ -110,7 +127,125 @@ export class InMemoryAssetRepository implements AssetRepository {
   }
 
   exportAssets(input: AssetExportInput): Promise<AssetDetail[]> {
-    const filtered = this.assets.filter((a) => matches(a, input));
+    const filtered = this.visibleAssets().filter((a) => matches(a, input));
     return Promise.resolve(filtered.slice(0, input.limit));
+  }
+
+  createSource(input: AdminCreateSource): Promise<AdminSourceResponse> {
+    const source: SourceInfo = {
+      slug: input.slug,
+      name: input.name,
+      providerName: input.providerName,
+      sourceUrl: input.sourceUrl,
+      accessType: input.accessType,
+      format: input.format,
+      licenseName: input.licenseName,
+      licenseUrl: input.licenseUrl ?? null,
+      redistribution: input.redistribution,
+      attributionText: input.attributionText ?? null,
+      enabled: input.enabled,
+      lastFetchedAt: null,
+      sourceUpdatedAt: null,
+      publishedAssetCount: 0,
+    };
+    const existingIndex = this.sources.findIndex((s) => s.slug === input.slug);
+    if (existingIndex >= 0) this.sources[existingIndex] = source;
+    else this.sources.push(source);
+    this.sources.sort((a, b) => a.slug.localeCompare(b.slug));
+    return Promise.resolve(source);
+  }
+
+  updateSource(slug: string, input: AdminUpdateSource): Promise<AdminSourceResponse | null> {
+    const source = this.sources.find((s) => s.slug === slug);
+    if (!source) return Promise.resolve(null);
+    const updated: SourceInfo = {
+      ...source,
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.providerName !== undefined ? { providerName: input.providerName } : {}),
+      ...(input.sourceUrl !== undefined ? { sourceUrl: input.sourceUrl } : {}),
+      ...(input.accessType !== undefined ? { accessType: input.accessType } : {}),
+      ...(input.format !== undefined ? { format: input.format } : {}),
+      ...(input.licenseName !== undefined ? { licenseName: input.licenseName } : {}),
+      ...(input.licenseUrl !== undefined ? { licenseUrl: input.licenseUrl } : {}),
+      ...(input.redistribution !== undefined ? { redistribution: input.redistribution } : {}),
+      ...(input.attributionText !== undefined ? { attributionText: input.attributionText } : {}),
+      ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+    };
+    this.sources[this.sources.indexOf(source)] = updated;
+    return Promise.resolve(updated);
+  }
+
+  startIngestion(
+    sourceSlug: string,
+    actor: string,
+    correlationId: string,
+  ): Promise<AdminIngestionRun | null> {
+    const source = this.sources.find((s) => s.slug === sourceSlug);
+    if (!source) return Promise.resolve(null);
+    const now = new Date().toISOString();
+    const run: AdminIngestionRun = {
+      id: crypto.randomUUID(),
+      sourceSlug,
+      startedAt: now,
+      finishedAt: now,
+      status: 'succeeded',
+      fetchedCount: 0,
+      acceptedCount: 0,
+      rejectedCount: 0,
+      warningCount: 0,
+      errorCode: null,
+      errorSummary: null,
+      triggeredBy: actor,
+      correlationId,
+    };
+    this.ingestionRuns.unshift(run);
+    return Promise.resolve(run);
+  }
+
+  getIngestionDetail(id: string): Promise<AdminIngestionDetail | null> {
+    const run = this.ingestionRuns.find((r) => r.id === id);
+    if (!run) return Promise.resolve(null);
+    return Promise.resolve({
+      run,
+      qualityIssues: this.qualityIssues.filter((q) => q.runId === id),
+    });
+  }
+
+  resolveQualityIssue(
+    id: string,
+    input: AdminResolveQualityIssue,
+    actor: string,
+  ): Promise<AdminQualityIssueRecord | null> {
+    const issue = this.qualityIssues.find((q) => q.id === id);
+    if (!issue) return Promise.resolve(null);
+    issue.resolutionStatus = input.resolutionStatus;
+    issue.resolvedAt = new Date().toISOString();
+    issue.message = `${issue.message}\nResolution by ${actor}: ${input.reason}`;
+    return Promise.resolve(issue);
+  }
+
+  suspendAsset(
+    id: string,
+    input: AdminSuspendAsset,
+    actor: string,
+  ): Promise<AdminAssetPublication | null> {
+    const asset = this.assets.find((a) => a.id === id);
+    if (!asset) return Promise.resolve(null);
+    asset.publicationStatus = 'suspended';
+    asset.quality.openIssueCodes = Array.from(new Set([...asset.quality.openIssueCodes, 'Q007']));
+    this.qualityIssues.unshift({
+      id: crypto.randomUUID(),
+      assetId: id,
+      runId: null,
+      ruleCode: 'Q007',
+      severity: 'warning',
+      fieldName: 'publication_status',
+      observedValue: 'suspended',
+      message: `Publication suspended by ${actor}: ${input.reason}`,
+      resolutionStatus: 'open',
+      createdAt: new Date().toISOString(),
+      resolvedAt: null,
+    });
+    return Promise.resolve({ id, publicationStatus: 'suspended', reason: input.reason });
   }
 }
