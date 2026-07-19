@@ -498,6 +498,15 @@ export class PostgresAssetPublisher implements AssetPublisher {
          WHERE a.source_id = ${input.sourceId} AND a.source_record_id = ${asset.sourceRecordId}`,
           ),
         ),
+        sql`
+        INSERT INTO ingestion_runs
+          (id, source_id, dataset_version_id, started_at, finished_at, status,
+           fetched_count, accepted_count, rejected_count, warning_count,
+           triggered_by, correlation_id)
+        VALUES
+          (${ingestionRunId}, ${input.sourceId}, ${datasetVersionId}, ${now}, ${now}, ${status},
+           ${input.fetchedCount}, ${publishedCount}, ${droppedCount + hiddenCount},
+           ${input.warningCount}, ${input.triggeredBy}, ${input.correlationId})`,
         // Issues are appended per run, not reconciled against prior-run issues on
         // the same asset — resolution-status lifecycle management (dismiss,
         // accept, mark fixed) is the admin-console's job (Issue #4), not publish's.
@@ -512,15 +521,6 @@ export class PostgresAssetPublisher implements AssetPublisher {
          WHERE a.source_id = ${input.sourceId} AND a.source_record_id = ${asset.sourceRecordId}`,
           ),
         ),
-        sql`
-        INSERT INTO ingestion_runs
-          (id, source_id, dataset_version_id, started_at, finished_at, status,
-           fetched_count, accepted_count, rejected_count, warning_count,
-           triggered_by, correlation_id)
-        VALUES
-          (${ingestionRunId}, ${input.sourceId}, ${datasetVersionId}, ${now}, ${now}, ${status},
-           ${input.fetchedCount}, ${publishedCount}, ${droppedCount + hiddenCount},
-           ${input.warningCount}, ${input.triggeredBy}, ${input.correlationId})`,
       ];
     };
 
