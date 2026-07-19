@@ -19,6 +19,7 @@ const CONFIG: ApiConfig = {
   version: 'test',
   adminEmails: ['admin@example.com'],
   reviewerEmails: ['reviewer@example.com'],
+  requireAccessJwt: false,
 };
 
 let app: Hono<never>;

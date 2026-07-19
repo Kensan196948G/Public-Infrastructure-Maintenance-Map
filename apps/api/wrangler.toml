@@ -3,16 +3,27 @@
 name = "pimm-api"
 main = "src/worker.ts"
 compatibility_date = "2026-07-01"
+# Safe by default: a `wrangler deploy` that forgets --env production must not
+# publish a reachable Worker. Without this, the workers.dev hostname would
+# expose the admin API outside any Cloudflare Access application.
+workers_dev = false
 
 [vars]
 ALLOWED_ORIGIN = "*"
 RATE_LIMIT_PER_MINUTE = "120"
+# Enforced in every environment, so an accidental default-env deploy fails
+# closed instead of falling back to the spoofable identity header.
+REQUIRE_ACCESS_JWT = "true"
 
 [observability]
 enabled = true
 
 [env.production]
 name = "pimm-api-production"
+# The workers.dev hostname is not covered by the Cloudflare Access application
+# bound to the custom domain, so leaving it enabled would expose the admin API
+# outside the authentication boundary.
+workers_dev = false
 
 [[env.production.routes]]
 pattern = "api.pimm.mirai-dx-platform.com"
@@ -21,3 +32,9 @@ custom_domain = true
 [env.production.vars]
 ALLOWED_ORIGIN = "https://pimm.mirai-dx-platform.com"
 RATE_LIMIT_PER_MINUTE = "120"
+# Declared here rather than left to `wrangler secret put` so a forgotten or
+# mistyped secret cannot silently downgrade production to sample data.
+REQUIRE_DATABASE_URL = "true"
+# Admin routes must reject every request unless a Cloudflare Access JWT is
+# verified. Fails closed (500) if CLOUDFLARE_ACCESS_AUD / _TEAM_DOMAIN are unset.
+REQUIRE_ACCESS_JWT = "true"

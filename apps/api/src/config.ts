@@ -24,6 +24,17 @@ export interface ApiConfig {
   adminEmails: readonly string[];
   /** Server-side allowlist for admin API read/review operations. */
   reviewerEmails: readonly string[];
+  /** Access application AUD tag. Required to verify Cf-Access-Jwt-Assertion. */
+  accessAud?: string;
+  /** Access team hostname, e.g. `example.cloudflareaccess.com`. */
+  accessTeamDomain?: string;
+  /**
+   * When true, admin routes verify an Access JWT and refuse to serve at all if
+   * accessAud/accessTeamDomain are missing. Set in production so that a
+   * misconfigured Access integration fails closed instead of falling back to
+   * trusting the spoofable CF-Access-Authenticated-User-Email header.
+   */
+  requireAccessJwt: boolean;
 }
 
 export interface EnvBindings {
@@ -33,6 +44,9 @@ export interface EnvBindings {
   REQUIRE_DATABASE_URL?: string;
   ADMIN_EMAILS?: string;
   REVIEWER_EMAILS?: string;
+  CLOUDFLARE_ACCESS_AUD?: string;
+  CLOUDFLARE_ACCESS_TEAM_DOMAIN?: string;
+  REQUIRE_ACCESS_JWT?: string;
 }
 
 /** Truthy env-string parse: 'true'/'1' (case-insensitive) enable the flag. */
@@ -56,7 +70,17 @@ export function configFromEnv(env: EnvBindings): ApiConfig {
     requireDatabaseUrl: envFlag(env.REQUIRE_DATABASE_URL),
     adminEmails: csvEmails(env.ADMIN_EMAILS),
     reviewerEmails: csvEmails(env.REVIEWER_EMAILS),
+    // Configuring either Access setting turns enforcement on, so the pair can
+    // never sit in the environment as decorative dead config.
+    requireAccessJwt:
+      envFlag(env.REQUIRE_ACCESS_JWT) ||
+      Boolean(env.CLOUDFLARE_ACCESS_AUD) ||
+      Boolean(env.CLOUDFLARE_ACCESS_TEAM_DOMAIN),
   };
   if (env.DATABASE_URL) config.databaseUrl = env.DATABASE_URL;
+  if (env.CLOUDFLARE_ACCESS_AUD) config.accessAud = env.CLOUDFLARE_ACCESS_AUD;
+  if (env.CLOUDFLARE_ACCESS_TEAM_DOMAIN) {
+    config.accessTeamDomain = env.CLOUDFLARE_ACCESS_TEAM_DOMAIN;
+  }
   return config;
 }

@@ -194,13 +194,17 @@ VITE_API_BASE_URL=http://localhost:8787/api/v1
 # Secret（実値はGit管理しない）
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
 CLOUDFLARE_ACCESS_AUD=
+CLOUDFLARE_ACCESS_TEAM_DOMAIN=
+REQUIRE_ACCESS_JWT=
 ADMIN_EMAILS=admin@example.com
 REVIEWER_EMAILS=reviewer@example.com
 ```
 
 - `VITE_API_BASE_URL`: Web と API を別オリジン（別ドメインの Cloudflare Pages／Workers 等）で配信する場合に、API のベース URL を指定します。同一オリジン配信なら未設定でよく、既定の `/api/v1` が使われます。ビルド時（`vite build`）に値がバンドルへ焼き込まれるため、デプロイ環境ごとに設定します。
 - 本番 Cloudflare では WebUI を `https://pimm.mirai-dx-platform.com`、API を `https://api.pimm.mirai-dx-platform.com/api/v1` として扱います。DNS / custom domain / route 変更は [Cloudflare Domain Approval PR](docs/CLOUDFLARE_DOMAIN_APPROVAL.md) の承認範囲内で実行します。
-- `ADMIN_EMAILS` / `REVIEWER_EMAILS`: Cloudflare Accessで認証されたメールアドレスに対する管理APIのサーバ側許可リストです。ロールはリクエストヘッダではなく、この設定からのみ解決します。
+- `ADMIN_EMAILS` / `REVIEWER_EMAILS`: 認証済みメールアドレスに対する管理APIのサーバ側許可リストです。ロールはリクエストヘッダではなく、この設定からのみ解決します。
+- 🔐 `CLOUDFLARE_ACCESS_AUD` / `CLOUDFLARE_ACCESS_TEAM_DOMAIN`: **いずれかを設定すると管理APIのJWT検証が有効化**され、Worker が `Cf-Access-Jwt-Assertion` の署名・`aud`・`iss`・有効期限を自前で検証します。この状態では利用者IDは**署名済みクレームからのみ**取得し、詐称可能な `CF-Access-Authenticated-User-Email` ヘッダは無視します。両方未設定のローカル開発時のみ、ヘッダによる簡易識別へフォールバックします。
+- 🛡️ `REQUIRE_ACCESS_JWT=true`: AUD / team domain が未設定でも強制を有効にし、設定不備時は管理APIを 500 で**フェイルクローズ**させます。`wrangler.toml` の既定 `[vars]` と `[env.production.vars]` の両方で宣言済みです。
 - 公開データ用APIキーが必要な場合も、ブラウザへ渡さずWorkers側のSecretとして保管します。
 
 ## 🧪 テスト方針

@@ -13,7 +13,7 @@
 | # | コンポーネント | 実体 | 配信先 | デプロイ方法 |
 |---|---|---|---|---|
 | 🌐 Web | `apps/web` | React 19 + MapLibre + Vite（静的 `dist/`） | **Cloudflare Pages** | `vite build` → Pages へ配信（手動） |
-| ⚙️ API | `apps/api` | Hono / Worker（`src/worker.ts`, name=`pimm-api`） | **Cloudflare Workers** | `wrangler deploy`（手動） |
+| ⚙️ API | `apps/api` | Hono / Worker（`src/worker.ts`, name=`pimm-api`） | **Cloudflare Workers** | `wrangler deploy --env production`（手動） |
 | 🗄️ DB | `migrations/` + 取込 | PostgreSQL + PostGIS | **Neon** | `pnpm db:migrate` / `pnpm ingest --publish`（手動） |
 
 ### 🗺️ 構成図
@@ -56,7 +56,10 @@ flowchart LR
 | 変数 | 設定場所 | 必須 | 説明 |
 |---|---|:--:|---|
 | 🔒 `DATABASE_URL` | **Worker Secret**（`wrangler secret put DATABASE_URL`）／取込時はローカル環境変数 | ✅ 本番 | Neon 接続文字列（`sslmode=require`）。未設定だとサンプルモードで公開されるため要注意 |
-| 🛡️ `REQUIRE_DATABASE_URL` | Worker Secret / 環境変数（`true`/`1`） | ✅ 本番 | `DATABASE_URL` 未設定時に fail-fast させ、サンプルデータの誤公開を防ぐ。本番 Workers では `DATABASE_URL` とセットで有効化する |
+| 🛡️ `REQUIRE_DATABASE_URL` | `wrangler.toml` `[env.production.vars]` に **`"true"` を宣言済み** | ✅ 本番 | `DATABASE_URL` 未設定時に fail-fast させ、サンプルデータの誤公開を防ぐ。secret 登録忘れで無言に無効化されないよう宣言的に固定済み（手動 `secret put` は不要） |
+| 🔑 `CLOUDFLARE_ACCESS_AUD` | **Worker Secret** | ✅ 本番 | Access アプリケーションの AUD タグ。Worker が JWT の `aud` 突合に使用する |
+| 🏛️ `CLOUDFLARE_ACCESS_TEAM_DOMAIN` | **Worker Secret**（例 `example.cloudflareaccess.com`） | ✅ 本番 | JWKS 取得元 兼 `iss` 突合先。**未設定だと管理APIは 500 でフェイルクローズ** |
+| 🚧 `REQUIRE_ACCESS_JWT` | `wrangler.toml` の**既定 `[vars]` と `[env.production.vars]` の両方**に `"true"` を宣言済み | ✅ 本番 | 上記2つが未設定でもヘッダ信頼へ退行させず 500 を返す安全弁。**既定 env でも `[vars]` に宣言済み** |
 | 🌐 `ALLOWED_ORIGIN` | `apps/api/wrangler.toml` `[vars]`（既定 `"*"`） | 推奨変更 | 本番の Web 固定オリジンに絞るとAPIのクロスサイト収集を抑制できる（現状 `"*"`） |
 | 🔢 `RATE_LIMIT_PER_MINUTE` | `wrangler.toml` `[vars]`（既定 `"120"`） | 任意 | in-isolate レート制限の分あたり上限 |
 | 🔐 `ADMIN_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの書込操作を許可するカンマ区切り許可リスト |
@@ -67,7 +70,10 @@ flowchart LR
 > - Web 向け環境変数は `VITE_API_BASE_URL`（`apps/web/src/api/client.ts`）に統一済みです。Pages 側でも `VITE_API_BASE_URL` を設定してください。
 > - `REQUIRE_DATABASE_URL`（未設定時 fail-fast）と、サンプルモード転落時の `sample_mode_fallback` 警告ログは実装済みです。本番では `REQUIRE_DATABASE_URL=true` を設定し、DB未接続のままサンプルデータを公開しない運用にしてください。
 >
-> 🔒 管理APIのロールはリクエストヘッダではなく、`ADMIN_EMAILS` / `REVIEWER_EMAILS` のサーバ側許可リストからのみ解決します。Cloudflare Accessは外側の認証境界、アプリはメール許可リストによる認可境界として扱います。
+> 🔒 **管理APIの認証境界（2026-07-19 更新）**
+> Worker が `Cf-Access-Jwt-Assertion` の署名・`aud`・`iss`・`exp` を**自前で検証**します。利用者IDは検証済みJWTのクレームからのみ取得し、詐称可能な `CF-Access-Authenticated-User-Email` ヘッダは JWT 強制時には無視します。ロールは引き続き `ADMIN_EMAILS` / `REVIEWER_EMAILS` のサーバ側許可リストからのみ解決します。
+>
+> これにより Cloudflare Access は「唯一の認証境界」ではなく**多層防御の外層**になりました。Access を迂回して Worker へ直接到達する経路（`*.workers.dev` 等）が生じても、有効な Access JWT なしに管理APIは利用できません。あわせて `workers_dev = false` と `REQUIRE_ACCESS_JWT = "true"` を**既定 env と production env の両方**に宣言しています。`--env production` を付け忘れた deploy でも、到達可能な Worker が公開されることも、ヘッダ信頼へ退行することもありません。
 
 ### 2.4 Cloudflare 本番ドメイン
 
@@ -108,7 +114,7 @@ flowchart LR
 ```mermaid
 flowchart TD
   A["① DB マイグレーション<br/>pnpm db:migrate"] --> B["② 実データ取込<br/>pnpm ingest --publish"]
-  B --> C["③ API デプロイ<br/>wrangler deploy"]
+  B --> C["③ API デプロイ<br/>wrangler deploy --env production"]
   C --> D["④ Web デプロイ<br/>vite build → Pages"]
   A -.検証.-> Av["schema_migrations 確認"]
   B -.検証.-> Bv["取込 品質レポート確認"]
@@ -149,10 +155,11 @@ DATABASE_URL='postgresql://...sslmode=require' pnpm ingest --source <slug> --pub
 # 初回・変更時のみ: Worker Secret を登録
 cd apps/api
 wrangler secret put DATABASE_URL --env production   # プロンプトに Neon 接続文字列を貼付
-wrangler secret put REQUIRE_DATABASE_URL --env production
 wrangler secret put CLOUDFLARE_ACCESS_AUD --env production
+wrangler secret put CLOUDFLARE_ACCESS_TEAM_DOMAIN --env production
 wrangler secret put ADMIN_EMAILS --env production
 wrangler secret put REVIEWER_EMAILS --env production
+# REQUIRE_DATABASE_URL / REQUIRE_ACCESS_JWT は wrangler.toml で宣言済みのため登録不要
 
 # デプロイ
 wrangler deploy --env production   # api.pimm.mirai-dx-platform.com を使用
@@ -199,7 +206,7 @@ pnpm smoke:cloudflare:preflight
 
 | 対象 | 手段 | 手順概要 |
 |---|---|---|
-| ⚙️ Workers | 直前デプロイへ戻す | Cloudflare ダッシュボード（Workers → Deployments）で直前バージョンへ Rollback、または直前コミットから再 `wrangler deploy` |
+| ⚙️ Workers | 直前デプロイへ戻す | Cloudflare ダッシュボード（Workers → Deployments）で直前バージョンへ Rollback、または直前コミットから再 `wrangler deploy --env production` |
 | 🌐 Pages | 直前デプロイへ切替 | Pages のデプロイ履歴から直前デプロイを **Rollback / 本番昇格** |
 | 🗄️ DB | **前方のみ** | マイグレーションは前方専用（down なし）。破壊的変更はせず、**是正用の新規 `migrations/00NN_*.sql` を追加**して `pnpm db:migrate` で前進修正 |
 | 🗄️ DB（データ復旧） | Neon の復元機能 | 誤取込・破損時は **Neon のブランチ作成 / PITR（Point-in-Time Restore）** で健全時点を復元し、接続文字列を切替 |
@@ -223,7 +230,7 @@ pnpm smoke:cloudflare:preflight
 
 | 症状 | 想定原因 | 対応 |
 |---|---|---|
-| 公開データが空/古い/明らかに少ない | `DATABASE_URL` 未設定/誤設定で **サンプルモードにフォールバック** | Worker Secret を再設定し `wrangler deploy`。件数を再検証 |
+| 公開データが空/古い/明らかに少ない | `DATABASE_URL` 未設定/誤設定で **サンプルモードにフォールバック** | Worker Secret を再設定し `wrangler deploy --env production`。件数を再検証 |
 | 429 が多発 | レート制限（in-isolate + 本番は Cloudflare WAF） | 正常な保護。恒常的なら `RATE_LIMIT_PER_MINUTE` / WAF ルールを調整 |
 | 5xx 増加 | `unhandled_error` ログに詳細 | ログの `request_id` で追跡し原因修正 → 再デプロイ |
 | 取込失敗 | 上流データ変化・品質チェック不合格 | dry-run で再現・原因除去後、**同一ソースを `--publish` 再実行**（既存公開データは非破壊） |

@@ -22,4 +22,20 @@ describe('envBindingsFromProcessEnv', () => {
   it('omits keys that are absent from process.env', () => {
     expect(envBindingsFromProcessEnv({} as NodeJS.ProcessEnv)).toEqual({});
   });
+
+  // A binding dropped here is not a compile error at the call site — it just
+  // silently disables the feature it configures, which is how the Access
+  // settings first shipped without taking effect.
+  it('forwards the Cloudflare Access settings', () => {
+    const env = {
+      CLOUDFLARE_ACCESS_AUD: 'aud-tag',
+      CLOUDFLARE_ACCESS_TEAM_DOMAIN: 'example.cloudflareaccess.com',
+      REQUIRE_ACCESS_JWT: 'true',
+    } as NodeJS.ProcessEnv;
+    expect(envBindingsFromProcessEnv(env)).toEqual({
+      CLOUDFLARE_ACCESS_AUD: 'aud-tag',
+      CLOUDFLARE_ACCESS_TEAM_DOMAIN: 'example.cloudflareaccess.com',
+      REQUIRE_ACCESS_JWT: 'true',
+    });
+  });
 });
