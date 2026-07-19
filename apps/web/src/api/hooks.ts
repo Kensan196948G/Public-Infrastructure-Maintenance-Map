@@ -20,17 +20,29 @@ export function useAssets(input: AssetsQueryInput, client: ApiClient = defaultCl
   // the server's bbox area guard — omit bbox rather than erroring; the query
   // still runs, just unfiltered by area (bounded by `limit` instead).
   const queryableBbox = isBboxQueryable(input.bbox) ? input.bbox : null;
+  const requestBbox = useMemo<BBox | null>(
+    () =>
+      queryableBbox
+        ? [
+            Number(queryableBbox[0].toFixed(3)),
+            Number(queryableBbox[1].toFixed(3)),
+            Number(queryableBbox[2].toFixed(3)),
+            Number(queryableBbox[3].toFixed(3)),
+          ]
+        : null,
+    [queryableBbox],
+  );
 
   // Round bbox for a stable cache key so tiny map jitters don't refetch.
   const key = useMemo(
     () => [
       'assets',
-      queryableBbox ? queryableBbox.map((n) => Number(n.toFixed(3))) : null,
+      requestBbox,
       [...input.types].sort(),
       [...input.quality].sort(),
       input.q.trim(),
     ],
-    [queryableBbox, input.types, input.quality, input.q],
+    [requestBbox, input.types, input.quality, input.q],
   );
 
   return useQuery({
@@ -44,7 +56,7 @@ export function useAssets(input: AssetsQueryInput, client: ApiClient = defaultCl
         return Promise.resolve({ items: [], nextCursor: null });
       }
       return client.searchAssets({
-        ...(queryableBbox ? { bbox: queryableBbox } : {}),
+        ...(requestBbox ? { bbox: requestBbox } : {}),
         types: input.types,
         quality: input.quality,
         q: input.q,

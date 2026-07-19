@@ -91,10 +91,12 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const itemsRef = useRef<readonly AssetSummary[]>(items);
+  const selectedIdRef = useRef<string | null>(selectedId);
   const onViewportChangeRef = useRef(onViewportChange);
   const onSelectAssetRef = useRef(onSelectAsset);
 
   itemsRef.current = items;
+  selectedIdRef.current = selectedId;
   onViewportChangeRef.current = onViewportChange;
   onSelectAssetRef.current = onSelectAsset;
 
@@ -140,7 +142,7 @@ export function MapView({
         id: SELECTED_LAYER_ID,
         type: 'circle',
         source: SOURCE_ID,
-        filter: ['==', ['get', 'id'], selectedId ?? '__none__'],
+        filter: ['==', ['get', 'id'], selectedIdRef.current ?? '__none__'],
         paint: {
           'circle-radius': 10,
           'circle-color': 'rgba(0,0,0,0)',

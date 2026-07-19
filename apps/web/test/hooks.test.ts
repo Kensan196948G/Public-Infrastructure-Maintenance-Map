@@ -87,4 +87,25 @@ describe('useAssets', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(searchAssets.mock.calls[0]?.[0]).toMatchObject({ bbox: smallBbox });
   });
+
+  it('uses the same rounded bbox for the cache key and the API request', async () => {
+    const response: AssetSearchResponse = { items: [], nextCursor: null };
+    const searchAssets = vi.fn<ApiClient['searchAssets']>().mockResolvedValue(response);
+    const client = makeClient(searchAssets);
+
+    const jitteredBbox: [number, number, number, number] = [
+      139.60049, 35.60049, 139.90049, 35.80049,
+    ];
+
+    const { result } = renderHook(
+      () =>
+        useAssets({ bbox: jitteredBbox, types: ['bridge'], quality: ['verified'], q: '' }, client),
+      { wrapper: wrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(searchAssets.mock.calls[0]?.[0]).toMatchObject({
+      bbox: [139.6, 35.6, 139.9, 35.8],
+    });
+  });
 });
