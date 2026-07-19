@@ -29,13 +29,21 @@ async function resolveDoh(host, type) {
 }
 
 function pass(name, detail) {
-  results.push({ ok: true, name, detail });
+  results.push({ status: 'pass', name, detail });
   console.log(`PASS ${name}: ${detail}`);
 }
 
 function fail(name, detail) {
-  results.push({ ok: false, name, detail });
+  results.push({ status: 'fail', name, detail });
   console.error(`FAIL ${name}: ${detail}`);
+}
+
+// A deferred check is NOT a passing check. Reporting it as PASS would let a
+// preflight run read as production verification, which is precisely the
+// mistake this script exists to prevent.
+function skip(name, detail) {
+  results.push({ status: 'skip', name, detail });
+  console.log(`SKIP ${name}: ${detail}`);
 }
 
 async function checkZoneDelegation() {
@@ -66,7 +74,7 @@ async function checkZoneDelegation() {
 
 function checkWranglerAuth() {
   if (SKIP_WRANGLER) {
-    pass('wrangler-auth', 'skipped by --skip-wrangler');
+    skip('wrangler-auth', 'not checked (--skip-wrangler)');
     return;
   }
 
@@ -103,7 +111,7 @@ async function checkDns(name, host) {
     }
     const detail = `${host} unresolved (${error.code ?? error.message})`;
     if (ALLOW_PENDING_DNS) {
-      pass(name, `${detail}; allowed by --allow-pending-dns`);
+      skip(name, `${detail}; tolerated by --allow-pending-dns`);
       return false;
     }
     fail(name, detail);
@@ -185,19 +193,35 @@ if (apiDnsOk) {
   );
   await checkAdminUnauthenticatedRejection();
 } else {
-  console.log('SKIP api probes: API hostname is not resolvable yet.');
+  skip('api-health', 'API hostname is not resolvable yet');
+  skip('api-summary', 'API hostname is not resolvable yet');
+  skip('admin-unauthenticated-rejection', 'API hostname is not resolvable yet');
 }
 
 if (webDnsOk) {
   await checkWeb();
 } else {
-  console.log('SKIP web probe: Web hostname is not resolvable yet.');
+  skip('web-ui', 'Web hostname is not resolvable yet');
 }
 
-const failed = results.filter((result) => !result.ok);
+const failed = results.filter((result) => result.status === 'fail');
+const skipped = results.filter((result) => result.status === 'skip');
+const passed = results.filter((result) => result.status === 'pass');
+
+console.log(`\n${passed.length} passed, ${skipped.length} skipped, ${failed.length} failed.`);
+
 if (failed.length > 0) {
-  console.error(`\n${failed.length} production smoke check(s) failed.`);
+  console.error(`\n${failed.length} production smoke check(s) FAILED.`);
   process.exitCode = 1;
+} else if (skipped.length > 0) {
+  // Exit 0 keeps preflight usable as a pre-deployment gate, but the banner must
+  // make it impossible to read this run as production verification.
+  console.log(
+    '\nPREFLIGHT ONLY — production was NOT verified.\n' +
+      `Deferred check(s): ${skipped.map((result) => result.name).join(', ')}.\n` +
+      'Run `pnpm smoke:cloudflare` (no flags) after deployment and DNS propagation ' +
+      'to obtain a production verification result.',
+  );
 } else {
-  console.log('\nAll applicable production smoke checks passed.');
+  console.log('\nAll production smoke checks passed.');
 }
