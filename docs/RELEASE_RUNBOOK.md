@@ -56,7 +56,10 @@ flowchart LR
 | 変数 | 設定場所 | 必須 | 説明 |
 |---|---|:--:|---|
 | 🔒 `DATABASE_URL` | **Worker Secret**（`wrangler secret put DATABASE_URL`）／取込時はローカル環境変数 | ✅ 本番 | Neon 接続文字列（`sslmode=require`）。未設定だとサンプルモードで公開されるため要注意 |
-| 🛡️ `REQUIRE_DATABASE_URL` | Worker Secret / 環境変数（`true`/`1`） | ✅ 本番 | `DATABASE_URL` 未設定時に fail-fast させ、サンプルデータの誤公開を防ぐ。本番 Workers では `DATABASE_URL` とセットで有効化する |
+| 🛡️ `REQUIRE_DATABASE_URL` | `wrangler.toml` `[env.production.vars]` に **`"true"` を宣言済み** | ✅ 本番 | `DATABASE_URL` 未設定時に fail-fast させ、サンプルデータの誤公開を防ぐ。secret 登録忘れで無言に無効化されないよう宣言的に固定済み（手動 `secret put` は不要） |
+| 🔑 `CLOUDFLARE_ACCESS_AUD` | **Worker Secret** | ✅ 本番 | Access アプリケーションの AUD タグ。Worker が JWT の `aud` 突合に使用する |
+| 🏛️ `CLOUDFLARE_ACCESS_TEAM_DOMAIN` | **Worker Secret**（例 `example.cloudflareaccess.com`） | ✅ 本番 | JWKS 取得元 兼 `iss` 突合先。**未設定だと管理APIは 503 でフェイルクローズ** |
+| 🚧 `REQUIRE_ACCESS_JWT` | `wrangler.toml` `[env.production.vars]` に **`"true"` を宣言済み** | ✅ 本番 | 上記2つが未設定でもヘッダ信頼へ退行させず 503 を返す安全弁 |
 | 🌐 `ALLOWED_ORIGIN` | `apps/api/wrangler.toml` `[vars]`（既定 `"*"`） | 推奨変更 | 本番の Web 固定オリジンに絞るとAPIのクロスサイト収集を抑制できる（現状 `"*"`） |
 | 🔢 `RATE_LIMIT_PER_MINUTE` | `wrangler.toml` `[vars]`（既定 `"120"`） | 任意 | in-isolate レート制限の分あたり上限 |
 | 🔐 `ADMIN_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの書込操作を許可するカンマ区切り許可リスト |
@@ -67,7 +70,10 @@ flowchart LR
 > - Web 向け環境変数は `VITE_API_BASE_URL`（`apps/web/src/api/client.ts`）に統一済みです。Pages 側でも `VITE_API_BASE_URL` を設定してください。
 > - `REQUIRE_DATABASE_URL`（未設定時 fail-fast）と、サンプルモード転落時の `sample_mode_fallback` 警告ログは実装済みです。本番では `REQUIRE_DATABASE_URL=true` を設定し、DB未接続のままサンプルデータを公開しない運用にしてください。
 >
-> 🔒 管理APIのロールはリクエストヘッダではなく、`ADMIN_EMAILS` / `REVIEWER_EMAILS` のサーバ側許可リストからのみ解決します。Cloudflare Accessは外側の認証境界、アプリはメール許可リストによる認可境界として扱います。
+> 🔒 **管理APIの認証境界（2026-07-19 更新）**
+> Worker が `Cf-Access-Jwt-Assertion` の署名・`aud`・`iss`・`exp` を**自前で検証**します。利用者IDは検証済みJWTのクレームからのみ取得し、詐称可能な `CF-Access-Authenticated-User-Email` ヘッダは JWT 強制時には無視します。ロールは引き続き `ADMIN_EMAILS` / `REVIEWER_EMAILS` のサーバ側許可リストからのみ解決します。
+>
+> これにより Cloudflare Access は「唯一の認証境界」ではなく**多層防御の外層**になりました。Access を迂回して Worker へ直接到達する経路（`*.workers.dev` 等）が生じても、有効な Access JWT なしに管理APIは利用できません。あわせて `[env.production]` に `workers_dev = false` を明示しています。
 
 ### 2.4 Cloudflare 本番ドメイン
 
@@ -149,10 +155,11 @@ DATABASE_URL='postgresql://...sslmode=require' pnpm ingest --source <slug> --pub
 # 初回・変更時のみ: Worker Secret を登録
 cd apps/api
 wrangler secret put DATABASE_URL --env production   # プロンプトに Neon 接続文字列を貼付
-wrangler secret put REQUIRE_DATABASE_URL --env production
 wrangler secret put CLOUDFLARE_ACCESS_AUD --env production
+wrangler secret put CLOUDFLARE_ACCESS_TEAM_DOMAIN --env production
 wrangler secret put ADMIN_EMAILS --env production
 wrangler secret put REVIEWER_EMAILS --env production
+# REQUIRE_DATABASE_URL / REQUIRE_ACCESS_JWT は wrangler.toml で宣言済みのため登録不要
 
 # デプロイ
 wrangler deploy --env production   # api.pimm.mirai-dx-platform.com を使用

@@ -13,6 +13,10 @@ enabled = true
 
 [env.production]
 name = "pimm-api-production"
+# The workers.dev hostname is not covered by the Cloudflare Access application
+# bound to the custom domain, so leaving it enabled would expose the admin API
+# outside the authentication boundary.
+workers_dev = false
 
 [[env.production.routes]]
 pattern = "api.pimm.mirai-dx-platform.com"
@@ -21,3 +25,9 @@ custom_domain = true
 [env.production.vars]
 ALLOWED_ORIGIN = "https://pimm.mirai-dx-platform.com"
 RATE_LIMIT_PER_MINUTE = "120"
+# Declared here rather than left to `wrangler secret put` so a forgotten or
+# mistyped secret cannot silently downgrade production to sample data.
+REQUIRE_DATABASE_URL = "true"
+# Admin routes must reject every request unless a Cloudflare Access JWT is
+# verified. Fails closed (503) if CLOUDFLARE_ACCESS_AUD / _TEAM_DOMAIN are unset.
+REQUIRE_ACCESS_JWT = "true"

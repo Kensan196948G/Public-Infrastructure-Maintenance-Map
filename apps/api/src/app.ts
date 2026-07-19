@@ -21,10 +21,18 @@ import {
 import type { AssetRepository } from '@pimm/database';
 import { InvalidCursorError } from '@pimm/database';
 import type { ApiConfig } from './config.js';
+import { verifyAccessJwt } from './access-jwt.js';
 import { assetsToCsv, assetsToGeoJson, partitionByLicense } from './csv-export.js';
+
+interface AdminIdentity {
+  email: string;
+  roles: string[];
+}
 
 interface AppState {
   requestId: string;
+  /** Set by the admin guard once the caller is authenticated. */
+  adminIdentity: AdminIdentity;
 }
 
 type AppContext = { Variables: AppState };
@@ -42,17 +50,43 @@ function zodIssuesToErrors(error: { issues: { path: PropertyKey[]; message: stri
   return error.issues.map((i) => ({ path: i.path.join('.'), message: i.message }));
 }
 
-function adminIdentity(
+function rolesFor(email: string, config: ApiConfig): AdminIdentity {
+  const roles = new Set<string>();
+  if (config.adminEmails.includes(email)) roles.add('admin');
+  if (config.reviewerEmails.includes(email)) roles.add('reviewer');
+  return { email, roles: [...roles] };
+}
+
+type AdminAuthOutcome =
+  | { status: 'ok'; identity: AdminIdentity }
+  | { status: 'unauthorized' }
+  | { status: 'misconfigured' };
+
+/**
+ * Resolves the calling administrator.
+ *
+ * When Access enforcement is on, identity comes from the *verified* JWT claim —
+ * never from CF-Access-Authenticated-User-Email, which any client that can
+ * reach the Worker directly is free to set. The header path remains only for
+ * local development, where no Access deployment exists to issue tokens.
+ */
+async function resolveAdminIdentity(
   c: { req: { header(name: string): string | undefined } },
   config: ApiConfig,
-) {
+): Promise<AdminAuthOutcome> {
+  if (config.requireAccessJwt) {
+    if (!config.accessAud || !config.accessTeamDomain) return { status: 'misconfigured' };
+    const verified = await verifyAccessJwt(c.req.header('Cf-Access-Jwt-Assertion'), {
+      aud: config.accessAud,
+      teamDomain: config.accessTeamDomain,
+    });
+    if (!verified.ok) return { status: 'unauthorized' };
+    return { status: 'ok', identity: rolesFor(verified.identity.email, config) };
+  }
+
   const email = c.req.header('CF-Access-Authenticated-User-Email');
-  if (!email) return null;
-  const normalizedEmail = email.trim().toLowerCase();
-  const roles = new Set<string>();
-  if (config.adminEmails.includes(normalizedEmail)) roles.add('admin');
-  if (config.reviewerEmails.includes(normalizedEmail)) roles.add('reviewer');
-  return { email: normalizedEmail, roles: [...roles] };
+  if (!email) return { status: 'unauthorized' };
+  return { status: 'ok', identity: rolesFor(email.trim().toLowerCase(), config) };
 }
 
 function hasRole(identity: { roles: string[] }, allowed: readonly string[]) {
@@ -238,18 +272,22 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
 
   admin.use('*', async (c, next) => {
     c.header('Cache-Control', 'no-store');
-    const identity = adminIdentity(c, config);
-    if (!identity) {
+    const outcome = await resolveAdminIdentity(c, config);
+    if (outcome.status === 'misconfigured') {
+      return fail(c, 'INTERNAL_ERROR', '管理APIの認証設定が未完了です');
+    }
+    if (outcome.status === 'unauthorized') {
       return fail(c, 'UNAUTHORIZED', '管理APIの認証が必要です');
     }
-    if (!hasRole(identity, ['admin', 'reviewer'])) {
+    if (!hasRole(outcome.identity, ['admin', 'reviewer'])) {
       return fail(c, 'FORBIDDEN', '管理APIを利用する権限がありません');
     }
+    c.set('adminIdentity', outcome.identity);
     return next();
   });
 
   admin.post('/sources', async (c) => {
-    const identity = adminIdentity(c, config)!;
+    const identity = c.get('adminIdentity');
     if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
     const parsed = AdminCreateSourceSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
@@ -262,7 +300,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.patch('/sources/:slug', async (c) => {
-    const identity = adminIdentity(c, config)!;
+    const identity = c.get('adminIdentity');
     if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
     const parsed = AdminUpdateSourceSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
@@ -276,7 +314,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.post('/sources/:slug/ingestions', async (c) => {
-    const identity = adminIdentity(c, config)!;
+    const identity = c.get('adminIdentity');
     if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
     const run = await repo.startIngestion(c.req.param('slug'), identity.email, c.get('requestId'));
     if (!run) return fail(c, 'NOT_FOUND', 'データソースが見つかりません');
@@ -312,7 +350,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.post('/quality-issues/:id/resolve', async (c) => {
-    const identity = adminIdentity(c, config)!;
+    const identity = c.get('adminIdentity');
     const id = c.req.param('id');
     if (!UUID_RE.test(id)) return fail(c, 'VALIDATION_ERROR', 'id の形式が不正です');
     const parsed = AdminResolveQualityIssueSchema.safeParse(await c.req.json().catch(() => null));
@@ -327,7 +365,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.post('/assets/:id/suspend', async (c) => {
-    const identity = adminIdentity(c, config)!;
+    const identity = c.get('adminIdentity');
     if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
     const id = c.req.param('id');
     if (!UUID_RE.test(id)) return fail(c, 'VALIDATION_ERROR', 'id の形式が不正です');
@@ -343,7 +381,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
   });
 
   admin.post('/sources/:slug/suspend-assets', async (c) => {
-    const identity = adminIdentity(c, config)!;
+    const identity = c.get('adminIdentity');
     if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');
     const parsed = AdminSuspendSourceAssetsSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {

@@ -12,6 +12,7 @@ const CONFIG: ApiConfig = {
   version: 'test',
   adminEmails: [],
   reviewerEmails: [],
+  requireAccessJwt: false,
 };
 
 beforeEach(() => {
