@@ -1,5 +1,5 @@
 import type { AssetType, QualityStatus } from '@pimm/contracts';
-import { ASSET_TYPES, QUALITY_STATUSES } from '@pimm/contracts';
+import { ASSET_TYPES } from '@pimm/contracts';
 import { VISIBLE_QUALITY_STATUSES } from './asset-meta.js';
 
 /**
