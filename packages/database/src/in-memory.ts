@@ -2,7 +2,9 @@ import type {
   AdminAssetPublication,
   AdminCreateSource,
   AdminIngestionDetail,
+  AdminIngestionList,
   AdminIngestionRun,
+  AdminQualityIssueList,
   AdminQualityIssueRecord,
   AdminResolveQualityIssue,
   AdminSourceResponse,
@@ -202,12 +204,22 @@ export class InMemoryAssetRepository implements AssetRepository {
     return Promise.resolve(run);
   }
 
+  listIngestions(limit: number): Promise<AdminIngestionList> {
+    return Promise.resolve({ items: this.ingestionRuns.slice(0, limit) });
+  }
+
   getIngestionDetail(id: string): Promise<AdminIngestionDetail | null> {
     const run = this.ingestionRuns.find((r) => r.id === id);
     if (!run) return Promise.resolve(null);
     return Promise.resolve({
       run,
       qualityIssues: this.qualityIssues.filter((q) => q.runId === id),
+    });
+  }
+
+  listQualityIssues(limit: number): Promise<AdminQualityIssueList> {
+    return Promise.resolve({
+      items: this.qualityIssues.filter((q) => q.resolutionStatus === 'open').slice(0, limit),
     });
   }
 

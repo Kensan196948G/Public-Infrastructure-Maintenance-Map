@@ -178,6 +178,24 @@ describe('sources', () => {
   });
 });
 
+describe('admin lists', () => {
+  it('lists ingestion history and open quality issues', async () => {
+    const asset = makeAsset({ name: '管理対象橋' });
+    const repo = repoWith([asset]);
+
+    const run = await repo.startIngestion('sample-bridges', 'admin@example.com', 'req-admin-1');
+    expect(run).not.toBeNull();
+    await repo.suspendAsset(asset.id, { reason: '公開停止テスト' }, 'admin@example.com');
+
+    await expect(repo.listIngestions(10)).resolves.toMatchObject({
+      items: [expect.objectContaining({ id: run!.id, sourceSlug: 'sample-bridges' })],
+    });
+    await expect(repo.listQualityIssues(10)).resolves.toMatchObject({
+      items: [expect.objectContaining({ assetId: asset.id, ruleCode: 'Q007' })],
+    });
+  });
+});
+
 describe('exportAssets', () => {
   it('returns full details bounded by limit', async () => {
     const repo = repoWith([makeAsset({ name: 'A橋' }), makeAsset({ name: 'B橋' })]);

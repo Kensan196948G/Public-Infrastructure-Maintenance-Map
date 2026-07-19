@@ -6,7 +6,9 @@ import type {
   AdminAssetPublication,
   AdminCreateSource,
   AdminIngestionDetail,
+  AdminIngestionList,
   AdminIngestionRun,
+  AdminQualityIssueList,
   AdminQualityIssueRecord,
   AdminResolveQualityIssue,
   AdminSourceResponse,
@@ -176,6 +178,22 @@ export class ApiClient {
   getAdminIngestion(id: string): Promise<AdminIngestionDetail> {
     return getJson<AdminIngestionDetail>(
       `${this.base}/admin/ingestions/${encodeURIComponent(id)}`,
+      this.fetchImpl,
+      { credentials: 'include' },
+    );
+  }
+
+  listAdminIngestions(limit = 20): Promise<AdminIngestionList> {
+    return getJson<AdminIngestionList>(
+      `${this.base}/admin/ingestions?limit=${encodeURIComponent(String(limit))}`,
+      this.fetchImpl,
+      { credentials: 'include' },
+    );
+  }
+
+  listAdminQualityIssues(limit = 50): Promise<AdminQualityIssueList> {
+    return getJson<AdminQualityIssueList>(
+      `${this.base}/admin/quality-issues?limit=${encodeURIComponent(String(limit))}`,
       this.fetchImpl,
       { credentials: 'include' },
     );
