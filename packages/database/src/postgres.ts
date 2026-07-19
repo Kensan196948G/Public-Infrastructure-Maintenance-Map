@@ -546,6 +546,7 @@ export class PostgresAssetRepository implements AssetRepository {
         FROM selected_source AS s
         WHERE a.source_id = s.id
           AND a.publication_status = 'published'
+          AND a.quality_status <> 'hidden'
         RETURNING a.id, s.slug
       ),
       inserted AS (

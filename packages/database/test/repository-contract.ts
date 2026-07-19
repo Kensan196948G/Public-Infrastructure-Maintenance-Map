@@ -119,6 +119,7 @@ export function registerAssetRepositoryContract(
       expect(before.items.map((i) => i.name)).toEqual(
         expect.arrayContaining(['都心橋', '都心第二橋', 'B川', 'C施設']),
       );
+      const publicCount = before.items.length;
 
       const result = await repo.suspendAssetsBySource(
         'contract-source',
@@ -128,7 +129,7 @@ export function registerAssetRepositoryContract(
       expect(result).toMatchObject({
         sourceSlug: 'contract-source',
         publicationStatus: 'suspended',
-        suspendedCount: 5,
+        suspendedCount: publicCount,
       });
 
       const after = await repo.searchAssets({ limit: 20 });

@@ -259,7 +259,10 @@ export class InMemoryAssetRepository implements AssetRepository {
     const source = this.sources.find((s) => s.slug === sourceSlug);
     if (!source) return Promise.resolve(null);
     const targets = this.assets.filter(
-      (a) => a.source.slug === sourceSlug && a.publicationStatus === 'published',
+      (a) =>
+        a.source.slug === sourceSlug &&
+        a.publicationStatus === 'published' &&
+        a.quality.status !== 'hidden',
     );
     for (const asset of targets) {
       asset.publicationStatus = 'suspended';
