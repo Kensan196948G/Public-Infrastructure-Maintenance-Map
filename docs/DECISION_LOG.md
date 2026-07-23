@@ -79,3 +79,4 @@ secret、credential、connection string、PII は記載しない。
 - 影響: 実際の zone への適用（`--apply`）は本番 WAF 変更のため承認範囲内でのみ実行する。**現行の CLOUDFLARE_API_TOKEN には Zone WAF（Rulesets）権限が無く適用は保留**（2026-07-23 実測で Authentication error）。token へ `Zone > Zone WAF > Edit` を追加するか、ダッシュボードで同内容を設定した後、`--show` / `--verify`（25 連打で 429 を確認）で検証する。
 - 検証: `pnpm ratelimit:cloudflare`（dry-run）が構成の妥当性（Free プラン制約・対象ホスト限定・block アクション）を fail-fast で検証する。適用後は `--verify` で実効上限を実測する。
 - Rollback: 適用前の entrypoint を `--show` で控え、ルール削除（空 rules の PUT）または該当ルールの `enabled: false` で戻す。
+- 2026-07-23 追記: token `pimm-production-deploy` へ Zone WAF Edit を追加後、ユーザー実行の `--apply` で zone へ適用し、`--verify` で 20×200 → 5×429 を実測して完了（Issue #41 close）。あわせて Approval PR #57 により Access アプリ `pimm-admin-api` を作成し、管理APIはフェイルクローズ 500 から Access 302 拒否へ移行した（Issue #38 はブラウザ最終確認のみ残）。
