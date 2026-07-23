@@ -320,7 +320,20 @@ export class PostgresAssetRepository implements AssetRepository {
       byType[r['asset_type'] as AssetType] = n;
       total += n;
     }
-    return { total, byType };
+    // Same visibility filters, grouped by prefecture for the prefecture
+    // navigation menu. buildConditions is rebuilt because a neon query
+    // fragment is single-use.
+    const prefWhere = buildConditions(this.sql, filters);
+    const prefRows = (await this.sql`
+      SELECT COALESCE(a.prefecture_code, 'unknown') AS pref, count(*)::int AS n
+        FROM infrastructure_assets a
+       WHERE ${prefWhere}
+       GROUP BY COALESCE(a.prefecture_code, 'unknown')`) as Row[];
+    const byPrefecture: Record<string, number> = {};
+    for (const r of prefRows) {
+      byPrefecture[String(r['pref'])] = Number(r['n']);
+    }
+    return { total, byType, byPrefecture };
   }
 
   async listSources(): Promise<SourceInfo[]> {

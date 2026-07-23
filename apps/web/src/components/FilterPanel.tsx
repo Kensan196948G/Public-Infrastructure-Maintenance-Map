@@ -1,5 +1,6 @@
 import type { AssetType, QualityStatus } from '@pimm/contracts';
 import { ASSET_TYPE_LIST, QUALITY_META, VISIBLE_QUALITY_STATUSES } from '../lib/asset-meta.js';
+import { prefectureName, sortPrefectureEntries } from '../lib/prefectures.js';
 
 interface FilterPanelProps {
   selectedTypes: readonly AssetType[];
@@ -9,9 +10,14 @@ interface FilterPanelProps {
   onToggleType: (type: AssetType) => void;
   onToggleQuality: (status: QualityStatus) => void;
   onOpenSources: () => void;
+  /** Country-wide counts per prefecture; null while the summary is loading. */
+  byPrefecture?: Record<string, number> | null;
+  selectedPrefecture?: string | null;
+  /** Called with a code to focus a prefecture, or null to return to Japan. */
+  onSelectPrefecture?: (code: string | null) => void;
 }
 
-/** Left panel: category filter, quality filter, legend and result count (UI-01). */
+/** Left panel: prefecture menu, category filter, quality filter and result count (UI-01). */
 export function FilterPanel({
   selectedTypes,
   selectedQuality,
@@ -19,9 +25,47 @@ export function FilterPanel({
   onToggleType,
   onToggleQuality,
   onOpenSources,
+  byPrefecture = null,
+  selectedPrefecture = null,
+  onSelectPrefecture,
 }: FilterPanelProps) {
   return (
     <aside className="filter-panel" aria-label="絞り込み">
+      {byPrefecture ? (
+        <section className="filter-group" aria-labelledby="filter-pref-heading">
+          <h2 id="filter-pref-heading" className="filter-heading">
+            都道府県
+          </h2>
+          {selectedPrefecture ? (
+            <button
+              type="button"
+              className="pref-reset-button"
+              onClick={() => onSelectPrefecture?.(null)}
+            >
+              🗾 全国地図に戻る
+            </button>
+          ) : null}
+          <ul className="pref-list">
+            {sortPrefectureEntries(byPrefecture).map(([code, count]) => {
+              const selected = code === selectedPrefecture;
+              return (
+                <li key={code}>
+                  <button
+                    type="button"
+                    className={`pref-item${selected ? ' is-selected' : ''}`}
+                    aria-pressed={selected}
+                    onClick={() => onSelectPrefecture?.(selected ? null : code)}
+                  >
+                    <span>{prefectureName(code)}</span>
+                    <span className="pref-count">{count.toLocaleString('ja-JP')}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="filter-group" aria-labelledby="filter-type-heading">
         <h2 id="filter-type-heading" className="filter-heading">
           種別

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { AssetSummary, AssetType, BBox, QualityStatus } from '@pimm/contracts';
-import { useAssetDetail, useAssets, useHealth, useSources } from './api/hooks.js';
+import { useAssetDetail, useAssets, useHealth, useSources, useSummary } from './api/hooks.js';
+import { prefectureName } from './lib/prefectures.js';
 import { AuditLogDialog } from './components/AuditLogDialog.js';
 import { DisclaimerBanner } from './components/DisclaimerBanner.js';
 import { DetailPanel } from './components/DetailPanel.js';
@@ -31,6 +32,8 @@ export function App() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusPoint, setFocusPoint] = useState<[number, number] | null>(null);
+  const [prefecture, setPrefecture] = useState<string | null>(initial.pref);
+  const [resetNonce, setResetNonce] = useState(0);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -38,12 +41,13 @@ export function App() {
 
   // Keep the shareable URL in sync with filters and viewport (FR-07).
   useEffect(() => {
-    const query = serializeUrlState({ center, zoom, types, quality, q });
+    const query = serializeUrlState({ center, zoom, types, quality, q, pref: prefecture });
     const next = `${window.location.pathname}?${query}`;
     window.history.replaceState(null, '', next);
-  }, [center, zoom, types, quality, q]);
+  }, [center, zoom, types, quality, q, prefecture]);
 
-  const assetsQuery = useAssets({ bbox, types, quality, q });
+  const assetsQuery = useAssets({ bbox, types, quality, q, prefectureCode: prefecture });
+  const summaryQuery = useSummary();
   const detailQuery = useAssetDetail(selectedId);
   // Sources feed three views (catalogue, settings summary, audit status).
   const sourcesQuery = useSources(sourcesOpen || settingsOpen || auditOpen);
@@ -66,6 +70,44 @@ export function App() {
   }, []);
 
   const clearSelection = useCallback(() => setSelectedId(null), []);
+
+  /** Focus a prefecture (code) or return to the country-wide view (null). */
+  const handleSelectPrefecture = useCallback((code: string | null) => {
+    setPrefecture(code);
+    setSelectedId(null);
+    setFocusPoint(null);
+    if (code === null) setResetNonce((v) => v + 1);
+  }, []);
+
+  // Fit the map to the prefecture's data extent once its list arrives.
+  const focusBounds = useMemo<BBox | null>(() => {
+    if (!prefecture || items.length === 0) return null;
+    let w = Infinity;
+    let s = Infinity;
+    let e = -Infinity;
+    let n = -Infinity;
+    for (const asset of items) {
+      const [lon, lat] = asset.representativePoint;
+      w = Math.min(w, lon);
+      e = Math.max(e, lon);
+      s = Math.min(s, lat);
+      n = Math.max(n, lat);
+    }
+    // Pad degenerate (single-point) extents so fitBounds has an area to frame.
+    if (e - w < 0.01) {
+      w -= 0.02;
+      e += 0.02;
+    }
+    if (n - s < 0.01) {
+      s -= 0.02;
+      n += 0.02;
+    }
+    return [w, s, e, n];
+  }, [prefecture, items]);
+
+  const prefectureTotal = prefecture
+    ? (summaryQuery.data?.byPrefecture?.[prefecture] ?? null)
+    : null;
 
   // Escape closes the detail and returns to the list — but never while a
   // dialog is open, so the key keeps meaning "close the topmost layer".
@@ -128,6 +170,9 @@ export function App() {
           onToggleType={(t) => setTypes((prev) => toggle(prev, t))}
           onToggleQuality={(s) => setQuality((prev) => toggle(prev, s))}
           onOpenSources={() => setSourcesOpen(true)}
+          byPrefecture={summaryQuery.data?.byPrefecture ?? null}
+          selectedPrefecture={prefecture}
+          onSelectPrefecture={handleSelectPrefecture}
         />
 
         <main className="map-area">
@@ -140,6 +185,8 @@ export function App() {
             onViewportChange={handleViewportChange}
             onSelectAsset={handleSelect}
             onClearSelection={clearSelection}
+            focusBounds={focusBounds}
+            resetNonce={resetNonce}
           />
         </main>
 
@@ -152,13 +199,37 @@ export function App() {
               onClose={clearSelection}
             />
           ) : (
-            <ResultList
-              items={items}
-              selectedId={selectedId}
-              isLoading={assetsQuery.isLoading}
-              isError={assetsQuery.isError}
-              onSelect={handleSelect}
-            />
+            <>
+              {prefecture ? (
+                <div className="pref-result-header">
+                  <button
+                    type="button"
+                    className="detail-back-button"
+                    onClick={() => handleSelectPrefecture(null)}
+                  >
+                    🗾 全国地図に戻る
+                  </button>
+                  <p className="pref-result-title">
+                    {prefectureName(prefecture)}の一覧
+                    {prefectureTotal !== null
+                      ? `（全${prefectureTotal.toLocaleString('ja-JP')}件${
+                          prefectureTotal > items.length
+                            ? `・上位${items.length.toLocaleString('ja-JP')}件を表示`
+                            : ''
+                        }）`
+                      : ''}
+                  </p>
+                </div>
+              ) : null}
+              <ResultList
+                items={items}
+                selectedId={selectedId}
+                isLoading={assetsQuery.isLoading}
+                isError={assetsQuery.isError}
+                onSelect={handleSelect}
+                groupByPrefecture={prefecture === null}
+              />
+            </>
           )}
         </div>
       </div>

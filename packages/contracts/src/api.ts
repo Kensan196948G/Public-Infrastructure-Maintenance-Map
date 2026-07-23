@@ -66,6 +66,8 @@ export type AssetSummaryQuery = z.infer<typeof AssetSummaryQuerySchema>;
 export const AssetCountSummarySchema = z.object({
   total: z.number().int().nonnegative(),
   byType: z.partialRecord(AssetTypeSchema, z.number().int().nonnegative()),
+  /** 2-digit JIS prefecture code → count; records without a code group under "unknown". */
+  byPrefecture: z.record(z.string(), z.number().int().nonnegative()),
 });
 export type AssetCountSummary = z.infer<typeof AssetCountSummarySchema>;
 

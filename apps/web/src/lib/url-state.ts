@@ -12,6 +12,8 @@ export interface MapUrlState {
   types: AssetType[];
   quality: QualityStatus[];
   q: string;
+  /** 2-digit JIS prefecture code when prefecture navigation is active. */
+  pref: string | null;
 }
 
 /** Roughly the geographic center of Japan; used when the URL has no location. */
@@ -24,6 +26,7 @@ export const DEFAULT_URL_STATE: MapUrlState = {
   types: [...ASSET_TYPES],
   quality: [...VISIBLE_QUALITY_STATUSES],
   q: '',
+  pref: null,
 };
 
 const LON_DECIMALS = 5;
@@ -88,7 +91,10 @@ export function parseUrlState(search: string): MapUrlState {
 
   const q = (params.get('q') ?? '').trim();
 
-  return { center: [lon, lat], zoom, types, quality, q };
+  const rawPref = params.get('pref');
+  const pref = rawPref && /^\d{2}$/.test(rawPref) ? rawPref : null;
+
+  return { center: [lon, lat], zoom, types, quality, q, pref };
 }
 
 /**
@@ -103,6 +109,9 @@ export function serializeUrlState(state: MapUrlState): string {
   // Always emit type/quality keys so an empty selection round-trips faithfully.
   params.set('types', state.types.join(','));
   params.set('quality', state.quality.join(','));
+  if (state.pref) {
+    params.set('pref', state.pref);
+  }
   if (state.q.trim() !== '') {
     params.set('q', state.q.trim());
   }

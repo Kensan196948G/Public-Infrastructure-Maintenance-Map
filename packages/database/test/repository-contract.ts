@@ -94,6 +94,9 @@ export function registerAssetRepositoryContract(
       expect(res.total).toBe(3);
       expect(res.byType.bridge).toBe(2);
       expect(res.byType.river).toBe(1);
+      // Prefecture buckets (including 'unknown') must partition the total.
+      expect(Object.values(res.byPrefecture).reduce((a, b) => a + b, 0)).toBe(res.total);
+      expect(res.byPrefecture['13']).toBeGreaterThan(0);
     });
 
     it('lists only enabled sources', async () => {
