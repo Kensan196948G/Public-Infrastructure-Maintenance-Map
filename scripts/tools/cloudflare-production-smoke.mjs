@@ -151,9 +151,23 @@ async function checkAdminUnauthenticatedRejection() {
       );
       return;
     }
+    // Until the Cloudflare Access application exists (Issue #38 / DL-008), the
+    // Worker fails closed: REQUIRE_ACCESS_JWT=true with no AUD/team domain
+    // yields a Problem Details 500. That is the designed rejection, not an
+    // outage — but only accept it when the body really is a problem response.
+    if (response.status === 500) {
+      const contentType = response.headers.get('content-type') ?? '';
+      if (contentType.includes('json')) {
+        pass(
+          'admin-unauthenticated-rejection',
+          `${ADMIN_PROBE_URL} failed closed with HTTP 500 problem response (Access not configured yet; DL-008)`,
+        );
+        return;
+      }
+    }
     fail(
       'admin-unauthenticated-rejection',
-      `${ADMIN_PROBE_URL} returned HTTP ${response.status}; expected 401/403/302/303`,
+      `${ADMIN_PROBE_URL} returned HTTP ${response.status}; expected 401/403/302/303 or a fail-closed 500 problem response`,
     );
   } catch (error) {
     fail('admin-unauthenticated-rejection', `${ADMIN_PROBE_URL} failed: ${error.message}`);
@@ -188,8 +202,11 @@ if (apiDnsOk) {
   await checkJson('api-health', `${API_BASE_URL}/health`, (body) =>
     body?.status === 'ok' ? true : `status=${body?.status}`,
   );
+  // Shape must match the AssetCountSummary contract: { total, byType }.
   await checkJson('api-summary', `${API_BASE_URL}/assets/summary`, (body) =>
-    Array.isArray(body?.counts) ? true : 'counts is not an array',
+    Number.isFinite(body?.total) && body?.byType && typeof body.byType === 'object'
+      ? true
+      : `unexpected shape: total=${body?.total} byType=${typeof body?.byType}`,
   );
   await checkAdminUnauthenticatedRejection();
 } else {
