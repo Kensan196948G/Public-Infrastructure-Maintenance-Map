@@ -57,6 +57,7 @@ describe('MapView', () => {
       focusPoint: null,
       onViewportChange: vi.fn(),
       onSelectAsset: vi.fn(),
+      onClearSelection: vi.fn(),
     };
 
     const { rerender } = render(<MapView {...props} selectedId={bridgeSummary.id} />);

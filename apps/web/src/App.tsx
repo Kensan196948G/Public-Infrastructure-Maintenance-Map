@@ -65,6 +65,20 @@ export function App() {
     setFocusPoint([asset.representativePoint[0], asset.representativePoint[1]]);
   }, []);
 
+  const clearSelection = useCallback(() => setSelectedId(null), []);
+
+  // Escape closes the detail and returns to the list — but never while a
+  // dialog is open, so the key keeps meaning "close the topmost layer".
+  const dialogOpen = sourcesOpen || noticeOpen || settingsOpen || auditOpen;
+  useEffect(() => {
+    if (!selectedId || dialogOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') clearSelection();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedId, dialogOpen, clearSelection]);
+
   const onSearchSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setQ(searchInput.trim());
@@ -125,6 +139,7 @@ export function App() {
             focusPoint={focusPoint}
             onViewportChange={handleViewportChange}
             onSelectAsset={handleSelect}
+            onClearSelection={clearSelection}
           />
         </main>
 
@@ -134,7 +149,7 @@ export function App() {
               detail={detailQuery.data ?? null}
               isLoading={detailQuery.isLoading}
               isError={detailQuery.isError}
-              onClose={() => setSelectedId(null)}
+              onClose={clearSelection}
             />
           ) : (
             <ResultList

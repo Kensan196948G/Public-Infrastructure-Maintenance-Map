@@ -1,5 +1,6 @@
 import type { AssetSummary } from '@pimm/contracts';
 import { ASSET_TYPE_META, UNKNOWN_LABEL } from '../lib/asset-meta.js';
+import { assetDisplayName, isNameless } from '../lib/display-name.js';
 import { QualityBadge } from './QualityBadge.js';
 
 interface ResultListProps {
@@ -53,7 +54,9 @@ export function ResultList({ items, selectedId, isLoading, isError, onSelect }: 
             >
               <span className="result-item-title">
                 <span aria-hidden="true">{meta.icon}</span>
-                <span className="result-item-name">{asset.name}</span>
+                <span className={`result-item-name${isNameless(asset.name) ? ' is-nameless' : ''}`}>
+                  {assetDisplayName(asset.name, asset.type, asset.representativePoint)}
+                </span>
               </span>
               <span className="result-item-meta">
                 <span className="result-item-type">{meta.label}</span>

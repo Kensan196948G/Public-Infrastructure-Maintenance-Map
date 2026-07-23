@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { AssetDetail } from '@pimm/contracts';
 import { ApiClient, ApiError } from '../api/client.js';
 import { ASSET_TYPE_META, UNKNOWN_LABEL } from '../lib/asset-meta.js';
+import { assetDisplayName, isNameless } from '../lib/display-name.js';
 import { formatAttributeValue, formatDate, formatLatLon, orUnknown } from '../lib/format.js';
 import { QualityBadge } from './QualityBadge.js';
 
@@ -30,13 +31,20 @@ export function DetailPanel({
   return (
     <section className="detail-panel" role="complementary" aria-label="詳細情報">
       <header className="detail-header">
-        <h2 className="detail-title">
-          {detail ? detail.name : isLoading ? '読み込み中…' : '詳細'}
-        </h2>
+        <button type="button" className="detail-back-button" onClick={onClose}>
+          ← 一覧へ戻る
+        </button>
         <button type="button" className="icon-button" aria-label="閉じる" onClick={onClose}>
           ✕
         </button>
       </header>
+      <h2 className="detail-title">
+        {detail
+          ? assetDisplayName(detail.name, detail.type, detail.representativePoint)
+          : isLoading
+            ? '読み込み中…'
+            : '詳細'}
+      </h2>
 
       {isError ? (
         <p className="detail-state" role="alert">
@@ -96,12 +104,18 @@ function DetailBody({ detail, client }: { detail: AssetDetail; client: ApiClient
             <span aria-hidden="true">{typeMeta.icon}</span> {typeMeta.label}
           </dd>
           <dt>名称</dt>
-          <dd>{orUnknown(detail.name)}</dd>
+          <dd>{isNameless(detail.name) ? '名称未収録' : detail.name}</dd>
           <dt>原文名称</dt>
           <dd>{orUnknown(detail.originalName)}</dd>
           <dt>管理主体</dt>
           <dd>{orUnknown(detail.managingAuthority)}</dd>
         </dl>
+        {isNameless(detail.name) ? (
+          <p className="detail-nameless-note">
+            ℹ️
+            この出典データセットには名称の項目が存在しないため、名称を表示できません。位置・公開属性・出典情報から対象を特定してください。
+          </p>
+        ) : null}
       </section>
 
       {/* 位置 */}
