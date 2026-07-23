@@ -1,0 +1,19 @@
+{
+  "description": "PIMM zone http_ratelimit entrypoint (Issue #41). Applied via scripts/tools/cloudflare-rate-limit.mjs — the API deployment itself never changes this.",
+  "zone": "mirai-dx-platform.com",
+  "zoneId": "e375e651e49a40801a305b89e297bff0",
+  "rules": [
+    {
+      "description": "PIMM API: shared per-IP rate limit — 20 req / 10s (~120/min), Free-plan fixed period and mitigation (Issue #41)",
+      "expression": "(http.host eq \"api.pimm.mirai-dx-platform.com\")",
+      "action": "block",
+      "ratelimit": {
+        "characteristics": ["cf.colo.id", "ip.src"],
+        "period": 10,
+        "requests_per_period": 20,
+        "mitigation_timeout": 10
+      },
+      "enabled": true
+    }
+  ]
+}
