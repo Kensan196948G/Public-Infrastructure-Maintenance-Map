@@ -9,7 +9,9 @@ compatibility_date = "2026-07-01"
 workers_dev = false
 
 [vars]
-ALLOWED_ORIGIN = "*"
+# Local Vite dev origin — never "*". A deploy that forgets --env production
+# must not publish a wildcard-CORS API (Issue #42 M-2).
+ALLOWED_ORIGIN = "http://localhost:5173"
 RATE_LIMIT_PER_MINUTE = "120"
 # Enforced in every environment, so an accidental default-env deploy fails
 # closed instead of falling back to the spoofable identity header.
