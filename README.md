@@ -248,15 +248,16 @@ flowchart LR
 | 管理API・管理画面（UI-05/06/07・FR-13/14） | ✅ 管理APIゲート・基本操作・取込履歴一覧・未解決品質issue一覧・監査ログ画面からの取込記録/詳細確認/品質issue解決・詳細画面からの個別資産公開停止・システム設定からのソース登録/編集とソース単位の公開一括停止を実装済（Issue #4 完了） |
 | UAT・本番公開判定 | 🟡 Cloudflare custom domain / Access 本番スモーク検証を Issue #38 で追跡。本番URL反映後に `pnpm smoke:cloudflare` を実行して判定 |
 
-### 🚦 Release Gate（2026-07-19）
+### 🚦 Release Gate（2026-07-23）
 
 | 項目 | 状態 |
 | --- | --- |
 | ✅ main CI | 最新 main run `29682975249` で lint / typecheck / test / build、Playwright E2E、PostGIS integration、publish PostGIS integration、secret scan、dependency scan が成功（テスト 289 pass / 17 skip） |
 | ✅ 管理UI Scope | PR #34 / #36 / #37 を main へ統合済み。Issue #4 は完了・close 済み |
 | 🔐 管理API認証 | PR #40 で Worker 側の Cloudflare Access JWT 検証を実装。詐称可能な `CF-Access-Authenticated-User-Email` ヘッダへの依存を解消し、`workers_dev = false` を既定・production 双方に宣言 |
+| 🔒 本番前ハードニング | Issue [#42](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/issues/42) の M-2（既定 CORS を wildcard からローカル限定へ）/ M-3（publish 失敗ログを name・message のみへ + 回帰テスト）/ L-1（本番ビルドの sourcemap 無効化）を実装済み |
 | 🧪 本番スモーク | Issue [#38](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/issues/38) で `pimm.mirai-dx-platform.com` / `api.pimm.mirai-dx-platform.com` のDNS、Cloudflare Access、公開API/Webを検証 |
-| 🚫 本番操作 | Cloudflare / Neon 本番デプロイ、production migration、production publish は未実行。実行はリリース手順書に従い人間が手動で行う |
+| 🚫 本番操作 | Cloudflare / Neon 本番デプロイ、production migration、production publish は未実行。初回リリースはリリースPRに承認範囲を明記し、マージ承認（`Y`）の範囲内でのみ実行する |
 
 > 📌 **2026-07-19 実測**: Cloudflare account に Worker `pimm-api` は未作成、Pages プロジェクトは 0 件、`pimm` / `api.pimm` サブドメインは未解決（NXDOMAIN）、Neon に本システム用 project は未作成です。zone `mirai-dx-platform.com` は active、wrangler は認証済みのため、`docs/RELEASE_RUNBOOK.md` に沿えばデプロイ着手可能な状態です。
 
