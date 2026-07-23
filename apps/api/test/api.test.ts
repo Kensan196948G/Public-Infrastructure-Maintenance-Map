@@ -135,6 +135,13 @@ describe('GET /api/v1/assets/summary', () => {
     expect(body.byType.bridge).toBeGreaterThan(0);
   });
 
+  it('reports prefecture buckets that partition the total', async () => {
+    const res = await get('/api/v1/assets/summary');
+    const body = (await res.json()) as AssetCountSummary;
+    expect(Object.keys(body.byPrefecture).length).toBeGreaterThan(0);
+    expect(Object.values(body.byPrefecture).reduce((a, b) => a + b, 0)).toBe(body.total);
+  });
+
   it('rejects an oversized bbox (same performance guard as /assets)', async () => {
     const res = await get('/api/v1/assets/summary?bbox=125,30,145,45');
     expect(res.status).toBe(400);

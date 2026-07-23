@@ -113,13 +113,16 @@ export class InMemoryAssetRepository implements AssetRepository {
 
   countByType(filters: Pick<AssetQueryFilters, 'bbox' | 'types'>): Promise<AssetCountSummary> {
     const byType: Partial<Record<AssetType, number>> = {};
+    const byPrefecture: Record<string, number> = {};
     let total = 0;
     for (const asset of this.visibleAssets()) {
       if (!matches(asset, filters)) continue;
       total += 1;
       byType[asset.type] = (byType[asset.type] ?? 0) + 1;
+      const pref = asset.prefectureCode ?? 'unknown';
+      byPrefecture[pref] = (byPrefecture[pref] ?? 0) + 1;
     }
-    return Promise.resolve({ total, byType });
+    return Promise.resolve({ total, byType, byPrefecture });
   }
 
   listSources(): Promise<SourceInfo[]> {

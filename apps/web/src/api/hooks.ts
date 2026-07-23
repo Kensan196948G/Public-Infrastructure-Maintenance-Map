@@ -12,14 +12,19 @@ export interface AssetsQueryInput {
   types: readonly AssetType[];
   quality: readonly QualityStatus[];
   q: string;
+  /** When set, the list is prefecture-scoped and the viewport bbox is ignored. */
+  prefectureCode?: string | null;
 }
 
 /** Fetches assets within the current viewport; re-runs when bbox/filters change. */
 export function useAssets(input: AssetsQueryInput, client: ApiClient = defaultClient) {
+  const prefectureCode = input.prefectureCode ?? null;
   // At low zoom (e.g. the default country-wide view) the viewport can exceed
   // the server's bbox area guard — omit bbox rather than erroring; the query
   // still runs, just unfiltered by area (bounded by `limit` instead).
-  const queryableBbox = isBboxQueryable(input.bbox) ? input.bbox : null;
+  // Prefecture mode drops the bbox entirely so moving the map cannot shrink
+  // the prefecture-wide list.
+  const queryableBbox = prefectureCode === null && isBboxQueryable(input.bbox) ? input.bbox : null;
   const requestBbox = useMemo<BBox | null>(
     () =>
       queryableBbox
@@ -38,16 +43,17 @@ export function useAssets(input: AssetsQueryInput, client: ApiClient = defaultCl
     () => [
       'assets',
       requestBbox,
+      prefectureCode,
       [...input.types].sort(),
       [...input.quality].sort(),
       input.q.trim(),
     ],
-    [requestBbox, input.types, input.quality, input.q],
+    [requestBbox, prefectureCode, input.types, input.quality, input.q],
   );
 
   return useQuery({
     queryKey: key,
-    enabled: input.bbox !== null,
+    enabled: input.bbox !== null || prefectureCode !== null,
     queryFn: () => {
       // An empty type or quality selection can never match anything — resolve
       // to an empty result locally instead of asking the server for "all"
@@ -57,6 +63,7 @@ export function useAssets(input: AssetsQueryInput, client: ApiClient = defaultCl
       }
       return client.searchAssets({
         ...(requestBbox ? { bbox: requestBbox } : {}),
+        ...(prefectureCode ? { prefectureCode } : {}),
         types: input.types,
         quality: input.quality,
         q: input.q,
@@ -65,6 +72,15 @@ export function useAssets(input: AssetsQueryInput, client: ApiClient = defaultCl
     },
     placeholderData: (prev) => prev,
     staleTime: 30_000,
+  });
+}
+
+/** Country-wide counts (byType / byPrefecture) that feed the prefecture menu. */
+export function useSummary(client: ApiClient = defaultClient) {
+  return useQuery({
+    queryKey: ['summary', 'country'],
+    queryFn: () => client.getSummary({}),
+    staleTime: 5 * 60_000,
   });
 }
 

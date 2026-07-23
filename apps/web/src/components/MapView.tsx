@@ -3,6 +3,7 @@ import { AttributionControl, Map as MapLibreMap, NavigationControl } from 'mapli
 import type { GeoJSONSource, MapMouseEvent, StyleSpecification } from 'maplibre-gl';
 import type { AssetSummary, AssetType, BBox } from '@pimm/contracts';
 import { ASSET_TYPE_LIST } from '../lib/asset-meta.js';
+import { DEFAULT_CENTER, DEFAULT_ZOOM } from '../lib/url-state.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 /** Minimal GeoJSON shapes for the point layer (avoids a @types/geojson import). */
@@ -29,6 +30,10 @@ interface MapViewProps {
   onSelectAsset: (asset: AssetSummary) => void;
   /** Fired when the user clicks empty map space — clears the selection. */
   onClearSelection: () => void;
+  /** When set, the map fits this [w, s, e, n] box (e.g. a prefecture's data extent). */
+  focusBounds?: BBox | null;
+  /** Increment to ease the map back to the country-wide default view. */
+  resetNonce?: number;
 }
 
 const SOURCE_ID = 'assets';
@@ -90,6 +95,8 @@ export function MapView({
   onViewportChange,
   onSelectAsset,
   onClearSelection,
+  focusBounds = null,
+  resetNonce = 0,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -214,6 +221,28 @@ export function MapView({
     if (!map || !focusPoint) return;
     map.easeTo({ center: focusPoint, zoom: Math.max(map.getZoom(), 13), duration: 600 });
   }, [focusPoint]);
+
+  // Fit the prefecture's data extent when prefecture navigation activates.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusBounds) return;
+    map.fitBounds(
+      [
+        [focusBounds[0], focusBounds[1]],
+        [focusBounds[2], focusBounds[3]],
+      ],
+      { padding: 60, maxZoom: 13, duration: 700 },
+    );
+  }, [focusBounds]);
+
+  // 「全国地図に戻る」: ease back to the default Japan-wide view.
+  const resetSeenRef = useRef(resetNonce);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || resetNonce === resetSeenRef.current) return;
+    resetSeenRef.current = resetNonce;
+    map.easeTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, duration: 700 });
+  }, [resetNonce]);
 
   return <div ref={containerRef} className="map-canvas" aria-label="地図" role="application" />;
 }

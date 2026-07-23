@@ -51,6 +51,23 @@ describe('parseUrlState', () => {
   });
 });
 
+describe('parseUrlState prefecture', () => {
+  it('accepts a valid 2-digit prefecture code', () => {
+    expect(parseUrlState('?pref=43').pref).toBe('43');
+  });
+
+  it('rejects malformed prefecture codes', () => {
+    expect(parseUrlState('?pref=4a').pref).toBeNull();
+    expect(parseUrlState('?pref=433').pref).toBeNull();
+    expect(parseUrlState('').pref).toBeNull();
+  });
+
+  it('round-trips the prefecture code', () => {
+    const state = { ...DEFAULT_URL_STATE, pref: '27' };
+    expect(parseUrlState(serializeUrlState(state)).pref).toBe('27');
+  });
+});
+
 describe('serializeUrlState / round trip', () => {
   it('round-trips the default state', () => {
     expect(parseUrlState(serializeUrlState(DEFAULT_URL_STATE))).toEqual(DEFAULT_URL_STATE);
@@ -63,6 +80,7 @@ describe('serializeUrlState / round trip', () => {
       types: ['bridge', 'port'],
       quality: ['review'],
       q: '大橋',
+      pref: '27',
     };
     expect(parseUrlState(serializeUrlState(state))).toEqual(state);
   });
@@ -74,6 +92,7 @@ describe('serializeUrlState / round trip', () => {
       types: [],
       quality: [],
       q: '',
+      pref: null,
     };
     expect(parseUrlState(serializeUrlState(state))).toEqual(state);
   });

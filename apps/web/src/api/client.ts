@@ -42,6 +42,7 @@ export interface AssetSearchParams {
   types?: readonly AssetType[];
   quality?: readonly QualityStatus[];
   q?: string;
+  prefectureCode?: string;
   limit?: number;
   cursor?: string;
 }
@@ -59,6 +60,9 @@ function buildAssetQuery(params: AssetSearchParams): string {
   }
   if (params.q && params.q.trim() !== '') {
     search.set('q', params.q.trim());
+  }
+  if (params.prefectureCode) {
+    search.set('prefectureCode', params.prefectureCode);
   }
   if (typeof params.limit === 'number') {
     search.set('limit', String(params.limit));
