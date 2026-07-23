@@ -305,6 +305,31 @@ a {
 .detail-title {
   font-size: 16px;
   margin: 0;
+  padding: 12px 16px 0;
+}
+
+.detail-back-button {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.detail-back-button:hover {
+  background: var(--color-border);
+}
+
+.detail-nameless-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--color-muted, #6b7280);
+}
+
+.result-item-name.is-nameless {
+  font-style: italic;
+  color: var(--color-muted, #6b7280);
 }
 
 .icon-button {

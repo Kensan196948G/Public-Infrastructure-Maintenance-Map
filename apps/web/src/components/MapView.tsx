@@ -27,6 +27,8 @@ interface MapViewProps {
   /** Fired after the user stops moving the map; carries the new viewport. */
   onViewportChange: (view: { bbox: BBox; center: [number, number]; zoom: number }) => void;
   onSelectAsset: (asset: AssetSummary) => void;
+  /** Fired when the user clicks empty map space — clears the selection. */
+  onClearSelection: () => void;
 }
 
 const SOURCE_ID = 'assets';
@@ -87,6 +89,7 @@ export function MapView({
   focusPoint,
   onViewportChange,
   onSelectAsset,
+  onClearSelection,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -94,11 +97,13 @@ export function MapView({
   const selectedIdRef = useRef<string | null>(selectedId);
   const onViewportChangeRef = useRef(onViewportChange);
   const onSelectAssetRef = useRef(onSelectAsset);
+  const onClearSelectionRef = useRef(onClearSelection);
 
   itemsRef.current = items;
   selectedIdRef.current = selectedId;
   onViewportChangeRef.current = onViewportChange;
   onSelectAssetRef.current = onSelectAsset;
+  onClearSelectionRef.current = onClearSelection;
 
   // Create the map once.
   useEffect(() => {
@@ -161,6 +166,13 @@ export function MapView({
         if (asset) onSelectAssetRef.current(asset);
       };
       map.on('click', LAYER_ID, onPointClick as never);
+      // Clicking empty map space returns to the list (deselect). The layer
+      // click above still wins for marker hits because we re-query here.
+      map.on('click', (e: MapMouseEvent) => {
+        if (!map.getLayer(LAYER_ID)) return;
+        const hits = map.queryRenderedFeatures(e.point, { layers: [LAYER_ID] });
+        if (hits.length === 0) onClearSelectionRef.current();
+      });
       map.on('mouseenter', LAYER_ID, () => {
         map.getCanvas().style.cursor = 'pointer';
       });

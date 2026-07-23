@@ -80,3 +80,11 @@ secret、credential、connection string、PII は記載しない。
 - 検証: `pnpm ratelimit:cloudflare`（dry-run）が構成の妥当性（Free プラン制約・対象ホスト限定・block アクション）を fail-fast で検証する。適用後は `--verify` で実効上限を実測する。
 - Rollback: 適用前の entrypoint を `--show` で控え、ルール削除（空 rules の PUT）または該当ルールの `enabled: false` で戻す。
 - 2026-07-23 追記: token `pimm-production-deploy` へ Zone WAF Edit を追加後、ユーザー実行の `--apply` で zone へ適用し、`--verify` で 20×200 → 5×429 を実測して完了（Issue #41 close）。あわせて Approval PR #57 により Access アプリ `pimm-admin-api` を作成し、管理APIはフェイルクローズ 500 から Access 302 拒否へ移行した（Issue #38 はブラウザ最終確認のみ残）。
+
+### DL-010: 名称未収録データの表示合成は web 層で行い、DB は改変しない
+
+- 判断: 出典に名称項目が存在しないデータ（例: 国土数値情報 道路 N13 — N13_001〜008 はコード値/日付/メッシュ番号のみで路線名フィールド自体が無い）は、DB の publisher 固定値 `(名称不明)` を保持したまま、web 表示層で「名称未収録の道路（緯度, 経度 付近）」の形式へ合成する（`apps/web/src/lib/display-name.ts`）。
+- 理由: 「欠損は不明と表示し推定しない」（設計書 §8.2）の原則を守りつつ、同名 800 行が並ぶ一覧の識別性を座標サフィックスで確保するため。名称の捏造や DB 書き換え（自然キー変化による重複リスク）を避ける。
+- 影響: 一覧・詳細タイトルの表示のみ。API 応答・DB・エクスポートは不変。N13 のコード値→名称ラベル変換は、製品仕様書のコードリストを検証確認できた時点で別途検討する。
+- 検証: `apps/web/test/display-name.test.ts` で合成規則を固定。既存 unit / E2E は全 PASS。
+- Rollback: 該当 PR を revert（表示のみの変更）。
