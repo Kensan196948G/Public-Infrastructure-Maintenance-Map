@@ -375,6 +375,14 @@ a {
   font-size: 12px;
 }
 
+.pref-item.is-empty {
+  color: var(--color-muted, #9ca3af);
+}
+
+.pref-item.is-empty .pref-count {
+  opacity: 0.6;
+}
+
 .pref-reset-button {
   width: 100%;
   margin-bottom: 6px;

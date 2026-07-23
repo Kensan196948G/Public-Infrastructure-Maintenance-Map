@@ -1,6 +1,6 @@
 import type { AssetType, QualityStatus } from '@pimm/contracts';
 import { ASSET_TYPE_LIST, QUALITY_META, VISIBLE_QUALITY_STATUSES } from '../lib/asset-meta.js';
-import { prefectureName, sortPrefectureEntries } from '../lib/prefectures.js';
+import { listPrefectureEntries, prefectureName } from '../lib/prefectures.js';
 
 interface FilterPanelProps {
   selectedTypes: readonly AssetType[];
@@ -46,13 +46,13 @@ export function FilterPanel({
             </button>
           ) : null}
           <ul className="pref-list">
-            {sortPrefectureEntries(byPrefecture).map(([code, count]) => {
+            {listPrefectureEntries(byPrefecture).map(([code, count]) => {
               const selected = code === selectedPrefecture;
               return (
                 <li key={code}>
                   <button
                     type="button"
-                    className={`pref-item${selected ? ' is-selected' : ''}`}
+                    className={`pref-item${selected ? ' is-selected' : ''}${count === 0 ? ' is-empty' : ''}`}
                     aria-pressed={selected}
                     onClick={() => onSelectPrefecture?.(selected ? null : code)}
                   >

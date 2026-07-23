@@ -57,13 +57,19 @@ export function prefectureName(code: string | null | undefined): string {
   return PREFECTURE_NAMES[code] ?? `都道府県コード${code}`;
 }
 
-/** Sort prefecture buckets by JIS code, with the unknown bucket last. */
-export function sortPrefectureEntries(
+/**
+ * All 47 prefectures in JIS order with their counts (0 when no data), plus a
+ * trailing unknown bucket only when the summary actually reports one.
+ */
+export function listPrefectureEntries(
   byPrefecture: Record<string, number>,
 ): Array<[string, number]> {
-  return Object.entries(byPrefecture).sort(([a], [b]) => {
-    if (a === UNKNOWN_PREFECTURE_KEY) return 1;
-    if (b === UNKNOWN_PREFECTURE_KEY) return -1;
-    return a.localeCompare(b);
-  });
+  const entries: Array<[string, number]> = Object.keys(PREFECTURE_NAMES)
+    .sort((a, b) => a.localeCompare(b))
+    .map((code) => [code, byPrefecture[code] ?? 0]);
+  const unknown = byPrefecture[UNKNOWN_PREFECTURE_KEY];
+  if (unknown !== undefined && unknown > 0) {
+    entries.push([UNKNOWN_PREFECTURE_KEY, unknown]);
+  }
+  return entries;
 }

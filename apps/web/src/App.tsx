@@ -228,6 +228,11 @@ export function App() {
                 isError={assetsQuery.isError}
                 onSelect={handleSelect}
                 groupByPrefecture={prefecture === null}
+                emptyMessage={
+                  prefecture
+                    ? `${prefectureName(prefecture)}の公開データはまだ収録されていません（または絞り込み条件に該当がありません）。「🗾 全国地図に戻る」で全国表示へ戻れます。`
+                    : undefined
+                }
               />
             </>
           )}
