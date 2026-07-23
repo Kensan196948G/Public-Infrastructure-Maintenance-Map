@@ -608,6 +608,17 @@ export class PostgresAssetRepository implements AssetRepository {
  * That id is whatever actually persisted, so two concurrent publishes for the
  * same source can no longer attach attributes/issues to a minted-but-discarded id.
  */
+/**
+ * Log-safe error shape. Driver errors may expose connection details (host,
+ * database, user) as own properties, so logging must be limited to
+ * name/message — the same rule app.ts applies in its onError handler.
+ */
+function errorLogSummary(error: unknown): { name: string; message: string } {
+  return error instanceof Error
+    ? { name: error.name, message: error.message }
+    : { name: 'UnknownError', message: String(error) };
+}
+
 export class PostgresAssetPublisher implements AssetPublisher {
   private readonly sql: TransactionalSql;
 
@@ -822,11 +833,13 @@ export class PostgresAssetPublisher implements AssetPublisher {
       try {
         return await this.publishFailed(input, error);
       } catch (recordingError) {
+        // Driver errors can carry connection details (host, db, user) as extra
+        // properties, so only name/message may reach the log stream (Issue #42 M-3).
         console.error('publish: failed to record failed ingestion run', {
           sourceId: input.sourceId,
           correlationId: input.correlationId,
-          originalError: error,
-          recordingError,
+          originalError: errorLogSummary(error),
+          recordingError: errorLogSummary(recordingError),
         });
         throw error;
       }

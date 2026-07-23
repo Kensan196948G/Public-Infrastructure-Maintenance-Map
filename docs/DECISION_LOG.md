@@ -45,3 +45,29 @@ secret、credential、connection string、PII は記載しない。
 - 影響: 本番前の未完了作業は Issue #38 に集約し、Cloudflare認証・DNS反映・本番スモークの結果を同Issueへ記録する。
 - 検証: 認証/DNS反映前は `pnpm smoke:cloudflare:preflight`、反映後は `pnpm smoke:cloudflare` を使用する。
 - Rollback: スモーク検証ツールは削除またはPR単位でrevert可能。本番route/domainのrollbackは Cloudflare Domain Approval PR の手順に従う。
+
+## 2026-07-23
+
+### DL-006: Issue #42 本番前ハードニングの実施範囲
+
+- 判断: M-2 は API の既定 `ALLOWED_ORIGIN` を `"*"` からローカル Vite オリジン `http://localhost:5173` へ変更（`config.ts` 既定値と `wrangler.toml` 既定 `[vars]` の両方）。M-3 は `PostgresAssetPublisher` の publish 失敗ログを `error.name` / `error.message` のみに制限し、回帰テストで固定。L-1 は本番ビルドの `sourcemap` を `false` に変更（`hidden` ではなく生成自体を止め、Pages 配信物から `.map` を排除）。
+- 理由: 本番 env は固定オリジンを宣言済みのため、既定値の到達経路は `--env production` 忘れの事故デプロイのみ。事故時の露出面を最小化する fail-safe 化が目的。M-3 は Neon ドライバエラーの追加プロパティ（host / db / user）が observability ログへ落ちる経路の遮断。
+- 影響: ローカル開発は Vite proxy（同一オリジン）経由のため既定値変更の影響なし。公開 API を第三者サイトから直接 fetch する用途は本番オリジン設定に従う（従来から production は固定済み）。
+- 検証: `packages/database/test/publish-error-logging.test.ts` で接続情報がログへ出ないことを回帰テスト化。既存の unit / integration / E2E は全 PASS。
+- Rollback: 本PRの該当コミットを revert する。
+
+### DL-007: Issue #41（レート制限の共有カウンタ化）は初回リリースでは対応しない
+
+- 判断: in-isolate レート制限のまま初回リリースする。Durable Object / KV 共有カウンタへの移行、または Cloudflare Rate Limiting ルールの IaC 化は、リリース後の課題として Issue #41 で継続する。
+- 理由: 公開 API は読み取り専用の公開データであり、DoS 対策の実効的な防御層は Cloudflare の edge（WAF / DDoS protection）が担う設計を README の既知の制約に明記済み。初回リリースの blocker ではない。
+- 影響: 分散実行時の実効上限は isolate 数に比例して緩む（既知の制約として文書化済み）。
+- 検証: リリース後に実トラフィックの error rate / latency を監視し、必要になった時点で #41 を実施する。
+- Rollback: 該当なし（現状維持の判断）。
+
+### DL-008: 初回本番リリースの実行範囲と管理APIの扱い
+
+- 判断: 初回リリースは (1) Neon project 新規作成（Tokyo リージョン優先、不可なら最寄り）+ `migrations/0001`・`0002` 適用、(2) 実データ 4 ソース（`bridge-kumamoto` / `road-n13` / `facility-osaka-park` / `facility-osaka-toilet`）の `ingest --publish`、(3) Workers（`pimm-api-production`）と Pages の本番デプロイ + custom domain、(4) `pnpm smoke:cloudflare` による検証、で構成する。Cloudflare Access アプリケーションの新規作成は範囲外とする。
+- 理由: Access アプリ作成はダッシュボード操作を要する高リスク変更（§17）であり、未作成でも `REQUIRE_ACCESS_JWT=true` により管理APIはフェイルクローズ（500）で閉じたまま公開機能に影響しない。公開データの提供という初回リリースの目的を、承認範囲を最小に保ったまま達成できる。
+- 影響: 初回リリース時点では管理APIおよび管理UIは利用不可（意図的にフェイルクローズ）。Access 認証込みの管理経路の開通は Issue #38 で追跡する。
+- 検証: デプロイ後スモークで管理APIが未認証拒否（4xx/5xx）を返すことを確認する。
+- Rollback: Workers / Pages は直前デプロイへの rollback、DB は forward-only（是正 migration 追加）+ Neon PITR。

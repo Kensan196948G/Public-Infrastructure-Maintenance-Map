@@ -15,6 +15,8 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    sourcemap: true,
+    // Pages serves everything under dist/, so shipped .map files would let
+    // anyone reconstruct the full frontend source (Issue #42 L-1).
+    sourcemap: false,
   },
 });

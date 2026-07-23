@@ -60,7 +60,7 @@ flowchart LR
 | 🔑 `CLOUDFLARE_ACCESS_AUD` | **Worker Secret** | ✅ 本番 | Access アプリケーションの AUD タグ。Worker が JWT の `aud` 突合に使用する |
 | 🏛️ `CLOUDFLARE_ACCESS_TEAM_DOMAIN` | **Worker Secret**（例 `example.cloudflareaccess.com`） | ✅ 本番 | JWKS 取得元 兼 `iss` 突合先。**未設定だと管理APIは 500 でフェイルクローズ** |
 | 🚧 `REQUIRE_ACCESS_JWT` | `wrangler.toml` の**既定 `[vars]` と `[env.production.vars]` の両方**に `"true"` を宣言済み | ✅ 本番 | 上記2つが未設定でもヘッダ信頼へ退行させず 500 を返す安全弁。**既定 env でも `[vars]` に宣言済み** |
-| 🌐 `ALLOWED_ORIGIN` | `apps/api/wrangler.toml` `[vars]`（既定 `"*"`） | 推奨変更 | 本番の Web 固定オリジンに絞るとAPIのクロスサイト収集を抑制できる（現状 `"*"`） |
+| 🌐 `ALLOWED_ORIGIN` | `apps/api/wrangler.toml`（既定 `[vars]` は `"http://localhost:5173"`、`[env.production.vars]` は `"https://pimm.mirai-dx-platform.com"` を宣言済み） | ✅ 宣言済み | 既定はローカル Vite オリジン限定で wildcard を廃止。`--env production` を付け忘れた deploy でも全オリジン許可の API は公開されない（Issue #42 M-2） |
 | 🔢 `RATE_LIMIT_PER_MINUTE` | `wrangler.toml` `[vars]`（既定 `"120"`） | 任意 | in-isolate レート制限の分あたり上限 |
 | 🔐 `ADMIN_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの書込操作を許可するカンマ区切り許可リスト |
 | 👀 `REVIEWER_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの閲覧・品質レビュー操作を許可するカンマ区切り許可リスト |

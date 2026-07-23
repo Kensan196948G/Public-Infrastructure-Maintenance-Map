@@ -3,10 +3,11 @@ export interface ApiConfig {
   /** Neon connection string. Absent → sample mode (in-memory seed). */
   databaseUrl?: string;
   /**
-   * CORS allow-origin for browser clients. Defaults to '*' — acceptable here
-   * because every /api/v1 route is unauthenticated GET-only public data with
-   * no cookies. Set ALLOWED_ORIGIN explicitly once the web app has a fixed
-   * production origin, to reduce cross-site scraping of the public API.
+   * CORS allow-origin for browser clients. Defaults to the local Vite dev
+   * origin, never '*': production declares the fixed Web origin in
+   * wrangler.toml, so the only deploy that could reach this default is one
+   * that forgot --env production — and that deploy must not serve a
+   * wildcard-CORS API (Issue #42 M-2).
    */
   allowedOrigin: string;
   /** Requests per minute per client IP (in-isolate limiter; CF WAF is the real guard). */
@@ -64,7 +65,7 @@ function csvEmails(value: string | undefined): string[] {
 export function configFromEnv(env: EnvBindings): ApiConfig {
   const parsedLimit = Number(env.RATE_LIMIT_PER_MINUTE ?? '120');
   const config: ApiConfig = {
-    allowedOrigin: env.ALLOWED_ORIGIN ?? '*',
+    allowedOrigin: env.ALLOWED_ORIGIN ?? 'http://localhost:5173',
     rateLimitPerMinute: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 120,
     version: '0.1.0',
     requireDatabaseUrl: envFlag(env.REQUIRE_DATABASE_URL),
