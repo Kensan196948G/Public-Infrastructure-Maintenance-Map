@@ -71,3 +71,11 @@ secret、credential、connection string、PII は記載しない。
 - 影響: 初回リリース時点では管理APIおよび管理UIは利用不可（意図的にフェイルクローズ）。Access 認証込みの管理経路の開通は Issue #38 で追跡する。
 - 検証: デプロイ後スモークで管理APIが未認証拒否（4xx/5xx）を返すことを確認する。
 - Rollback: Workers / Pages は直前デプロイへの rollback、DB は forward-only（是正 migration 追加）+ Neon PITR。
+
+### DL-009: Issue #41 は edge Rate Limiting ルールの IaC 化で対応する
+
+- 判断: 共有レート制限は Durable Object カウンタではなく、zone の `http_ratelimit` フェーズへの Rate Limiting ルール（`infra/cloudflare/http-ratelimit.entrypoint.json` + `scripts/tools/cloudflare-rate-limit.mjs`）で実現する。Free プラン制約（period / mitigation 10 秒固定）に合わせ、既存ポリシー 120 req/分 を 20 req/10s per IP へ等価変換する。
+- 理由: Worker コード無変更でランタイムリスクとリクエスト単価増（DO 経由の追加サブリクエスト）を避けられ、ルールがリポジトリでレビュー可能な IaC になるため。in-isolate カウンタは多層防御の内側として維持する。
+- 影響: 実際の zone への適用（`--apply`）は本番 WAF 変更のため承認範囲内でのみ実行する。**現行の CLOUDFLARE_API_TOKEN には Zone WAF（Rulesets）権限が無く適用は保留**（2026-07-23 実測で Authentication error）。token へ `Zone > Zone WAF > Edit` を追加するか、ダッシュボードで同内容を設定した後、`--show` / `--verify`（25 連打で 429 を確認）で検証する。
+- 検証: `pnpm ratelimit:cloudflare`（dry-run）が構成の妥当性（Free プラン制約・対象ホスト限定・block アクション）を fail-fast で検証する。適用後は `--verify` で実効上限を実測する。
+- Rollback: 適用前の entrypoint を `--show` で控え、ルール削除（空 rules の PUT）または該当ルールの `enabled: false` で戻す。
