@@ -277,7 +277,7 @@ flowchart LR
 - 🐘 `PostgresAssetPublisher` は CI の `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証する。Neon dev branch での接続先固有検証はリリース手順で実施
 - 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。公開前は runbook の手動 publish と API 件数突合を必須とする
 - 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込履歴一覧、取込詳細、未解決品質issue一覧、品質issue解決、個別資産公開停止、ソース単位の公開一括停止の基本経路を実装済み。監査ログ画面からは取込履歴・未解決品質issueの一覧更新、ソース別の取込記録作成、取込詳細確認、理由入力付きの品質issue解決、詳細画面からは理由入力付きの個別資産公開停止、システム設定画面からはソース登録/編集とライセンス変更時の公開一括停止まで接続済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタと管理系の未認証拒否を導入済み。実 Cloudflare Access 認証済み管理E2Eと custom domain 本番スモークは Issue #38 で追跡
-- 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。共有の実効上限は edge 側の Rate Limiting ルール（`infra/cloudflare/http-ratelimit.entrypoint.json` に IaC 化、20 req/10s ≒ 120/分・per IP）が担う。適用・検証は `pnpm ratelimit:cloudflare`（`--apply` は承認範囲内でのみ実行。現行 API token に WAF 権限が無いため適用は保留中 — Issue #41）
+- 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。共有の実効上限は edge 側の Rate Limiting ルール（`infra/cloudflare/http-ratelimit.entrypoint.json` に IaC 化、20 req/10s ≒ 120/分・per IP）が担う。**2026-07-23 に zone へ適用済み・`--verify` で 429 発効を実測済み**（Issue #41 完了）。変更時は `pnpm ratelimit:cloudflare`（`--apply` は承認範囲内でのみ実行）
 
 ## 🗺️ ロードマップ
 
