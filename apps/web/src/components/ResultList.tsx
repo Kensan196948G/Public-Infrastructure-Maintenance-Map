@@ -14,6 +14,8 @@ interface ResultListProps {
   onSelect: (asset: AssetSummary) => void;
   /** Insert prefecture section headers (country-wide viewport mode). */
   groupByPrefecture?: boolean;
+  /** Overrides the default empty-state text (e.g. prefecture-scoped mode). */
+  emptyMessage?: string | undefined;
 }
 
 /** Groups items by prefecture code (JIS order, unknown last), keeping row order inside a group. */
@@ -43,6 +45,7 @@ export function ResultList({
   isError,
   onSelect,
   groupByPrefecture = false,
+  emptyMessage,
 }: ResultListProps) {
   if (isError) {
     return (
@@ -63,7 +66,8 @@ export function ResultList({
   if (items.length === 0) {
     return (
       <div className="result-list-state" role="status">
-        表示範囲に該当するデータがありません。地図を移動するか条件を変更してください。
+        {emptyMessage ??
+          '表示範囲に該当するデータがありません。地図を移動するか条件を変更してください。'}
       </div>
     );
   }
