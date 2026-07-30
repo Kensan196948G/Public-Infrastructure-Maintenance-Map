@@ -118,7 +118,7 @@ describe('buildSampleSeed', () => {
 });
 
 describe('registry', () => {
-  it('lists seven adapters and resolves by slug', () => {
+  it('lists eight adapters and resolves by slug', () => {
     expect(
       listAdapters()
         .map((a) => a.descriptor.slug)
@@ -127,6 +127,7 @@ describe('registry', () => {
       'bridge-kumamoto',
       'facility-osaka-park',
       'facility-osaka-toilet',
+      'port-c02',
       'road-n13',
       'sample-bridges',
       'sample-facilities',

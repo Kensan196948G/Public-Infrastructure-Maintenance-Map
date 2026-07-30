@@ -106,3 +106,11 @@ secret、credential、connection string、PII は記載しない。
 - 影響: CI の依存脆弱性スキャンは本 advisory のみ期限付きで無視する。新規 advisory は従来どおり fail する。
 - 検証: `grep -c 'brace-expansion\|braceExpand' apps/api/dist/worker.js` = 0、`apps/web/dist/assets/*.js` = 0。lint / test / build 全 PASS（1.1.17 適用後）。
 - Rollback: `osv-scanner.toml` の当該エントリ削除。期限到来時に minimatch/eslint の upstream 更新を再確認し、恒久解消できれば即削除する。
+
+### DL-013: 港湾データは KSJ C02(非商用条件) を restricted として全国投入する
+
+- 判断: port カテゴリの初期全国データとして国土数値情報 港湾データ C02 第3.2版(平成26年度・全国994港湾)を採用し、`redistribution='restricted'`・attributionText に非商用条件を明記して取込・公開する。レコード更新日が原典に無いため `sourceUpdatedAt=null`(Q006「鮮度不明」を994件に正しく表示)とし、日付類(政令指定日・設立日)は YYYYMMDD 生値の属性として保持する(ISO への変換・推定はしない)。
+- 理由: 当該版の使用許諾条件はデータ詳細ページ上「非商用」であり、CC-BY へ移行済みの新版群(例: N13-24)と異なる。本サイトは非営利公開のため利用可能で、エクスポートは既存のライセンス制御(restricted はエクスポート許可+帰属表示)に従う。ユーザー提示の代替候補は取込不可(損傷マップ=営利利用・複写禁止+機械可読DLなし)または要申請(基盤地図情報・JICE)のため、C02 が唯一の即時投入可能な全国港湾データ。
+- 影響: 公開資産に port 994 件が加わる(実測ドライラン: 994 fetched / 994 accepted / 0 quarantined / Q006×994 / 40都道府県)。schema 変更なし。
+- 検証: アダプタ unit + pipeline 契約テスト(Q002/Q008/エンティティ/緯度経度入替)、実URLドライラン全件成功。本番 ingest は PR #64 に手順・件数・rollback を明記して承認範囲で実行する。
+- Rollback: `POST /api/v1/admin/sources/port-c02/suspend-assets`(ソース単位公開停止・Q007監査付き)。非破壊。
