@@ -88,3 +88,13 @@ secret、credential、connection string、PII は記載しない。
 - 影響: 一覧・詳細タイトルの表示のみ。API 応答・DB・エクスポートは不変。N13 のコード値→名称ラベル変換は、製品仕様書のコードリストを検証確認できた時点で別途検討する。
 - 検証: `apps/web/test/display-name.test.ts` で合成規則を固定。既存 unit / E2E は全 PASS。
 - Rollback: 該当 PR を revert（表示のみの変更）。
+
+## 2026-07-30
+
+### DL-011: 運用ダッシュボードは既存テーブルの集計 API で提供し、追加 migration を行わない
+
+- 判断: Issue #52（運用コンソール）の第1弾として `GET /api/v1/admin/operations` を追加し、ソース別の最終取込・成功率・公開/停止/隔離件数・未解決品質issue・鮮度を既存の `data_sources` / `infrastructure_assets` / `ingestion_runs` / `quality_issues` から都度集計する。集計テーブルや view の追加 migration は行わない。
+- 理由: 現状のデータ規模（数千件・ソース数十以下）では 4 本の bounded な集計 SELECT で十分応答でき、schema 変更ゼロなら rollback は revert だけで完結するため。集計の意味論は contracts の `summarizeOperations` に一元化し、InMemory / Postgres の実装差を repository contract test で塞ぐ。
+- 影響: 管理API配下（Cloudflare Access + admin/reviewer allowlist）の read-only エンドポイントが 1 本増える。公開APIと DB スキーマは不変。件数バケットは「隔離（quality hidden）＞公開/下書き/停止」の順で各資産を一意に分類し、公開件数は公開APIの可視性ルールと一致させる。成功率の窓は `OPERATIONS_RECENT_RUN_WINDOW = 20` 実行に固定。
+- 検証: contracts unit、repository contract（InMemory 実測 / Postgres は同一テストを integration で共有）、API test（401/認可/合計整合）、SettingsDialog test。Postgres 実 SQL は Neon 上で read-only 実行により構文検証。
+- Rollback: 該当 PR を revert（migration なし・データ影響なし）。
