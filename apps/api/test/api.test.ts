@@ -7,6 +7,7 @@ import type {
   ProblemDetails,
   SourceInfo,
 } from '@pimm/contracts';
+import { AdminOperationsSummarySchema } from '@pimm/contracts';
 import { InMemoryAssetRepository } from '@pimm/database';
 import { buildSampleSeed } from '@pimm/source-adapters';
 import { createApp } from '../src/app.js';
@@ -246,6 +247,27 @@ describe('admin API (Issue #4 / FR-13 / FR-14)', () => {
       'X-PIMM-Admin-Roles': 'admin',
     });
     expect(res.status).toBe(403);
+  });
+
+  it('rejects unauthenticated access to the ops rollup', async () => {
+    const res = await get('/api/v1/admin/operations');
+    expect(res.status).toBe(401);
+  });
+
+  it('serves the ops rollup to reviewers with consistent totals (Issue #52)', async () => {
+    const res = await get('/api/v1/admin/operations', reviewerHeaders);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+
+    const body = AdminOperationsSummarySchema.parse(await res.json());
+    expect(body.sources.length).toBeGreaterThan(0);
+    expect(body.totals.sourceCount).toBe(body.sources.length);
+    expect(body.totals.publishedCount).toBe(
+      body.sources.reduce((sum, s) => sum + s.publishedCount, 0),
+    );
+    // Sample seed ships published-only data: nothing suspended or quarantined.
+    expect(body.totals.suspendedCount).toBe(0);
+    expect(body.totals.hiddenCount).toBe(0);
   });
 
   it('lets an admin register and update a source', async () => {

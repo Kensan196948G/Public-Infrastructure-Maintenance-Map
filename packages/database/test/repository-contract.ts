@@ -115,6 +115,51 @@ export function registerAssetRepositoryContract(
       expect(res[0]!.source.licenseName).toBe('CC-BY-4.0');
     });
 
+    it('rolls up per-source operations for the ops console', async () => {
+      const { repo } = await setup();
+
+      const before = await repo.getOperationsSummary();
+      // Admin view: disabled sources are listed too, ordered by slug.
+      expect(before.sources.map((s) => s.slug)).toEqual(['contract-source', 'disabled-source']);
+      expect(before.totals.sourceCount).toBe(2);
+      expect(before.totals.enabledSourceCount).toBe(1);
+
+      const main = before.sources[0]!;
+      expect(main).toMatchObject({
+        publishedCount: 4,
+        draftCount: 1,
+        suspendedCount: 0,
+        hiddenCount: 1,
+        lastRunAt: null,
+        lastRunStatus: null,
+        recentRunCount: 0,
+        recentSucceededCount: 0,
+      });
+      expect(before.totals.publishedCount).toBe(4);
+      expect(before.totals.hiddenCount).toBe(1);
+
+      const run = await repo.startIngestion('contract-source', 'admin@example.com', 'ops-corr');
+      expect(run).not.toBeNull();
+      await repo.suspendAssetsBySource(
+        'contract-source',
+        { reason: '運用ダッシュボード検証' },
+        'admin@example.com',
+      );
+
+      const after = await repo.getOperationsSummary();
+      const mainAfter = after.sources[0]!;
+      expect(mainAfter.publishedCount).toBe(0);
+      expect(mainAfter.suspendedCount).toBe(4);
+      expect(mainAfter.hiddenCount).toBe(1);
+      expect(mainAfter.lastRunAt).not.toBeNull();
+      expect(mainAfter.lastRunStatus).not.toBeNull();
+      // Suspension records one open Q007 issue per asset; a backend may carry
+      // additional pre-seeded open issues, so assert a lower bound only.
+      expect(mainAfter.openQualityIssueCount).toBeGreaterThanOrEqual(4);
+      expect(after.totals.suspendedCount).toBe(4);
+      expect(after.totals.publishedCount).toBe(0);
+    });
+
     it('suspends every published asset for a source', async () => {
       const { repo } = await setup();
 

@@ -3,8 +3,10 @@ import type { FormEvent } from 'react';
 import type {
   AccessType,
   AdminCreateSource,
+  AdminOperationsSummary,
   AdminUpdateSource,
   HealthResponse,
+  IngestionRunStatus,
   RedistributionPolicy,
   SourceFormat,
   SourceInfo,
@@ -12,6 +14,20 @@ import type {
 import { ApiClient, ApiError, apiBaseUrl } from '../api/client.js';
 import { formatDate } from '../lib/format.js';
 import { Modal } from './Modal.js';
+
+/**
+ * Shared default instance (same pattern as api/hooks.ts): a parameter default
+ * of `new ApiClient()` would mint a new identity every render and retrigger
+ * the ops-dashboard effect forever.
+ */
+const defaultApiClient = new ApiClient();
+
+const RUN_STATUS_LABEL: Record<IngestionRunStatus, string> = {
+  succeeded: '✅ 成功',
+  partial: '⚠️ 部分成功',
+  failed: '❌ 失敗',
+  running: '🔄 実行中',
+};
 
 interface SettingsDialogProps {
   health: HealthResponse | null;
@@ -106,7 +122,7 @@ export function SettingsDialog({
   sources,
   isLoading,
   isError,
-  apiClient = new ApiClient(),
+  apiClient = defaultApiClient,
   onSourcesChanged,
   onClose,
 }: SettingsDialogProps) {
@@ -123,6 +139,36 @@ export function SettingsDialog({
   const [sourceSuspendReason, setSourceSuspendReason] = useState('');
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [adminError, setAdminError] = useState<string | null>(null);
+  const [ops, setOps] = useState<AdminOperationsSummary | null>(null);
+  const [opsLoading, setOpsLoading] = useState(true);
+  const [opsError, setOpsError] = useState<string | null>(null);
+  const [opsReloadNonce, setOpsReloadNonce] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadOperations() {
+      setOpsLoading(true);
+      setOpsError(null);
+      try {
+        const summary = await apiClient.getAdminOperations();
+        if (!cancelled) setOps(summary);
+      } catch (error) {
+        if (cancelled) return;
+        setOps(null);
+        setOpsError(
+          error instanceof ApiError && (error.status === 401 || error.status === 403)
+            ? '🔒 運用ダッシュボードの閲覧には Cloudflare Access 認証（admin / reviewer）が必要です。'
+            : '運用状況を取得できませんでした。Access 未認証の場合はログイン後に再読込してください。',
+        );
+      } finally {
+        if (!cancelled) setOpsLoading(false);
+      }
+    }
+    void loadOperations();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiClient, opsReloadNonce]);
 
   useEffect(() => {
     const selected = sources.find((s) => s.slug === selectedSlug);
@@ -229,6 +275,97 @@ export function SettingsDialog({
         </dl>
       </section>
 
+      <section className="settings-section" aria-labelledby="ops-dashboard-heading">
+        <h3 id="ops-dashboard-heading" className="settings-heading">
+          🎛️ 運用ダッシュボード（ソース別）
+        </h3>
+        {opsLoading ? (
+          <p role="status">⏳ 運用状況を読み込み中…</p>
+        ) : opsError ? (
+          <p className="admin-error" role="alert">
+            {opsError}
+          </p>
+        ) : ops ? (
+          <>
+            <dl className="settings-list">
+              <dt>有効ソース</dt>
+              <dd>
+                {ops.totals.enabledSourceCount} / {ops.totals.sourceCount} 件
+              </dd>
+              <dt>公開中</dt>
+              <dd>🟢 {ops.totals.publishedCount.toLocaleString('ja-JP')} 件</dd>
+              <dt>公開停止</dt>
+              <dd>🛑 {ops.totals.suspendedCount.toLocaleString('ja-JP')} 件</dd>
+              <dt>隔離（hidden）</dt>
+              <dd>🚧 {ops.totals.hiddenCount.toLocaleString('ja-JP')} 件</dd>
+              <dt>未解決品質issue</dt>
+              <dd>🐛 {ops.totals.openQualityIssueCount.toLocaleString('ja-JP')} 件</dd>
+            </dl>
+            {ops.sources.length === 0 ? (
+              <p>データソースが未登録です。</p>
+            ) : (
+              <div className="ops-table-wrap">
+                <table className="ops-table" aria-labelledby="ops-dashboard-heading">
+                  <thead>
+                    <tr>
+                      <th scope="col">ソース</th>
+                      <th scope="col">最終取込</th>
+                      <th scope="col">成功率</th>
+                      <th scope="col">公開</th>
+                      <th scope="col">停止</th>
+                      <th scope="col">隔離</th>
+                      <th scope="col">品質issue</th>
+                      <th scope="col">最終取得</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ops.sources.map((row) => (
+                      <tr key={row.slug}>
+                        <th scope="row">
+                          <span className="mono">{row.slug}</span>
+                          {row.enabled ? null : <span className="ops-badge-disabled">無効</span>}
+                        </th>
+                        <td>
+                          {row.lastRunStatus === null
+                            ? '—'
+                            : `${RUN_STATUS_LABEL[row.lastRunStatus]} ${formatDate(row.lastRunAt)}`}
+                        </td>
+                        <td>
+                          {row.recentRunCount === 0
+                            ? '—'
+                            : `${row.recentSucceededCount}/${row.recentRunCount} (${Math.round(
+                                (row.recentSucceededCount / row.recentRunCount) * 100,
+                              )}%)`}
+                        </td>
+                        <td className="ops-num">{row.publishedCount.toLocaleString('ja-JP')}</td>
+                        <td className="ops-num">{row.suspendedCount.toLocaleString('ja-JP')}</td>
+                        <td className="ops-num">{row.hiddenCount.toLocaleString('ja-JP')}</td>
+                        <td className="ops-num">
+                          {row.openQualityIssueCount.toLocaleString('ja-JP')}
+                          {row.openErrorQualityIssueCount > 0
+                            ? ` (⚠️ error ${row.openErrorQualityIssueCount})`
+                            : ''}
+                        </td>
+                        <td>{formatDate(row.lastFetchedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="ops-generated">集計時刻: {formatDate(ops.generatedAt)}</p>
+          </>
+        ) : null}
+        <button
+          type="button"
+          className="admin-action-button"
+          onClick={() => setOpsReloadNonce((n) => n + 1)}
+          disabled={opsLoading}
+        >
+          🔄 再読込
+        </button>
+      </section>
+
       <section className="settings-section" aria-labelledby="source-admin-heading">
         <h3 id="source-admin-heading" className="settings-heading">
           🛠️ データソース登録 / 編集
@@ -293,18 +430,20 @@ export function SettingsDialog({
             </label>
             <label className="admin-source-field">
               取得方式
+              {/* 選択肢は contracts の ACCESS_TYPES と一致させる（不一致値はサーバで VALIDATION_ERROR になる） */}
               <select
                 value={form.accessType}
                 onChange={(event) => updateForm('accessType', event.target.value as AccessType)}
                 disabled={isSubmitting}
               >
                 <option value="file">file</option>
-                <option value="http">http</option>
                 <option value="api">api</option>
+                <option value="manual">manual</option>
               </select>
             </label>
             <label className="admin-source-field">
               形式
+              {/* 選択肢は contracts の SOURCE_FORMATS と一致させる */}
               <select
                 value={form.format}
                 onChange={(event) => updateForm('format', event.target.value as SourceFormat)}
@@ -314,8 +453,6 @@ export function SettingsDialog({
                 <option value="csv">csv</option>
                 <option value="json">json</option>
                 <option value="xml">xml</option>
-                <option value="shape">shape</option>
-                <option value="pdf">pdf</option>
               </select>
             </label>
             <label className="admin-source-field">

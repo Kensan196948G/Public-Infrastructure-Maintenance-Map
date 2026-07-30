@@ -8,6 +8,7 @@ import type {
   AdminIngestionDetail,
   AdminIngestionList,
   AdminIngestionRun,
+  AdminOperationsSummary,
   AdminQualityIssueList,
   AdminQualityIssueRecord,
   AdminResolveQualityIssue,
@@ -194,6 +195,11 @@ export class ApiClient {
       this.fetchImpl,
       { credentials: 'include' },
     );
+  }
+
+  /** Ops-console dashboard rollup (Issue #52); requires admin/reviewer identity. */
+  getAdminOperations(): Promise<AdminOperationsSummary> {
+    return getJson<AdminOperationsSummary>(`${this.base}/admin/operations`, this.fetchImpl);
   }
 
   listAdminQualityIssues(limit = 50): Promise<AdminQualityIssueList> {

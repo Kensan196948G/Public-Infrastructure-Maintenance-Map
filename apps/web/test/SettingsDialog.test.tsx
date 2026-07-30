@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { HealthResponse, SourceInfo } from '@pimm/contracts';
+import type { AdminOperationsSummary, HealthResponse, SourceInfo } from '@pimm/contracts';
+import { ApiError } from '../src/api/client.js';
 import { SettingsDialog } from '../src/components/SettingsDialog.js';
 
 const health: HealthResponse = {
@@ -27,14 +28,55 @@ const source: SourceInfo = {
   publishedAssetCount: 10,
 };
 
+const opsSummary: AdminOperationsSummary = {
+  generatedAt: '2026-07-30T00:00:00.000Z',
+  recentRunWindow: 20,
+  totals: {
+    sourceCount: 1,
+    enabledSourceCount: 1,
+    publishedCount: 10,
+    suspendedCount: 0,
+    hiddenCount: 2,
+    openQualityIssueCount: 3,
+  },
+  sources: [
+    {
+      slug: 'sample-bridges',
+      name: 'サンプル橋梁データセット',
+      providerName: 'テスト提供機関',
+      enabled: true,
+      publishedCount: 10,
+      draftCount: 0,
+      suspendedCount: 0,
+      hiddenCount: 2,
+      lastRunAt: '2026-07-29T12:00:00.000Z',
+      lastRunStatus: 'succeeded',
+      recentRunCount: 5,
+      recentSucceededCount: 4,
+      openQualityIssueCount: 3,
+      openErrorQualityIssueCount: 1,
+      lastFetchedAt: '2026-07-29T12:00:00.000Z',
+      sourceUpdatedAt: null,
+    },
+  ],
+};
+
 function setup(overrides: Partial<Parameters<typeof SettingsDialog>[0]> = {}) {
+  // Every render fetches the ops rollup, so partial apiClient mocks from
+  // individual tests are merged on top of a working getAdminOperations.
+  const { apiClient: apiClientOverride, ...rest } = overrides;
+  const apiClient = {
+    getAdminOperations: vi.fn().mockResolvedValue(opsSummary),
+    ...(apiClientOverride as object | undefined),
+  } as never;
   const props = {
     health,
     sources: [source],
     isLoading: false,
     isError: false,
     onClose: vi.fn(),
-    ...overrides,
+    ...rest,
+    apiClient,
   };
   render(<SettingsDialog {...props} />);
   return props;
@@ -146,5 +188,23 @@ describe('SettingsDialog', () => {
     });
     expect(onSourcesChanged).toHaveBeenCalled();
     expect(await screen.findByText(/公開中資産 10 件を停止しました/)).toBeInTheDocument();
+  });
+
+  it('renders the ops dashboard rollup per source (Issue #52)', async () => {
+    setup();
+
+    expect(await screen.findByText(/✅ 成功/)).toBeInTheDocument();
+    expect(screen.getByText('4/5 (80%)')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: '成功率' })).toBeInTheDocument();
+    expect(screen.getByText(/3 \(⚠️ error 1\)/)).toBeInTheDocument();
+    expect(screen.getByText('未解決品質issue')).toBeInTheDocument();
+  });
+
+  it('shows a permission hint when the ops rollup is rejected by Access', async () => {
+    const getAdminOperations = vi.fn().mockRejectedValue(new ApiError(403, 'forbidden'));
+    setup({ apiClient: { getAdminOperations } as never });
+
+    expect(await screen.findByText(/admin \/ reviewer/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /再読込/ })).toBeEnabled();
   });
 });

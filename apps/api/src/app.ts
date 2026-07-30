@@ -286,6 +286,9 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     return next();
   });
 
+  // Read-only rollup for the ops console (Issue #52); reviewer roles may view.
+  admin.get('/operations', async (c) => c.json(await repo.getOperationsSummary()));
+
   admin.post('/sources', async (c) => {
     const identity = c.get('adminIdentity');
     if (!hasRole(identity, ['admin'])) return fail(c, 'FORBIDDEN', 'admin 権限が必要です');

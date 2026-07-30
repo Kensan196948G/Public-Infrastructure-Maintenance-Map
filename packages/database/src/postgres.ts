@@ -13,9 +13,11 @@ import type {
   AdminIngestionDetail,
   AdminIngestionList,
   AdminIngestionRun,
+  AdminOperationsSummary,
   AdminQualityIssueRecord,
   AdminQualityIssueList,
   AdminResolveQualityIssue,
+  AdminSourceOperations,
   AdminSourceResponse,
   AdminSourcePublication,
   AdminSuspendAsset,
@@ -29,7 +31,7 @@ import type {
   Geometry,
   SourceInfo,
 } from '@pimm/contracts';
-import { GeometrySchema } from '@pimm/contracts';
+import { GeometrySchema, OPERATIONS_RECENT_RUN_WINDOW, summarizeOperations } from '@pimm/contracts';
 import { decodeCursor, encodeCursor } from './cursor.js';
 import { representativePoint } from './geo.js';
 import type {
@@ -504,6 +506,99 @@ export class PostgresAssetRepository implements AssetRepository {
        ORDER BY created_at DESC, id
        LIMIT ${limit}`) as Row[];
     return { items: rows.map(rowToAdminIssue) };
+  }
+
+  async getOperationsSummary(): Promise<AdminOperationsSummary> {
+    // Four bounded aggregate queries (sources / assets / runs / issues) merged
+    // in JS — simpler to review than one mega-join and each uses an existing
+    // index. Disabled sources are included on purpose: this is the admin view.
+    const sourceRows = (await this.sql`
+      SELECT s.id, s.slug, s.name, s.provider_name, s.enabled,
+             (SELECT max(v.fetched_at) FROM dataset_versions v WHERE v.source_id = s.id) AS last_fetched_at,
+             (SELECT max(v.source_updated_at) FROM dataset_versions v WHERE v.source_id = s.id) AS source_updated_at
+        FROM data_sources s
+       ORDER BY s.slug`) as Row[];
+
+    // Buckets partition every record exactly once: quarantine (quality_status
+    // = 'hidden') wins over publication_status, matching the public API's
+    // visibility rule and AdminSourceOperationsSchema's documented semantics.
+    const assetRows = (await this.sql`
+      SELECT a.source_id,
+             count(*) FILTER (WHERE a.quality_status = 'hidden')::int AS hidden_count,
+             count(*) FILTER (WHERE a.quality_status <> 'hidden' AND a.publication_status = 'published')::int AS published_count,
+             count(*) FILTER (WHERE a.quality_status <> 'hidden' AND a.publication_status = 'draft')::int AS draft_count,
+             count(*) FILTER (WHERE a.quality_status <> 'hidden' AND a.publication_status = 'suspended')::int AS suspended_count
+        FROM infrastructure_assets a
+       GROUP BY a.source_id`) as Row[];
+
+    const runRows = (await this.sql`
+      SELECT t.source_id, t.status, t.started_at, t.rn
+        FROM (
+          SELECT r.source_id, r.status, r.started_at,
+                 row_number() OVER (PARTITION BY r.source_id ORDER BY r.started_at DESC, r.id DESC) AS rn
+            FROM ingestion_runs r
+        ) t
+       WHERE t.rn <= ${OPERATIONS_RECENT_RUN_WINDOW}`) as Row[];
+
+    const issueRows = (await this.sql`
+      SELECT t.source_id,
+             count(*)::int AS open_count,
+             count(*) FILTER (WHERE t.severity = 'error')::int AS error_count
+        FROM (
+          SELECT COALESCE(a.source_id, r.source_id) AS source_id, qi.severity
+            FROM quality_issues qi
+            LEFT JOIN infrastructure_assets a ON a.id = qi.asset_id
+            LEFT JOIN ingestion_runs r ON r.id = qi.run_id
+           WHERE qi.resolution_status = 'open'
+        ) t
+       WHERE t.source_id IS NOT NULL
+       GROUP BY t.source_id`) as Row[];
+
+    const assetsBySource = new Map(assetRows.map((r) => [String(r['source_id']), r]));
+    const issuesBySource = new Map(issueRows.map((r) => [String(r['source_id']), r]));
+    const runsBySource = new Map<
+      string,
+      { status: string; startedAt: string | null; rn: number }[]
+    >();
+    for (const r of runRows) {
+      const key = String(r['source_id']);
+      const entry = {
+        status: String(r['status']),
+        startedAt: toIso(r['started_at']),
+        rn: Number(r['rn']),
+      };
+      const list = runsBySource.get(key);
+      if (list) list.push(entry);
+      else runsBySource.set(key, [entry]);
+    }
+
+    const rows: AdminSourceOperations[] = sourceRows.map((s) => {
+      const id = String(s['id']);
+      const assets = assetsBySource.get(id);
+      const issues = issuesBySource.get(id);
+      const runs = (runsBySource.get(id) ?? []).sort((a, b) => a.rn - b.rn);
+      const finished = runs.filter((r) => r.status !== 'running');
+      const latest = runs[0];
+      return {
+        slug: String(s['slug']),
+        name: String(s['name']),
+        providerName: String(s['provider_name']),
+        enabled: Boolean(s['enabled']),
+        publishedCount: Number(assets?.['published_count'] ?? 0),
+        draftCount: Number(assets?.['draft_count'] ?? 0),
+        suspendedCount: Number(assets?.['suspended_count'] ?? 0),
+        hiddenCount: Number(assets?.['hidden_count'] ?? 0),
+        lastRunAt: latest?.startedAt ?? null,
+        lastRunStatus: latest ? (latest.status as AdminSourceOperations['lastRunStatus']) : null,
+        recentRunCount: finished.length,
+        recentSucceededCount: finished.filter((r) => r.status === 'succeeded').length,
+        openQualityIssueCount: Number(issues?.['open_count'] ?? 0),
+        openErrorQualityIssueCount: Number(issues?.['error_count'] ?? 0),
+        lastFetchedAt: toIso(s['last_fetched_at']),
+        sourceUpdatedAt: toIso(s['source_updated_at']),
+      };
+    });
+    return summarizeOperations(rows);
   }
 
   async resolveQualityIssue(

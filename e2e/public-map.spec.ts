@@ -47,6 +47,7 @@ test('opens the system settings source-management form', async ({ page }) => {
 
   const dialog = page.getByRole('dialog', { name: 'システム設定' });
   await expect(dialog).toContainText('データソース登録 / 編集');
+  await expect(dialog.getByRole('heading', { name: /運用ダッシュボード/ })).toBeVisible();
   await expect(dialog.getByLabel('対象')).toBeVisible();
   await expect(dialog.getByLabel('slug')).toBeVisible();
   await expect(dialog.getByRole('button', { name: /登録/ })).toBeVisible();
@@ -66,7 +67,8 @@ test('rejects unauthenticated source registration from the settings form', async
   await dialog.getByLabel('ライセンス', { exact: true }).fill('CC-BY-4.0');
   await dialog.getByRole('button', { name: /登録/ }).click();
 
-  await expect(dialog.getByRole('alert')).toContainText('401');
+  // 運用ダッシュボードの Access 案内 (role=alert) と区別するため管理フォーム側の文言で絞る。
+  await expect(dialog.getByRole('alert').filter({ hasText: '管理API' })).toContainText('401');
 });
 
 test('rejects unauthenticated source-wide suspension from the settings form', async ({ page }) => {
@@ -80,5 +82,5 @@ test('rejects unauthenticated source-wide suspension from the settings form', as
   await dialog.getByLabel('一括公開停止理由').fill('ライセンス変更のため再確認');
   await dialog.getByRole('button', { name: /選択ソースの公開資産を一括停止/ }).click();
 
-  await expect(dialog.getByRole('alert')).toContainText('401');
+  await expect(dialog.getByRole('alert').filter({ hasText: '管理API' })).toContainText('401');
 });

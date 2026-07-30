@@ -194,6 +194,33 @@ describe('admin lists', () => {
       items: [expect.objectContaining({ assetId: asset.id, ruleCode: 'Q007' })],
     });
   });
+
+  it('computes run success rate and attributes issues to sources in the ops rollup', async () => {
+    const asset = makeAsset({ name: '運用対象橋' });
+    const repo = repoWith([asset]);
+
+    await repo.startIngestion('sample-bridges', 'admin@example.com', 'req-ops-1');
+    await repo.startIngestion('sample-bridges', 'admin@example.com', 'req-ops-2');
+    // Creates an open warning issue linked to the asset (→ sample-bridges).
+    await repo.suspendAsset(asset.id, { reason: '運用検証' }, 'admin@example.com');
+
+    const summary = await repo.getOperationsSummary();
+    expect(summary.recentRunWindow).toBeGreaterThan(0);
+    expect(summary.sources.map((s) => s.slug)).toEqual(['disabled', 'sample-bridges']);
+
+    const bridges = summary.sources.find((s) => s.slug === 'sample-bridges')!;
+    // InMemory startIngestion finishes runs synchronously as 'succeeded'.
+    expect(bridges.recentRunCount).toBe(2);
+    expect(bridges.recentSucceededCount).toBe(2);
+    expect(bridges.lastRunStatus).toBe('succeeded');
+    expect(bridges.suspendedCount).toBe(1);
+    expect(bridges.openQualityIssueCount).toBe(1);
+    expect(bridges.openErrorQualityIssueCount).toBe(0);
+
+    const disabled = summary.sources.find((s) => s.slug === 'disabled')!;
+    expect(disabled.openQualityIssueCount).toBe(0);
+    expect(disabled.recentRunCount).toBe(0);
+  });
 });
 
 describe('exportAssets', () => {
