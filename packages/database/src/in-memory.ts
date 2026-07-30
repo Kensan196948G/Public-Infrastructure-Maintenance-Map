@@ -4,9 +4,11 @@ import type {
   AdminIngestionDetail,
   AdminIngestionList,
   AdminIngestionRun,
+  AdminOperationsSummary,
   AdminQualityIssueList,
   AdminQualityIssueRecord,
   AdminResolveQualityIssue,
+  AdminSourceOperations,
   AdminSourceResponse,
   AdminSourcePublication,
   AdminSuspendAsset,
@@ -18,6 +20,7 @@ import type {
   AssetType,
   SourceInfo,
 } from '@pimm/contracts';
+import { OPERATIONS_RECENT_RUN_WINDOW, summarizeOperations } from '@pimm/contracts';
 import { decodeCursor, encodeCursor } from './cursor.js';
 import { bboxIntersects, geometryBBox } from './geo.js';
 import type {
@@ -226,6 +229,64 @@ export class InMemoryAssetRepository implements AssetRepository {
     return Promise.resolve({
       items: this.qualityIssues.filter((q) => q.resolutionStatus === 'open').slice(0, limit),
     });
+  }
+
+  getOperationsSummary(): Promise<AdminOperationsSummary> {
+    // this.ingestionRuns is newest-first (unshift), so per-source lists stay ordered.
+    const runsBySlug = new Map<string, AdminIngestionRun[]>();
+    for (const run of this.ingestionRuns) {
+      const list = runsBySlug.get(run.sourceSlug);
+      if (list) list.push(run);
+      else runsBySlug.set(run.sourceSlug, [run]);
+    }
+    // An issue belongs to the source of its asset, else of its run — the same
+    // COALESCE(asset.source_id, run.source_id) rule as the Postgres backend.
+    const issueSourceSlug = (issue: AdminQualityIssueRecord): string | null => {
+      if (issue.assetId) {
+        return this.assets.find((a) => a.id === issue.assetId)?.source.slug ?? null;
+      }
+      if (issue.runId) {
+        return this.ingestionRuns.find((r) => r.id === issue.runId)?.sourceSlug ?? null;
+      }
+      return null;
+    };
+    const openIssues = this.qualityIssues.filter((q) => q.resolutionStatus === 'open');
+
+    const rows: AdminSourceOperations[] = this.sources.map((source) => {
+      let published = 0;
+      let draft = 0;
+      let suspended = 0;
+      let hidden = 0;
+      for (const asset of this.assets) {
+        if (asset.source.slug !== source.slug) continue;
+        if (asset.quality.status === 'hidden') hidden += 1;
+        else if (asset.publicationStatus === 'published') published += 1;
+        else if (asset.publicationStatus === 'draft') draft += 1;
+        else suspended += 1;
+      }
+      const recentRuns = (runsBySlug.get(source.slug) ?? []).slice(0, OPERATIONS_RECENT_RUN_WINDOW);
+      const finished = recentRuns.filter((r) => r.status !== 'running');
+      const issues = openIssues.filter((q) => issueSourceSlug(q) === source.slug);
+      return {
+        slug: source.slug,
+        name: source.name,
+        providerName: source.providerName,
+        enabled: source.enabled,
+        publishedCount: published,
+        draftCount: draft,
+        suspendedCount: suspended,
+        hiddenCount: hidden,
+        lastRunAt: recentRuns[0]?.startedAt ?? null,
+        lastRunStatus: recentRuns[0]?.status ?? null,
+        recentRunCount: finished.length,
+        recentSucceededCount: finished.filter((r) => r.status === 'succeeded').length,
+        openQualityIssueCount: issues.length,
+        openErrorQualityIssueCount: issues.filter((q) => q.severity === 'error').length,
+        lastFetchedAt: source.lastFetchedAt,
+        sourceUpdatedAt: source.sourceUpdatedAt,
+      };
+    });
+    return Promise.resolve(summarizeOperations(rows));
   }
 
   resolveQualityIssue(

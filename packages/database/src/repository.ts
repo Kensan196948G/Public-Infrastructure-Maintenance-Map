@@ -4,6 +4,7 @@ import type {
   AdminIngestionDetail,
   AdminIngestionList,
   AdminIngestionRun,
+  AdminOperationsSummary,
   AdminQualityIssueList,
   AdminResolveQualityIssue,
   AdminSourceResponse,
@@ -82,6 +83,8 @@ export interface AssetRepository {
   listIngestions(limit: number): Promise<AdminIngestionList>;
   getIngestionDetail(id: string): Promise<AdminIngestionDetail | null>;
   listQualityIssues(limit: number): Promise<AdminQualityIssueList>;
+  /** Ops-console dashboard (Issue #52): per-source publication / run / quality rollup. */
+  getOperationsSummary(): Promise<AdminOperationsSummary>;
   resolveQualityIssue(
     id: string,
     input: AdminResolveQualityIssue,
