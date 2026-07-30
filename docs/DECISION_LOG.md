@@ -114,3 +114,11 @@ secret、credential、connection string、PII は記載しない。
 - 影響: 公開資産に port 994 件が加わる(実測ドライラン: 994 fetched / 994 accepted / 0 quarantined / Q006×994 / 40都道府県)。schema 変更なし。
 - 検証: アダプタ unit + pipeline 契約テスト(Q002/Q008/エンティティ/緯度経度入替)、実URLドライラン全件成功。本番 ingest は PR #64 に手順・件数・rollback を明記して承認範囲で実行する。
 - Rollback: `POST /api/v1/admin/sources/port-c02/suspend-assets`(ソース単位公開停止・Q007監査付き)。非破壊。
+
+### DL-014: 本番 Web ビルドの API 接続先は .env.production で固定し、スモークでバンドル混入を検証する
+
+- 判断: `apps/web/.env.production`（公開値のみ・secret なし）をコミットして本番 API base を宣言的に固定し、`pnpm smoke:cloudflare` に `web-bundle-api-base`（配信中バンドルへ本番 API base が焼き込まれ、私有 IP/localhost 系 URL が混入していないことの検証）を追加する。
+- 理由: 2026-07-30、検証用 `apps/web/.env.local`（LAN URL）が本番ビルドへ混入し、本番ページが `http://192.168.0.185:8790` を参照する障害が発生（Mixed Content + 接続拒否で一覧・サマリ全滅。ローカル検証サーバ稼働中は本番ドメイン上でサンプルデータが表示される、より発見しにくい形でも顕在化）。Vite は `.env.production` を `.env.local` より優先するため、コミット済み宣言が構造的なガードになる（`.env.local` 残存状態での再ビルドで hash 一致のクリーンバンドル生成を実証済み）。
+- 影響: 以後の web 本番ビルドは環境変数の付け忘れでも正しい API base になる。スモークは 9 チェックへ増加し、同種の混入を deploy 直後に fail で検出する。
+- 検証: 修正デプロイ（Pages `407a6f8b`）で本番復旧を確認。`.env.local` を残したままのビルドがクリーンな `index-BGcv4vYg.js` を再現。新スモーク 9/9 PASS（本 PR の検証結果参照）。
+- Rollback: 本 PR revert（`.env.production` 削除でビルド時の明示環境変数運用へ戻る）。

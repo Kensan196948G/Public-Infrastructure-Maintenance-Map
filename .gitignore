@@ -12,6 +12,8 @@ build/
 .env
 .env.*
 !.env.example
+# 公開値のみ(本番 API base)。検証用 .env.local の本番ビルド混入を防ぐ宣言的ガード (DL-014)
+!apps/web/.env.production
 
 # Test artifacts
 coverage/

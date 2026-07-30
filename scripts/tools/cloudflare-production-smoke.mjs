@@ -192,6 +192,38 @@ async function checkWeb() {
   }
 }
 
+/**
+ * 2026-07-30 障害(DL-014)の再発防止: 配信中の JS バンドルへ本番 API base が
+ * 焼き込まれており、検証用 .env.local のローカル URL が混入していないことを検証する。
+ */
+async function checkWebBundleApiBase() {
+  const name = 'web-bundle-api-base';
+  try {
+    const shell = await fetch(WEB_URL);
+    const html = await shell.text();
+    const asset = (html.match(/assets\/(index-[\w-]+\.js)/) ?? [])[1];
+    if (!asset) {
+      fail(name, `${WEB_URL} の HTML から asset バンドル名を特定できませんでした`);
+      return;
+    }
+    const bundle = await (await fetch(`${WEB_URL}/assets/${asset}`)).text();
+    const contaminated = bundle.match(
+      /http:\/\/(?:192\.168\.[\d.:]+|10\.[\d.:]+|172\.(?:1[6-9]|2\d|3[01])\.[\d.:]+|localhost[\d.:]*|127\.[\d.:]+)[^"'\s]*/,
+    );
+    if (contaminated) {
+      fail(name, `${asset} に非本番の API base が混入しています: ${contaminated[0]}`);
+      return;
+    }
+    if (!bundle.includes(API_BASE_URL)) {
+      fail(name, `${asset} に本番 API base (${API_BASE_URL}) が焼き込まれていません`);
+      return;
+    }
+    pass(name, `${asset} uses the production API base (no local URL contamination)`);
+  } catch (error) {
+    fail(name, `bundle verification failed: ${error.message}`);
+  }
+}
+
 await checkZoneDelegation();
 checkWranglerAuth();
 
@@ -217,8 +249,10 @@ if (apiDnsOk) {
 
 if (webDnsOk) {
   await checkWeb();
+  await checkWebBundleApiBase();
 } else {
   skip('web-ui', 'Web hostname is not resolvable yet');
+  skip('web-bundle-api-base', 'Web hostname is not resolvable yet');
 }
 
 const failed = results.filter((result) => result.status === 'fail');
