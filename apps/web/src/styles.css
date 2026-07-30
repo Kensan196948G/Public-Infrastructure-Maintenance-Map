@@ -859,6 +859,67 @@ a {
   font-size: 13px;
 }
 
+/* 運用ダッシュボード (Issue #52) — 横幅超過時はテーブル側だけ横スクロール */
+.ops-table-wrap {
+  overflow-x: auto;
+  margin: 8px 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ops-table th,
+.ops-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.ops-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font-weight: 600;
+}
+
+.ops-table tbody tr:last-child th,
+.ops-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ops-table tbody th .mono {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ops-table .ops-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ops-badge-disabled {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-border);
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.ops-generated {
+  margin: 4px 0 8px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
 .admin-source-actions {
   display: flex;
   gap: 8px;
