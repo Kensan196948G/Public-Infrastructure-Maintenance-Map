@@ -10,11 +10,11 @@
 
 本サービスは **公開データのみ**を扱う Web GIS で、3 つのコンポーネントを個別にデプロイします。
 
-| # | コンポーネント | 実体 | 配信先 | デプロイ方法 |
-|---|---|---|---|---|
-| 🌐 Web | `apps/web` | React 19 + MapLibre + Vite（静的 `dist/`） | **Cloudflare Pages** | `vite build` → Pages へ配信（手動） |
-| ⚙️ API | `apps/api` | Hono / Worker（`src/worker.ts`, name=`pimm-api`） | **Cloudflare Workers** | `wrangler deploy --env production`（手動） |
-| 🗄️ DB | `migrations/` + 取込 | PostgreSQL + PostGIS | **Neon** | `pnpm db:migrate` / `pnpm ingest --publish`（手動） |
+| #      | コンポーネント       | 実体                                              | 配信先                 | デプロイ方法                                                                                                                                                                                                                                 |
+| ------ | -------------------- | ------------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🌐 Web | `apps/web`           | React 19 + MapLibre + Vite（静的 `dist/`）        | **Cloudflare Pages**   | `vite build` → Pages へ配信（手動）。API 接続先はコミット済み `apps/web/.env.production` が供給（Vite の優先順位で検証用 `.env.local` に勝つ）。デプロイ後は `pnpm smoke:cloudflare` の `web-bundle-api-base` で混入なしを必ず確認（DL-014） |
+| ⚙️ API | `apps/api`           | Hono / Worker（`src/worker.ts`, name=`pimm-api`） | **Cloudflare Workers** | `wrangler deploy --env production`（手動）                                                                                                                                                                                                   |
+| 🗄️ DB  | `migrations/` + 取込 | PostgreSQL + PostGIS                              | **Neon**               | `pnpm db:migrate` / `pnpm ingest --publish`（手動）                                                                                                                                                                                          |
 
 ### 🗺️ 構成図
 
@@ -36,37 +36,38 @@ flowchart LR
 
 ### 2.1 アカウント / 権限
 
-| 🔑 対象 | 用途 | 権限レベルの目安 |
-|---|---|---|
-| Cloudflare アカウント | Workers デプロイ・Pages 配信・WAF | Workers/Pages の編集権限 |
-| Cloudflare zone | `mirai-dx-platform.com` の DNS / Custom Domain | Zone DNS 編集権限 |
-| Neon アカウント | PostgreSQL + PostGIS 本番DB | 対象プロジェクトの接続文字列発行・ブランチ操作 |
-| GitHub | ソース・CI（`.github/workflows/ci.yml`） | リポジトリ書込 |
+| 🔑 対象               | 用途                                           | 権限レベルの目安                               |
+| --------------------- | ---------------------------------------------- | ---------------------------------------------- |
+| Cloudflare アカウント | Workers デプロイ・Pages 配信・WAF              | Workers/Pages の編集権限                       |
+| Cloudflare zone       | `mirai-dx-platform.com` の DNS / Custom Domain | Zone DNS 編集権限                              |
+| Neon アカウント       | PostgreSQL + PostGIS 本番DB                    | 対象プロジェクトの接続文字列発行・ブランチ操作 |
+| GitHub                | ソース・CI（`.github/workflows/ci.yml`）       | リポジトリ書込                                 |
 
 ### 2.2 ツール
 
-| 🛠️ ツール | バージョン制約 | 備考 |
-|---|---|---|
-| Node.js | **>= 22**（`package.json` engines） | pnpm workspace |
-| pnpm | **10.34.5**（`packageManager` 固定） | corepack 推奨 |
-| wrangler | Cloudflare Workers CLI | `apps/api/wrangler.toml` を使用 |
+| 🛠️ ツール | バージョン制約                       | 備考                            |
+| --------- | ------------------------------------ | ------------------------------- |
+| Node.js   | **>= 22**（`package.json` engines）  | pnpm workspace                  |
+| pnpm      | **10.34.5**（`packageManager` 固定） | corepack 推奨                   |
+| wrangler  | Cloudflare Workers CLI               | `apps/api/wrangler.toml` を使用 |
 
 ### 2.3 シークレット / 環境変数
 
-| 変数 | 設定場所 | 必須 | 説明 |
-|---|---|:--:|---|
-| 🔒 `DATABASE_URL` | **Worker Secret**（`wrangler secret put DATABASE_URL`）／取込時はローカル環境変数 | ✅ 本番 | Neon 接続文字列（`sslmode=require`）。未設定だとサンプルモードで公開されるため要注意 |
-| 🛡️ `REQUIRE_DATABASE_URL` | `wrangler.toml` `[env.production.vars]` に **`"true"` を宣言済み** | ✅ 本番 | `DATABASE_URL` 未設定時に fail-fast させ、サンプルデータの誤公開を防ぐ。secret 登録忘れで無言に無効化されないよう宣言的に固定済み（手動 `secret put` は不要） |
-| 🔑 `CLOUDFLARE_ACCESS_AUD` | **Worker Secret** | ✅ 本番 | Access アプリケーションの AUD タグ。Worker が JWT の `aud` 突合に使用する |
-| 🏛️ `CLOUDFLARE_ACCESS_TEAM_DOMAIN` | **Worker Secret**（例 `example.cloudflareaccess.com`） | ✅ 本番 | JWKS 取得元 兼 `iss` 突合先。**未設定だと管理APIは 500 でフェイルクローズ** |
-| 🚧 `REQUIRE_ACCESS_JWT` | `wrangler.toml` の**既定 `[vars]` と `[env.production.vars]` の両方**に `"true"` を宣言済み | ✅ 本番 | 上記2つが未設定でもヘッダ信頼へ退行させず 500 を返す安全弁。**既定 env でも `[vars]` に宣言済み** |
-| 🌐 `ALLOWED_ORIGIN` | `apps/api/wrangler.toml`（既定 `[vars]` は `"http://localhost:5173"`、`[env.production.vars]` は `"https://pimm.mirai-dx-platform.com"` を宣言済み） | ✅ 宣言済み | 既定はローカル Vite オリジン限定で wildcard を廃止。`--env production` を付け忘れた deploy でも全オリジン許可の API は公開されない（Issue #42 M-2） |
-| 🔢 `RATE_LIMIT_PER_MINUTE` | `wrangler.toml` `[vars]`（既定 `"120"`） | 任意 | in-isolate レート制限の分あたり上限 |
-| 🔐 `ADMIN_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの書込操作を許可するカンマ区切り許可リスト |
-| 👀 `REVIEWER_EMAILS` | Worker Secret / 環境変数 | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの閲覧・品質レビュー操作を許可するカンマ区切り許可リスト |
-| 🌐 `VITE_API_BASE_URL` | **Cloudflare Pages の環境変数**（ビルド時） | 本番 | `https://api.pimm.mirai-dx-platform.com/api/v1`。未設定なら同一オリジン `/api/v1` |
+| 変数                               | 設定場所                                                                                                                                             |     必須      | 説明                                                                                                                                                          |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | :-----------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🔒 `DATABASE_URL`                  | **Worker Secret**（`wrangler secret put DATABASE_URL`）／取込時はローカル環境変数                                                                    |    ✅ 本番    | Neon 接続文字列（`sslmode=require`）。未設定だとサンプルモードで公開されるため要注意                                                                          |
+| 🛡️ `REQUIRE_DATABASE_URL`          | `wrangler.toml` `[env.production.vars]` に **`"true"` を宣言済み**                                                                                   |    ✅ 本番    | `DATABASE_URL` 未設定時に fail-fast させ、サンプルデータの誤公開を防ぐ。secret 登録忘れで無言に無効化されないよう宣言的に固定済み（手動 `secret put` は不要） |
+| 🔑 `CLOUDFLARE_ACCESS_AUD`         | **Worker Secret**                                                                                                                                    |    ✅ 本番    | Access アプリケーションの AUD タグ。Worker が JWT の `aud` 突合に使用する                                                                                     |
+| 🏛️ `CLOUDFLARE_ACCESS_TEAM_DOMAIN` | **Worker Secret**（例 `example.cloudflareaccess.com`）                                                                                               |    ✅ 本番    | JWKS 取得元 兼 `iss` 突合先。**未設定だと管理APIは 500 でフェイルクローズ**                                                                                   |
+| 🚧 `REQUIRE_ACCESS_JWT`            | `wrangler.toml` の**既定 `[vars]` と `[env.production.vars]` の両方**に `"true"` を宣言済み                                                          |    ✅ 本番    | 上記2つが未設定でもヘッダ信頼へ退行させず 500 を返す安全弁。**既定 env でも `[vars]` に宣言済み**                                                             |
+| 🌐 `ALLOWED_ORIGIN`                | `apps/api/wrangler.toml`（既定 `[vars]` は `"http://localhost:5173"`、`[env.production.vars]` は `"https://pimm.mirai-dx-platform.com"` を宣言済み） |  ✅ 宣言済み  | 既定はローカル Vite オリジン限定で wildcard を廃止。`--env production` を付け忘れた deploy でも全オリジン許可の API は公開されない（Issue #42 M-2）           |
+| 🔢 `RATE_LIMIT_PER_MINUTE`         | `wrangler.toml` `[vars]`（既定 `"120"`）                                                                                                             |     任意      | in-isolate レート制限の分あたり上限                                                                                                                           |
+| 🔐 `ADMIN_EMAILS`                  | Worker Secret / 環境変数                                                                                                                             | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの書込操作を許可するカンマ区切り許可リスト                                                                  |
+| 👀 `REVIEWER_EMAILS`               | Worker Secret / 環境変数                                                                                                                             | 管理API利用時 | Cloudflare Accessで認証されたメールのうち、管理APIの閲覧・品質レビュー操作を許可するカンマ区切り許可リスト                                                    |
+| 🌐 `VITE_API_BASE_URL`             | **Cloudflare Pages の環境変数**（ビルド時）                                                                                                          |     本番      | `https://api.pimm.mirai-dx-platform.com/api/v1`。未設定なら同一オリジン `/api/v1`                                                                             |
 
 > ✅ **実装状況の注記**
+>
 > - Web 向け環境変数は `VITE_API_BASE_URL`（`apps/web/src/api/client.ts`）に統一済みです。Pages 側でも `VITE_API_BASE_URL` を設定してください。
 > - `REQUIRE_DATABASE_URL`（未設定時 fail-fast）と、サンプルモード転落時の `sample_mode_fallback` 警告ログは実装済みです。本番では `REQUIRE_DATABASE_URL=true` を設定し、DB未接続のままサンプルデータを公開しない運用にしてください。
 >
@@ -77,10 +78,10 @@ flowchart LR
 
 ### 2.4 Cloudflare 本番ドメイン
 
-| 用途 | Hostname | 設定場所 |
-|---|---|---|
-| 🌐 WebUI | `pimm.mirai-dx-platform.com` | Cloudflare Pages custom domain |
-| ⚙️ API | `api.pimm.mirai-dx-platform.com` | `apps/api/wrangler.toml` production env custom domain |
+| 用途     | Hostname                         | 設定場所                                              |
+| -------- | -------------------------------- | ----------------------------------------------------- |
+| 🌐 WebUI | `pimm.mirai-dx-platform.com`     | Cloudflare Pages custom domain                        |
+| ⚙️ API   | `api.pimm.mirai-dx-platform.com` | `apps/api/wrangler.toml` production env custom domain |
 
 > ⚠️ ドメイン/route変更は本番影響を持つため、`docs/CLOUDFLARE_DOMAIN_APPROVAL.md` のApproval PRで承認された範囲だけ実行します。
 
@@ -90,18 +91,18 @@ flowchart LR
 
 デプロイ着手の前に、以下をすべて満たすことを確認します（未達なら着手しない）。
 
-| # | 項目 | 確認方法 | 状態基準 |
-|---|---|---|---|
-| ✅ | CI success | GitHub Actions `ci.yml` が緑 | 3 ジョブ success |
-| ✅ | lint / format / typecheck | `pnpm lint` / `pnpm format:check` / `pnpm typecheck` | error 0 |
-| ✅ | テスト | `pnpm test`（vitest, 全パッケージ） | 全 pass |
-| ✅ | ビルド | `pnpm build`（`-r`, Web の `dist/` 生成） | 成功 |
-| 🔐 | シークレットスキャン | CI `secret-scan`（gitleaks） | 検出 0 |
-| 🔐 | 依存脆弱性スキャン | CI `dependency-scan`（osv-scanner v2.3.8） | Critical 0 |
-| 🗄️ | マイグレーション適用計画 | 未適用 `migrations/*.sql` を棚卸し（`0001_init.sql` / `0002_cross_column_checks.sql`） | 適用対象を把握 |
-| 🔁 | ロールバック確認 | §5 の手順・直前デプロイ・Neon 復元点を確認 | 手段を用意 |
-| 📄 | README / docs 最新 | 利用機能・手順の差分反映 | 反映済み |
-| ⚠️ | 受入基準の現状 | §8 の既知制約を確認（Cloudflare 本番スモーク #38 等） | リスク合意済み |
+| #   | 項目                      | 確認方法                                                                               | 状態基準         |
+| --- | ------------------------- | -------------------------------------------------------------------------------------- | ---------------- |
+| ✅  | CI success                | GitHub Actions `ci.yml` が緑                                                           | 3 ジョブ success |
+| ✅  | lint / format / typecheck | `pnpm lint` / `pnpm format:check` / `pnpm typecheck`                                   | error 0          |
+| ✅  | テスト                    | `pnpm test`（vitest, 全パッケージ）                                                    | 全 pass          |
+| ✅  | ビルド                    | `pnpm build`（`-r`, Web の `dist/` 生成）                                              | 成功             |
+| 🔐  | シークレットスキャン      | CI `secret-scan`（gitleaks）                                                           | 検出 0           |
+| 🔐  | 依存脆弱性スキャン        | CI `dependency-scan`（osv-scanner v2.3.8）                                             | Critical 0       |
+| 🗄️  | マイグレーション適用計画  | 未適用 `migrations/*.sql` を棚卸し（`0001_init.sql` / `0002_cross_column_checks.sql`） | 適用対象を把握   |
+| 🔁  | ロールバック確認          | §5 の手順・直前デプロイ・Neon 復元点を確認                                             | 手段を用意       |
+| 📄  | README / docs 最新        | 利用機能・手順の差分反映                                                               | 反映済み         |
+| ⚠️  | 受入基準の現状            | §8 の既知制約を確認（Cloudflare 本番スモーク #38 等）                                  | リスク合意済み   |
 
 > 💡 CI にデプロイジョブは**ありません**（`ci.yml` は quality / secret-scan / dependency-scan の 3 ジョブのみ）。**本番反映は 100% 手動**です。
 
@@ -204,12 +205,12 @@ pnpm smoke:cloudflare:preflight
 
 ## 🔁 5. ロールバック手順
 
-| 対象 | 手段 | 手順概要 |
-|---|---|---|
-| ⚙️ Workers | 直前デプロイへ戻す | Cloudflare ダッシュボード（Workers → Deployments）で直前バージョンへ Rollback、または直前コミットから再 `wrangler deploy --env production` |
-| 🌐 Pages | 直前デプロイへ切替 | Pages のデプロイ履歴から直前デプロイを **Rollback / 本番昇格** |
-| 🗄️ DB | **前方のみ** | マイグレーションは前方専用（down なし）。破壊的変更はせず、**是正用の新規 `migrations/00NN_*.sql` を追加**して `pnpm db:migrate` で前進修正 |
-| 🗄️ DB（データ復旧） | Neon の復元機能 | 誤取込・破損時は **Neon のブランチ作成 / PITR（Point-in-Time Restore）** で健全時点を復元し、接続文字列を切替 |
+| 対象                | 手段               | 手順概要                                                                                                                                    |
+| ------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| ⚙️ Workers          | 直前デプロイへ戻す | Cloudflare ダッシュボード（Workers → Deployments）で直前バージョンへ Rollback、または直前コミットから再 `wrangler deploy --env production`  |
+| 🌐 Pages            | 直前デプロイへ切替 | Pages のデプロイ履歴から直前デプロイを **Rollback / 本番昇格**                                                                              |
+| 🗄️ DB               | **前方のみ**       | マイグレーションは前方専用（down なし）。破壊的変更はせず、**是正用の新規 `migrations/00NN_*.sql` を追加**して `pnpm db:migrate` で前進修正 |
+| 🗄️ DB（データ復旧） | Neon の復元機能    | 誤取込・破損時は **Neon のブランチ作成 / PITR（Point-in-Time Restore）** で健全時点を復元し、接続文字列を切替                               |
 
 - スキーマは「戻す」のではなく「新しいマイグレーションで直す」。`schema_migrations` の整合を崩さないこと。
 - Neon PITR/ブランチ復元を行う場合、`DATABASE_URL`（Worker Secret）の向き先変更＝実質 API の切替になるため、切替後に §4③ の検証を再実施。
@@ -228,12 +229,12 @@ pnpm smoke:cloudflare:preflight
 
 ### 6.2 症状別
 
-| 症状 | 想定原因 | 対応 |
-|---|---|---|
-| 公開データが空/古い/明らかに少ない | `DATABASE_URL` 未設定/誤設定で **サンプルモードにフォールバック** | Worker Secret を再設定し `wrangler deploy --env production`。件数を再検証 |
-| 429 が多発 | レート制限（in-isolate + 本番は Cloudflare WAF） | 正常な保護。恒常的なら `RATE_LIMIT_PER_MINUTE` / WAF ルールを調整 |
-| 5xx 増加 | `unhandled_error` ログに詳細 | ログの `request_id` で追跡し原因修正 → 再デプロイ |
-| 取込失敗 | 上流データ変化・品質チェック不合格 | dry-run で再現・原因除去後、**同一ソースを `--publish` 再実行**（既存公開データは非破壊） |
+| 症状                               | 想定原因                                                          | 対応                                                                                      |
+| ---------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 公開データが空/古い/明らかに少ない | `DATABASE_URL` 未設定/誤設定で **サンプルモードにフォールバック** | Worker Secret を再設定し `wrangler deploy --env production`。件数を再検証                 |
+| 429 が多発                         | レート制限（in-isolate + 本番は Cloudflare WAF）                  | 正常な保護。恒常的なら `RATE_LIMIT_PER_MINUTE` / WAF ルールを調整                         |
+| 5xx 増加                           | `unhandled_error` ログに詳細                                      | ログの `request_id` で追跡し原因修正 → 再デプロイ                                         |
+| 取込失敗                           | 上流データ変化・品質チェック不合格                                | dry-run で再現・原因除去後、**同一ソースを `--publish` 再実行**（既存公開データは非破壊） |
 
 > ⚠️ **サンプルモード転落の検知**: `DATABASE_URL` が未設定で `REQUIRE_DATABASE_URL` も無効な環境では、API はローカル開発用のサンプルモードで起動します。本番では `REQUIRE_DATABASE_URL=true` による fail-fast を必須とし、あわせて `/api/v1/assets/summary`・`/api/v1/sources` の件数突合で接続先と公開件数を確認してください。
 
@@ -243,12 +244,12 @@ pnpm smoke:cloudflare:preflight
 
 ### 7.1 監視項目
 
-| 📈 指標 | 取得元 | 目安 |
-|---|---|---|
-| 取込成功/失敗 | `pnpm ingest` の実行結果・品質レポート | 失敗は都度対応 |
-| データ鮮度 | 取込日時・`/api/v1/sources` | ソース更新周期に追随 |
-| API 健全性 | `/api/v1/health` + `request`/`unhandled_error` ログ | 5xx・遅延を監視 |
-| レート制限 | 429 発生状況（ログ） | 異常スパイクを監視 |
+| 📈 指標       | 取得元                                              | 目安                 |
+| ------------- | --------------------------------------------------- | -------------------- |
+| 取込成功/失敗 | `pnpm ingest` の実行結果・品質レポート              | 失敗は都度対応       |
+| データ鮮度    | 取込日時・`/api/v1/sources`                         | ソース更新周期に追随 |
+| API 健全性    | `/api/v1/health` + `request`/`unhandled_error` ログ | 5xx・遅延を監視      |
+| レート制限    | 429 発生状況（ログ）                                | 異常スパイクを監視   |
 
 ### 7.2 定期作業
 
@@ -268,12 +269,12 @@ Cloudflare Access で `admin` 権限を持つ運用者が、システム設定�
 
 ## ⚠️ 8. 既知の制約とリリース判断
 
-| Issue | 内容 | 本番判断への影響 |
-|---|---|---|
-| 🚀 #38 | Cloudflare custom domain / Access 本番スモーク未完了 | `pimm.mirai-dx-platform.com` / `api.pimm.mirai-dx-platform.com` のDNS、Cloudflare Access、公開API/Webを `pnpm smoke:cloudflare` で検証する。本番デプロイ直前の停止条件 |
-| 🧪 #12 | E2E（Playwright）**公開地図の主要回帰を導入済み** | `pnpm test:e2e` / CI `🗺️ Playwright E2E` で初期表示・検索・詳細表示・種別フィルタを検証。公開前は手動スモークテスト（§4④）も併用 |
-| 🗄️ #8 | `PostgresAssetRepository` の PostGIS 統合テストを CI に導入 | 読取経路の公開可視性・検索・bbox・`getAssetById` 契約は `🗄️ PostGIS integration` で検証。Neon dev branch を使った publish 一気通貫は #5/#16 で継続 |
-| 🔄 #5 / #16 | Publish 経路の PostGIS 統合テストを CI に導入 | `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証。実 Neon への流し込みは本 runbook の手動手順で実施 |
+| Issue       | 内容                                                        | 本番判断への影響                                                                                                                                                                   |
+| ----------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🚀 #38      | Cloudflare custom domain / Access 本番スモーク未完了        | `pimm.mirai-dx-platform.com` / `api.pimm.mirai-dx-platform.com` のDNS、Cloudflare Access、公開API/Webを `pnpm smoke:cloudflare` で検証する。本番デプロイ直前の停止条件             |
+| 🧪 #12      | E2E（Playwright）**公開地図の主要回帰を導入済み**           | `pnpm test:e2e` / CI `🗺️ Playwright E2E` で初期表示・検索・詳細表示・種別フィルタを検証。公開前は手動スモークテスト（§4④）も併用                                                   |
+| 🗄️ #8       | `PostgresAssetRepository` の PostGIS 統合テストを CI に導入 | 読取経路の公開可視性・検索・bbox・`getAssetById` 契約は `🗄️ PostGIS integration` で検証。Neon dev branch を使った publish 一気通貫は #5/#16 で継続                                 |
+| 🔄 #5 / #16 | Publish 経路の PostGIS 統合テストを CI に導入               | `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証。実 Neon への流し込みは本 runbook の手動手順で実施 |
 
 ### 🚦 リリース判断（Deploy Gate）
 
