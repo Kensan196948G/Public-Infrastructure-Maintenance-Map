@@ -118,12 +118,15 @@ describe('buildSampleSeed', () => {
 });
 
 describe('registry', () => {
-  it('lists eight adapters and resolves by slug', () => {
-    expect(
-      listAdapters()
-        .map((a) => a.descriptor.slug)
-        .sort(),
-    ).toEqual([
+  it('lists all adapters (8 static + 47 river prefectures) and resolves by slug', () => {
+    const slugs = listAdapters()
+      .map((a) => a.descriptor.slug)
+      .sort();
+    const riverSlugs = slugs.filter((s) => s.startsWith('river-w05-'));
+    expect(riverSlugs).toHaveLength(47);
+    expect(riverSlugs[0]).toBe('river-w05-01');
+    expect(riverSlugs[46]).toBe('river-w05-47');
+    expect(slugs.filter((s) => !s.startsWith('river-w05-'))).toEqual([
       'bridge-kumamoto',
       'facility-osaka-park',
       'facility-osaka-toilet',
