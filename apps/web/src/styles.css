@@ -859,6 +859,24 @@ a {
   font-size: 13px;
 }
 
+/* 🔄 データ更新ボタン(ヘッダ) */
+.data-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.data-refresh .header-link:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.data-refresh-time {
+  color: var(--color-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 /* 運用ダッシュボード (Issue #52) — 横幅超過時はテーブル側だけ横スクロール */
 .ops-table-wrap {
   overflow-x: auto;

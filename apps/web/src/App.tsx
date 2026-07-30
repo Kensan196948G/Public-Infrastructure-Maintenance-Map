@@ -4,6 +4,7 @@ import type { AssetSummary, AssetType, BBox, QualityStatus } from '@pimm/contrac
 import { useAssetDetail, useAssets, useHealth, useSources, useSummary } from './api/hooks.js';
 import { prefectureName } from './lib/prefectures.js';
 import { AuditLogDialog } from './components/AuditLogDialog.js';
+import { DataRefreshButton } from './components/DataRefreshButton.js';
 import { DisclaimerBanner } from './components/DisclaimerBanner.js';
 import { DetailPanel } from './components/DetailPanel.js';
 import { FilterPanel } from './components/FilterPanel.js';
@@ -149,6 +150,7 @@ export function App() {
             🔍 検索
           </button>
         </form>
+        <DataRefreshButton />
         <button type="button" className="header-link" onClick={() => setNoticeOpen(true)}>
           ℹ️ 利用上の注意
         </button>
