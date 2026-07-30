@@ -3,6 +3,7 @@ import { createBridgeKumamotoAdapter } from './adapters/bridge-kumamoto.js';
 import { createFacilityOsakaParkAdapter } from './adapters/facility-osaka-park.js';
 import { createFacilityOsakaToiletAdapter } from './adapters/facility-osaka-toilet.js';
 import { createPortC02Adapter } from './adapters/port-c02.js';
+import { createRiverW05Adapter, RIVER_W05_YEARS } from './adapters/river-w05.js';
 import { createRoadN13Adapter } from './adapters/road-n13.js';
 import { createSampleBridgesAdapter } from './adapters/sample-bridges.js';
 import { createSampleFacilitiesAdapter } from './adapters/sample-facilities.js';
@@ -19,6 +20,10 @@ export function listAdapters(): SourceAdapter<never>[] {
     createBridgeKumamotoAdapter(),
     createRoadN13Adapter(),
     createPortC02Adapter(),
+    // 河川 W05 は都道府県別ソース(47件)。年度対応表から slug river-w05-XX を生成する。
+    ...Object.keys(RIVER_W05_YEARS)
+      .sort()
+      .map((prefCode) => createRiverW05Adapter(prefCode)),
   ] as SourceAdapter<never>[];
 }
 
