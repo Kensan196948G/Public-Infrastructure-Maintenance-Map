@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AdminOperationsSummarySchema,
   AssetSearchQuerySchema,
   AssetTypeSchema,
   BBoxParamSchema,
@@ -8,12 +9,15 @@ import {
   isExportAllowed,
   LonLatTupleSchema,
   MAX_BBOX_AREA_DEG2,
+  OPERATIONS_RECENT_RUN_WINDOW,
   PositionSchema,
   problem,
   ProblemDetailsSchema,
   QUALITY_RULES,
   SourceInfoSchema,
+  summarizeOperations,
 } from '../src/index.js';
+import type { AdminSourceOperations } from '../src/index.js';
 
 describe('enums', () => {
   it('accepts known asset types', () => {
@@ -196,5 +200,60 @@ describe('SourceInfoSchema', () => {
     expect(SourceInfoSchema.safeParse({ ...base, licenseUrl: 'javascript:alert(1)' }).success).toBe(
       false,
     );
+  });
+});
+
+describe('admin operations summary (Issue #52)', () => {
+  const row = (overrides: Partial<AdminSourceOperations>): AdminSourceOperations => ({
+    slug: 'sample-bridges',
+    name: 'サンプル橋梁',
+    providerName: 'サンプル提供者',
+    enabled: true,
+    publishedCount: 10,
+    draftCount: 1,
+    suspendedCount: 2,
+    hiddenCount: 3,
+    lastRunAt: '2026-07-30T00:00:00.000Z',
+    lastRunStatus: 'succeeded',
+    recentRunCount: 5,
+    recentSucceededCount: 4,
+    openQualityIssueCount: 6,
+    openErrorQualityIssueCount: 2,
+    lastFetchedAt: '2026-07-29T00:00:00.000Z',
+    sourceUpdatedAt: null,
+    ...overrides,
+  });
+
+  it('sums totals across sources and stamps the run window', () => {
+    const summary = summarizeOperations([
+      row({}),
+      row({ slug: 'z-disabled', enabled: false, publishedCount: 0, openQualityIssueCount: 1 }),
+    ]);
+    expect(AdminOperationsSummarySchema.parse(summary)).toBeTruthy();
+    expect(summary.recentRunWindow).toBe(OPERATIONS_RECENT_RUN_WINDOW);
+    expect(summary.totals).toEqual({
+      sourceCount: 2,
+      enabledSourceCount: 1,
+      publishedCount: 10,
+      suspendedCount: 4,
+      hiddenCount: 6,
+      openQualityIssueCount: 7,
+    });
+  });
+
+  it('rejects negative counts and unknown run statuses', () => {
+    const valid = summarizeOperations([row({})]);
+    expect(
+      AdminOperationsSummarySchema.safeParse({
+        ...valid,
+        sources: [row({ publishedCount: -1 })],
+      }).success,
+    ).toBe(false);
+    expect(
+      AdminOperationsSummarySchema.safeParse({
+        ...valid,
+        sources: [{ ...row({}), lastRunStatus: 'exploded' }],
+      }).success,
+    ).toBe(false);
   });
 });
