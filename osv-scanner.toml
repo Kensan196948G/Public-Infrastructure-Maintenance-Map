@@ -1,0 +1,14 @@
+# osv-scanner 例外設定（CI: .github/workflows/ci.yml dependency-scan が自動読込）
+# 例外は必ず理由と ignoreUntil（再評価期限）をセットで記録すること。
+
+[[IgnoredVulns]]
+id = "GHSA-mh99-v99m-4gvg"
+ignoreUntil = 2026-10-31T00:00:00Z
+reason = """
+brace-expansion DoS。lockfile 上の 1.x 系の唯一の依存元は minimatch@3（eslint/glob 等の
+dev/CI ツールチェーン）で、本番成果物（apps/api/dist/worker.js・apps/web/dist）には
+含まれないことを grep で実証済み（DL-012）。advisory の fixed は 5.0.8 のみだが、
+minimatch@3 は brace-expansion v5 の named-exports CJS と非互換（expand is not a function を
+実測）で強制昇格はツールチェーンを破壊する。実緩和として maintenance backport 1.1.17 適用済み。
+期限までに upstream (minimatch/eslint) の更新を再確認する。
+"""

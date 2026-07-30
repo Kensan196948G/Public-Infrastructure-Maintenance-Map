@@ -98,3 +98,11 @@ secret、credential、connection string、PII は記載しない。
 - 影響: 管理API配下（Cloudflare Access + admin/reviewer allowlist）の read-only エンドポイントが 1 本増える。公開APIと DB スキーマは不変。件数バケットは「隔離（quality hidden）＞公開/下書き/停止」の順で各資産を一意に分類し、公開件数は公開APIの可視性ルールと一致させる。成功率の窓は `OPERATIONS_RECENT_RUN_WINDOW = 20` 実行に固定。
 - 検証: contracts unit、repository contract（InMemory 実測 / Postgres は同一テストを integration で共有）、API test（401/認可/合計整合）、SettingsDialog test。Postgres 実 SQL は Neon 上で read-only 実行により構文検証。
 - Rollback: 該当 PR を revert（migration なし・データ影響なし）。
+
+### DL-012: brace-expansion GHSA-mh99-v99m-4gvg は dev ツールチェーン限定として scanner 例外で扱う
+
+- 判断: OSV High (CVSS 7.5, DoS) の brace-expansion 1.x 系は、maintenance backport 1.1.17 へ更新した上で、`osv-scanner.toml` の IgnoredVulns（期限 2026-10-31）として扱う。5.x 系は 5.0.9（修正版）へ更新済み。
+- 理由: advisory の fixed は 5.0.8 のみで 1.x に認定修正が無い。lockfile 上の 1.x の唯一の依存元は minimatch@3（eslint/glob 等の dev/CI ツールチェーン）で、pnpm override による 1→5 強制昇格は `expand is not a function` を実測しツールチェーンを破壊する。本番成果物（worker bundle / web assets）に brace-expansion が含まれないことを grep で実証しており、本番暴露はない。
+- 影響: CI の依存脆弱性スキャンは本 advisory のみ期限付きで無視する。新規 advisory は従来どおり fail する。
+- 検証: `grep -c 'brace-expansion\|braceExpand' apps/api/dist/worker.js` = 0、`apps/web/dist/assets/*.js` = 0。lint / test / build 全 PASS（1.1.17 適用後）。
+- Rollback: `osv-scanner.toml` の当該エントリ削除。期限到来時に minimatch/eslint の upstream 更新を再確認し、恒久解消できれば即削除する。
