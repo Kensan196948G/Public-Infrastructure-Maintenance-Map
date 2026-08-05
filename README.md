@@ -252,20 +252,21 @@ flowchart LR
 | 公開データソース選定・アダプター実装 | ✅ 実データ4ソース・3種別（公共施設／橋梁／道路） |
 | 実データ取込→公開DB反映（Phase 2） | ✅ 取込→Publish経路を実装（`ingest --publish`）。CI の disposable PostGIS で publish→公開Repository参照を検証 |
 | 管理API・管理画面（UI-05/06/07・FR-13/14） | ✅ 管理APIゲート・基本操作・取込履歴一覧・未解決品質issue一覧・監査ログ画面からの取込記録/詳細確認/品質issue解決・詳細画面からの個別資産公開停止・システム設定からのソース登録/編集とソース単位の公開一括停止を実装済（Issue #4 完了） |
-| UAT・本番公開判定 | ✅ 2026-07-23 に v0.1.0 を本番公開（PR #46 承認範囲）。`pnpm smoke:cloudflare` 全 PASS。Access 認証込みの管理経路開通は Issue #38 で継続 |
+| UAT・本番公開判定 | ✅ 2026-07-23 に v0.1.0 を本番公開（PR #46 承認範囲）。2026-08-05 に機能統合 3 PR（#68/#70/#71）と geocode 修正 2 PR（#72/#73）を main へ統合し、API を本番再デプロイ・フルスモーク 9/9 成功 |
 
-### 🚦 Release Gate（2026-07-23）
+### 🚦 Release Gate（2026-08-05）
 
 | 項目 | 状態 |
 | --- | --- |
-| ✅ main CI | 最新 main run `29682975249` で lint / typecheck / test / build、Playwright E2E、PostGIS integration、publish PostGIS integration、secret scan、dependency scan が成功（テスト 289 pass / 17 skip） |
-| ✅ 管理UI Scope | PR #34 / #36 / #37 を main へ統合済み。Issue #4 は完了・close 済み |
-| 🔐 管理API認証 | PR #40 で Worker 側の Cloudflare Access JWT 検証を実装。詐称可能な `CF-Access-Authenticated-User-Email` ヘッダへの依存を解消し、`workers_dev = false` を既定・production 双方に宣言 |
-| 🔒 本番前ハードニング | Issue [#42](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/issues/42) の M-2（既定 CORS を wildcard からローカル限定へ）/ M-3（publish 失敗ログを name・message のみへ + 回帰テスト）/ L-1（本番ビルドの sourcemap 無効化）を実装済み |
-| 🧪 本番スモーク | Issue [#38](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/issues/38) で `pimm.mirai-dx-platform.com` / `api.pimm.mirai-dx-platform.com` のDNS、Cloudflare Access、公開API/Webを検証 |
-| ✅ 本番リリース | **2026-07-23 に v0.1.0 を初回本番リリース済み**（PR #46 の承認範囲内で実行）。Web: `https://pimm.mirai-dx-platform.com` / API: `https://api.pimm.mirai-dx-platform.com/api/v1` / DB: Neon `pimm-production`（migration 0001+0002 適用、実データ 4 ソース 5,977 件 publish 済み） |
+| ✅ main CI | PR #68 / #70 / #71 / #72 / #73 すべて lint / typecheck / test / build、Playwright E2E、PostGIS integration、publish PostGIS integration、secret scan、dependency scan 成功 |
+| ✅ 機能統合 | 実形状地図・クラスタリング・出力/共有/報告UI・ページング（#68）、自動取込Cron・検索強化・keyset・OpenAPI・管理UI認証ゲート（#70）、W05自動化・OpenAPI Zod生成・市町村絞り込み・管理E2E（#71） |
+| ✅ geocode 本番修正 | GSI エンドポイント URL 修正（#72）＋実レスポンス形状（素の Feature 配列）対応（#73）。本番で `東京都千代田区` → 座標＋`13101` を確認 |
+| ✅ 本番スモーク | `pnpm smoke:cloudflare` 9/9 PASS（zone / wrangler auth / DNS / health / summary / admin 302 / web shell / bundle API base） |
+| ✅ 本番リリース | **API を 2026-08-05 に再デプロイ**（Version `771d94f2`）。Web は Pages `pimm-web` に前回デプロイが配信中（現行 main より古いため要再配信） |
 
-> 📌 **2026-07-23 実測（リリース後）**: Worker `pimm-api-production`（version `4008e051`）と Pages `pimm-web` が custom domain で稼働。API `/health` は `ok`、`/assets/summary` は DB と一致する 5,977 件を返却。管理APIは Cloudflare Access アプリ未作成のため設計通りフェイルクローズ（DL-008、Issue #38 で継続）。
+> 📌 **2026-08-05 実測**: API `/health` 200、`/assets/summary` 8,011 件、`/geocode` は GSI 連携で座標＋市区町村コード返却、`/suggest?q=橋` は実データ候補を返却、`/export?format=csv` はライセンス制御付き CSV を返却、管理 API は未認証 302（Cloudflare Access）で保護。セキュリティヘッダ（CSP / HSTS / nosniff / Referrer-Policy）を確認済み。Cron Trigger（毎時）は本番登録済み。 |
+
+> ⚠️ **未解決の運用ギャップ（ユーザー対応事項）**: ① Cloudflare API トークンに Pages: Edit 権限がなく Web 再配信不可、② GitHub Actions Secrets に `DATABASE_URL` 未設定で W05 週次取込未実行、③ main ブランチ保護未設定、④ 外部死活監視・アラート通知未設定。詳細は [docs/operations/](./docs/operations/README.md) を参照。 |
 
 本番デプロイ前の機械確認は `pnpm smoke:cloudflare` で行います。Cloudflare認証またはサブドメインDNS反映前の事前確認だけなら `pnpm smoke:cloudflare:preflight` を使用します。
 
@@ -305,6 +306,7 @@ flowchart LR
 - `Public-Infrastructure-Maintenance-Map_要件定義書_20260716.md` — 何を、なぜ、どこまで実現するか
 - `Public-Infrastructure-Maintenance-Map_詳細設計仕様書_20260716.md` — どのような構造・データ・処理で実装するか
 - `docs/DECISION_LOG.md` — CTO代行/Supervisor判断による暫定前提・技術判断・運用判断の記録
+- `docs/operations/` — 運用ハンドブック（監視/SLO、バックアップ/復旧、インシデント対応、運用台帳、保守、権限棚卸し、予算）
 
 ## ⚖️ 利用上の注意
 

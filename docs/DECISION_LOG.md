@@ -180,3 +180,21 @@ secret、credential、connection string、PII は記載しない。
 - 影響: `/geocode` レスポンスにフィールド2件追加。Web は URL（`muni`/`muniN`）に保持し、解除チップ・エクスポート条件へ反映。
 - 検証: contracts マッチャー単体、API テスト（fetch スタブ）、url-state 往復テスト。
 - Rollback: フィールドと UI を revert（データは同梱のまま無害）。
+
+### DL-022: GSI ジオコーダの本番障害を URL 修正＋実レスポンス形状対応で解消
+
+- 判断: 本番検証で `/geocode` が 502 を返したため、2 段階で修正した。① GSI エンドポイントは `/address/search` ではなく `/address-search/AddressSearch`（404 を実測）。② GSI は `{features:[...]}` ではなく素の Feature 配列を返すため、URL 修正後も items が空になる問題を配列優先＋旧形式互換受容で解消。
+- 理由: 本番の住所検索機能が全滅しており、利用者機能として必須だったため。curl・診断 Worker による egress 確認で原因を切り分け、テスト（fetch URL 断言・実形状テスト）で回帰を固定した。
+- 影響: `/api/v1/geocode` のみ。DB・スキーマ変更なし。
+- 検証: 本番で `東京都千代田区` → 座標 `139.753616, 35.69389` ＋ `municipalityCode=13101` を確認。API テスト 84/84、CI 全ジョブ成功。
+- Rollback: PR #72 / #73 を revert（最小差分）。
+
+### DL-023: 2026-08-05 本番運用化ラウンドの判断と未解決ギャップ
+
+- 判断: 機能統合 3 PR（#68/#70/#71）と geocode 修正 2 PR（#72/#73）を main へ統合し、API を本番再デプロイ（Version `771d94f2`）。フルスモーク 9/9 PASS。本番検証（geocode/suggest/export/管理API 302/セキュリティヘッダ）を実施。
+- 未解決ギャップ（ユーザー対応事項として明記）:
+  1. Cloudflare API トークンに Pages: Edit 権限がなく、Web の現行 main ビルド再配信が不可（現配信は 2026-07-29 頃のビルド）
+  2. GitHub Actions Secrets に `DATABASE_URL` 未設定で、W05 週次取込ワークフローが未実行
+  3. main ブランチ保護（必須レビュー・必須CI）未設定
+  4. 外部死活監視・アラート通知・Neon バックアップ API 確認が未設定（監視/SLO・通知先は docs/operations で定義済み）
+- 検証: 本番 curl・スモーク・CI 全成功。Cron Trigger は本番登録済み（実働ログ捕捉は 2026-08-05 14:00 UTC 予定）。
