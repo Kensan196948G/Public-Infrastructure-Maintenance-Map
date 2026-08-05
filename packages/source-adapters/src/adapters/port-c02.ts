@@ -15,7 +15,7 @@ import type {
 } from '@pimm/ingestion-core';
 import { geometryToWgs84 } from '@pimm/ingestion-core';
 import type { AssetAttribute, Geometry } from '@pimm/contracts';
-import { fetchBinaryOverHttps } from '../http.js';
+import type { FetchBinaryFn } from '../transport.js';
 
 const SOURCE_URL = 'https://nlftp.mlit.go.jp/ksj/gml/data/C02/C02-14/C02-14_GML.zip';
 
@@ -145,11 +145,11 @@ const DATE_ATTRIBUTE_COLUMNS = [
   ['foundation_date_raw', 'foundationDate'],
 ] as const;
 
-export function createPortC02Adapter(): SourceAdapter<PortC02Record> {
+export function createPortC02Adapter(transport: FetchBinaryFn): SourceAdapter<PortC02Record> {
   return {
     descriptor: PORT_C02_DESCRIPTOR,
     fetch: async (context: FetchContext): Promise<FetchResult> => {
-      const zipBuffer = await fetchBinaryOverHttps(SOURCE_URL);
+      const zipBuffer = await transport(SOURCE_URL);
       const unzipped = unzipSync(zipBuffer);
       // 本体は C02-14_GML/C02-14-g.xml。KS-META-*.xml(メタデータ)は除外する。
       const xmlPath = Object.keys(unzipped).find(

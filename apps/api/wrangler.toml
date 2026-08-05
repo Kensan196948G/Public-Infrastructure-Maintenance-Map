@@ -20,6 +20,11 @@ REQUIRE_ACCESS_JWT = "true"
 [observability]
 enabled = true
 
+[triggers]
+# 自動取込スケジューラ（毎時実行）。実行対象は refresh_cron が現在時刻に一致する
+# Worker 対応ソースのみ（W05 河川は大容量のため CLI 運用）。
+crons = ["0 * * * *"]
+
 [env.production]
 name = "pimm-api-production"
 # The workers.dev hostname is not covered by the Cloudflare Access application
@@ -40,3 +45,6 @@ REQUIRE_DATABASE_URL = "true"
 # Admin routes must reject every request unless a Cloudflare Access JWT is
 # verified. Fails closed (500) if CLOUDFLARE_ACCESS_AUD / _TEAM_DOMAIN are unset.
 REQUIRE_ACCESS_JWT = "true"
+
+[env.production.triggers]
+crons = ["0 * * * *"]

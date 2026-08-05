@@ -1,22 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runPipeline } from '@pimm/ingestion-core';
-
-// bridge-kumamoto の fetch は HTTPS 取得だけでなく、データセット基準日を
-// クロージャ変数へ抽出する副作用を持つ (normalize がそれを参照する)。
-// adapter.fetch を丸ごと差し替えるとその副作用が失われるため、より下層の
-// fetchTextOverHttps だけをモックし、本物の fetch 実装をそのまま実行させる。
-vi.mock('../src/http.js', () => ({
-  fetchTextOverHttps: vi.fn(),
-}));
-
-import { fetchTextOverHttps } from '../src/http.js';
 import {
   BRIDGE_KUMAMOTO_DESCRIPTOR,
   createBridgeKumamotoAdapter,
 } from '../src/adapters/bridge-kumamoto.js';
+import type { FetchTextFn } from '../src/transport.js';
 
 const CTX = { now: '2026-07-16T00:00:00.000Z' };
-const mockFetchText = vi.mocked(fetchTextOverHttps);
+// Transport injection: the adapter's fetch is exercised for real while the
+// network layer is stubbed, so the dataset-date closure side effect is kept.
+const mockFetchText = vi.fn<FetchTextFn>();
 
 // セル内改行を含む列名 (位置\n（緯度）等) はRFC4180に従いダブルクォートで囲む。
 // クォートなしの生の\nはparseCsvにとって行区切りになってしまうため。
@@ -36,7 +29,7 @@ describe('bridge-kumamoto adapter (contract test)', () => {
     ].join('\n');
     mockFetchText.mockResolvedValueOnce(csv);
 
-    const result = await runPipeline(createBridgeKumamotoAdapter(), CTX);
+    const result = await runPipeline(createBridgeKumamotoAdapter(mockFetchText), CTX);
 
     expect(result.aborted).toBeNull();
     expect(result.counts.fetched).toBe(1);
@@ -66,7 +59,7 @@ describe('bridge-kumamoto adapter (contract test)', () => {
     ].join('\n');
     mockFetchText.mockResolvedValueOnce(csv);
 
-    const result = await runPipeline(createBridgeKumamotoAdapter(), CTX);
+    const result = await runPipeline(createBridgeKumamotoAdapter(mockFetchText), CTX);
     const attr = result.accepted[0]?.asset.attributes.find((a) => a.key === 'construction_year');
     expect(attr?.valueText).toBe('不明');
     expect(attr?.valueNumber).toBeNull();
@@ -80,7 +73,7 @@ describe('bridge-kumamoto adapter (contract test)', () => {
     ].join('\n');
     mockFetchText.mockResolvedValueOnce(csv);
 
-    const result = await runPipeline(createBridgeKumamotoAdapter(), CTX);
+    const result = await runPipeline(createBridgeKumamotoAdapter(mockFetchText), CTX);
     expect(result.accepted).toHaveLength(0);
     expect(result.quarantined.map((p) => p.asset.sourceRecordId)).toEqual(['BR0-999999']);
   });

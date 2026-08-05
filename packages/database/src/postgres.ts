@@ -30,9 +30,15 @@ import type {
   AssetType,
   Geometry,
   SourceInfo,
+  SuggestItem,
 } from '@pimm/contracts';
-import { GeometrySchema, OPERATIONS_RECENT_RUN_WINDOW, summarizeOperations } from '@pimm/contracts';
-import { decodeCursor, encodeCursor } from './cursor.js';
+import {
+  GeometrySchema,
+  OPERATIONS_RECENT_RUN_WINDOW,
+  prefectureCodeForKeyword,
+  summarizeOperations,
+} from '@pimm/contracts';
+import { decodeCursor, encodeCursor, type CursorPayload } from './cursor.js';
 import { representativePoint } from './geo.js';
 import type {
   AssetPublisher,
@@ -209,13 +215,22 @@ function buildConditions(sql: Sql, filters: AssetQueryFilters) {
   if (filters.q) {
     // Same fields as InMemoryAssetRepository.matches — keep search behavior
     // consistent across sample mode and the Postgres-backed production path.
-    const pattern = '%' + escapeLikePattern(filters.q) + '%';
-    conditions.push(sql`(
-      a.name ILIKE ${pattern}
-      OR a.original_name ILIKE ${pattern}
-      OR a.managing_authority ILIKE ${pattern}
-      OR a.municipality_code ILIKE ${pattern}
-    )`);
+    const tokens = filters.q.normalize('NFKC').trim().split(/\s+/u).filter(Boolean);
+    for (const token of tokens) {
+      const prefCode = prefectureCodeForKeyword(token);
+      if (prefCode) {
+        // 「東京都」等の都道府県名は空間フィルタとして扱う（名称一致は空になる）。
+        conditions.push(sql`a.prefecture_code = ${prefCode}`);
+      } else {
+        const pattern = '%' + escapeLikePattern(token) + '%';
+        conditions.push(sql`(
+          a.name ILIKE ${pattern}
+          OR a.original_name ILIKE ${pattern}
+          OR a.managing_authority ILIKE ${pattern}
+          OR a.municipality_code ILIKE ${pattern}
+        )`);
+      }
+    }
   }
   return conditions.reduce((acc, c) => sql`${acc} AND ${c}`);
 }
@@ -227,7 +242,7 @@ export class PostgresAssetRepository implements AssetRepository {
     this.sql = sqlOverride ?? neon(databaseUrl);
   }
 
-  private summarySelect(filters: AssetQueryFilters) {
+  private summarySelect(filters: AssetQueryFilters, cursor?: CursorPayload) {
     const where = buildConditions(this.sql, filters);
     return this.sql`
       SELECT a.id, a.asset_type, a.name, a.prefecture_code, a.municipality_code,
@@ -243,6 +258,7 @@ export class PostgresAssetRepository implements AssetRepository {
         FROM infrastructure_assets a
         JOIN data_sources s ON s.id = a.source_id
        WHERE ${where}
+       ${cursor ? this.sql`AND (a.name, a.id) > (${cursor.name}, ${cursor.id})` : this.sql``}
        ORDER BY a.name, a.id`;
   }
 
@@ -267,16 +283,21 @@ export class PostgresAssetRepository implements AssetRepository {
   }
 
   async searchAssets(input: AssetSearchInput): Promise<AssetSearchResponse> {
-    const offset = input.cursor === undefined ? 0 : decodeCursor(input.cursor)?.offset;
-    if (offset === undefined) throw new InvalidCursorError();
+    let cursor: CursorPayload | undefined;
+    if (input.cursor !== undefined) {
+      const decoded = decodeCursor(input.cursor);
+      if (!decoded) throw new InvalidCursorError();
+      cursor = decoded;
+    }
     const rows = (await this.sql`
-      ${this.summarySelect(input)}
-      LIMIT ${input.limit + 1} OFFSET ${offset}`) as Row[];
+      ${this.summarySelect(input, cursor)}
+      LIMIT ${input.limit + 1}`) as Row[];
     const hasMore = rows.length > input.limit;
     const items = rows.slice(0, input.limit).map(rowToSummary);
+    const last = items[items.length - 1];
     return {
       items,
-      nextCursor: hasMore ? encodeCursor({ offset: offset + input.limit }) : null,
+      nextCursor: hasMore && last ? encodeCursor({ name: last.name, id: last.id }) : null,
     };
   }
 
@@ -356,6 +377,20 @@ export class PostgresAssetRepository implements AssetRepository {
   async getSourceBySlug(slug: string): Promise<SourceInfo | null> {
     const sources = await this.listSources();
     return sources.find((s) => s.slug === slug) ?? null;
+  }
+
+  async suggestNames(q: string, limit: number): Promise<SuggestItem[]> {
+    const pattern = '%' + escapeLikePattern(q) + '%';
+    const rows = (await this.sql`
+      SELECT name, count(*)::int AS count
+        FROM infrastructure_assets a
+       WHERE a.publication_status = 'published'
+         AND a.quality_status <> 'hidden'
+         AND a.name ILIKE ${pattern}
+       GROUP BY a.name
+       ORDER BY count(*) DESC, a.name
+       LIMIT ${limit}`) as Row[];
+    return rows.map((r) => ({ name: String(r['name']), count: Number(r['count']) }));
   }
 
   async exportAssets(input: AssetExportInput): Promise<AssetDetail[]> {

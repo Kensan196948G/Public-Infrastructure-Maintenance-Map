@@ -355,4 +355,29 @@ describe('ApiClient', () => {
       body: JSON.stringify({ resolutionStatus: 'accepted', reason: '原典で確認済み' }),
     });
   });
+
+  it('requests name suggestions with limit', async () => {
+    const payload = { items: [{ name: 'ふたご橋', count: 2 }] };
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(payload),
+    );
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(client.suggest('ふたご', 5)).resolves.toEqual(payload);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      '/api/v1/suggest?q=%E3%81%B5%E3%81%9F%E3%81%94&limit=5',
+    );
+  });
+
+  it('requests address geocoding', async () => {
+    const payload = { items: [{ title: '千代田区', address: null, lon: 139.7, lat: 35.6 }] };
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(payload),
+    );
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(client.geocode('大阪市北区')).resolves.toEqual(payload);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/api/v1/geocode?q=');
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain(encodeURIComponent('大阪市北区'));
+  });
 });

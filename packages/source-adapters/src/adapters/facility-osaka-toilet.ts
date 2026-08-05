@@ -1,5 +1,6 @@
 import type { FetchResult, SourceAdapter, SourceDescriptor } from '@pimm/ingestion-core';
 import { csvToObjects } from '@pimm/ingestion-core';
+import type { FetchTextFn } from '../transport.js';
 import {
   OSAKA_FACILITY_SCHEMA_KEYS,
   createOsakaFacilityFetch,
@@ -28,10 +29,12 @@ export const FACILITY_OSAKA_TOILET_DESCRIPTOR: SourceDescriptor = {
   expectedSchemaKeys: [...OSAKA_FACILITY_SCHEMA_KEYS],
 };
 
-export function createFacilityOsakaToiletAdapter(): SourceAdapter<OsakaCsvRow> {
+export function createFacilityOsakaToiletAdapter(
+  transport: FetchTextFn,
+): SourceAdapter<OsakaCsvRow> {
   return {
     descriptor: FACILITY_OSAKA_TOILET_DESCRIPTOR,
-    fetch: createOsakaFacilityFetch(SOURCE_URL),
+    fetch: createOsakaFacilityFetch(SOURCE_URL, transport),
     parse: (input: FetchResult) => csvToObjects(input.content),
     normalize: (row) =>
       normalizeOsakaFacilityRow(row, FACILITY_OSAKA_TOILET_DESCRIPTOR, 'public_facility'),

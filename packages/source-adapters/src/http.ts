@@ -3,6 +3,7 @@
  * Node-only (adapters run from apps/api's CLI, not from a Worker).
  */
 import * as https from 'node:https';
+import type { FetchBinaryFn, FetchTextFn } from './transport.js';
 
 export interface FetchTextOptions {
   /**
@@ -61,3 +62,11 @@ export async function fetchTextOverHttps(
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
   return text;
 }
+
+/** Node (CLI) transport implementations, passed by registry.ts. */
+export const nodeFetchText: FetchTextFn = fetchTextOverHttps;
+export const nodeFetchBinary: FetchBinaryFn = (url, options = {}) =>
+  fetchBinaryOverHttps(
+    url,
+    options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs },
+  );

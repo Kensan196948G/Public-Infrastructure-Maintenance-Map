@@ -15,7 +15,7 @@ import type {
 } from '@pimm/ingestion-core';
 import { geometryToWgs84, parseDateToIso } from '@pimm/ingestion-core';
 import type { AssetAttribute, Geometry } from '@pimm/contracts';
-import { fetchBinaryOverHttps } from '../http.js';
+import type { FetchBinaryFn } from '../transport.js';
 
 const SOURCE_URL = 'https://nlftp.mlit.go.jp/ksj/gml/data/N13/N13-24/N13-24_3622_GEOJSON.zip';
 
@@ -63,11 +63,11 @@ const CODE_ATTRIBUTE_COLUMNS = [
   ['mesh_code', 'N13_008'],
 ] as const;
 
-export function createRoadN13Adapter(): SourceAdapter<RoadN13Feature> {
+export function createRoadN13Adapter(transport: FetchBinaryFn): SourceAdapter<RoadN13Feature> {
   return {
     descriptor: ROAD_N13_DESCRIPTOR,
     fetch: async (context: FetchContext): Promise<FetchResult> => {
-      const zipBuffer = await fetchBinaryOverHttps(SOURCE_URL);
+      const zipBuffer = await transport(SOURCE_URL);
       const unzipped = unzipSync(zipBuffer);
       const geojsonPath = Object.keys(unzipped).find((path) => path.endsWith('.geojson'));
       if (!geojsonPath) throw new Error(`${SOURCE_URL}: zip contains no .geojson entry`);

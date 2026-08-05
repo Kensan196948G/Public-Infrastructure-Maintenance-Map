@@ -4,12 +4,18 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { AssetSearchResponse } from '@pimm/contracts';
 import { ApiClient } from '../src/api/client.js';
-import { useAssets, usePagedAssets } from '../src/api/hooks.js';
+import { useAdminAccess, useAssets, usePagedAssets } from '../src/api/hooks.js';
 import { bridgeSummary, riverSummary } from './fixtures.js';
 
 function makeClient(searchAssets: ApiClient['searchAssets']) {
   const client = new ApiClient({ fetchImpl: vi.fn() });
   client.searchAssets = searchAssets;
+  return client;
+}
+
+function makeAdminClient(getAdminOperations: ApiClient['getAdminOperations']) {
+  const client = new ApiClient({ fetchImpl: vi.fn() });
+  client.getAdminOperations = getAdminOperations;
   return client;
 }
 
@@ -170,5 +176,20 @@ describe('usePagedAssets', () => {
     expect(result.current.loadMoreError).toBe(true);
     expect(result.current.items).toEqual([bridgeSummary]);
     expect(result.current.hasMore).toBe(true);
+  });
+});
+
+describe('useAdminAccess', () => {
+  it('reports granted when the ops endpoint succeeds', async () => {
+    const client = makeAdminClient(vi.fn().mockResolvedValue({}));
+    const { result } = renderHook(() => useAdminAccess(client), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.status).toBe('granted'));
+  });
+
+  it('reports denied when the ops endpoint rejects (unauthenticated)', async () => {
+    const client = makeAdminClient(vi.fn().mockRejectedValue(new Error('denied')));
+    const { result } = renderHook(() => useAdminAccess(client), { wrapper: wrapper() });
+    // retry: 1 applies an exponential backoff before settling on the error state.
+    await waitFor(() => expect(result.current.status).toBe('denied'), { timeout: 5000 });
   });
 });

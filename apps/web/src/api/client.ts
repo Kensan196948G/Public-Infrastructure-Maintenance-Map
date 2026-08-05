@@ -15,9 +15,11 @@ import type {
   AdminSourceResponse,
   AdminSourcePublication,
   AdminUpdateSource,
+  GeocodeResponse,
   HealthResponse,
   QualityStatus,
   SourceListResponse,
+  SuggestResponse,
 } from '@pimm/contracts';
 import type { BBox } from '@pimm/contracts';
 
@@ -192,6 +194,16 @@ export class ApiClient {
 
   getSources(): Promise<SourceListResponse> {
     return getJson<SourceListResponse>(`${this.base}/sources`, this.fetchImpl);
+  }
+
+  suggest(q: string, limit = 10): Promise<SuggestResponse> {
+    const qs = new URLSearchParams({ q, limit: String(limit) }).toString();
+    return getJson<SuggestResponse>(`${this.base}/suggest?${qs}`, this.fetchImpl);
+  }
+
+  geocode(q: string): Promise<GeocodeResponse> {
+    const qs = new URLSearchParams({ q }).toString();
+    return getJson<GeocodeResponse>(`${this.base}/geocode?${qs}`, this.fetchImpl);
   }
 
   getHealth(): Promise<HealthResponse> {

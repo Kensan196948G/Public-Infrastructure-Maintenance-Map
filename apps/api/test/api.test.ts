@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Hono } from 'hono';
 import type {
   AssetCountSummary,
@@ -47,6 +47,76 @@ describe('GET /api/v1/health', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { status: string };
     expect(body.status).toBe('ok');
+  });
+});
+
+describe('GET /api/v1/openapi.json (Issue #49)', () => {
+  it('serves an OpenAPI document covering public and admin paths', async () => {
+    const res = await get('/api/v1/openapi.json');
+    expect(res.status).toBe(200);
+    const doc = (await res.json()) as {
+      paths: Record<string, unknown>;
+      info: { version: string };
+    };
+    expect(doc.paths['/assets']).toBeDefined();
+    expect(doc.paths['/export']).toBeDefined();
+    expect(doc.paths['/admin/operations']).toBeDefined();
+    expect(doc.paths['/admin/sources']).toBeDefined();
+    expect(doc.info.version).toBe('test');
+  });
+});
+
+describe('GET /api/v1/suggest (Issue #50)', () => {
+  it('returns name suggestions for a partial keyword', async () => {
+    const res = await get('/api/v1/suggest?q=ふたご');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: { name: string; count: number }[] };
+    expect(body.items.map((i) => i.name)).toEqual(['ふたご橋(サンプル)']);
+    expect(body.items[0]?.count).toBeGreaterThanOrEqual(1);
+  });
+
+  it('rejects an empty query', async () => {
+    const res = await get('/api/v1/suggest?q=');
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/v1/geocode (Issue #50)', () => {
+  it('proxies the GSI geocoder and returns normalized coordinates', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            features: [
+              {
+                geometry: { coordinates: [139.7, 35.6] },
+                properties: { title: '千代田区', address: '東京都千代田区' },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+    ) as typeof fetch;
+    try {
+      const res = await get('/api/v1/geocode?q=千代田区');
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { items: { lon: number; lat: number }[] };
+      expect(body.items[0]).toMatchObject({ lon: 139.7, lat: 35.6 });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('fails closed when the geocoder is unavailable', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () => new Response('', { status: 503 })) as typeof fetch;
+    try {
+      const res = await get('/api/v1/geocode?q=大阪');
+      expect(res.status).toBe(502);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 

@@ -1,31 +1,47 @@
 /**
- * Opaque offset cursor. The payload is intentionally tiny; the sort order
- * (name asc, id asc) is deterministic so an offset cursor is stable enough
- * for MVP page sizes. Swap for keyset pagination when moving to PostGIS scale.
+ * Opaque keyset cursor for the deterministic (name asc, id asc) ordering.
+ * Carries the *last seen row's* sort key, so a page inserted or removed
+ * between requests cannot shift results (the OFFSET-pagination weakness).
+ * The comparison is backend-specific (collation may differ between
+ * Postgres and JS localeCompare) but each backend is self-consistent with
+ * its own ORDER BY, so cursors round-trip within one backend.
  */
 export interface CursorPayload {
-  offset: number;
+  name: string;
+  id: string;
 }
 
 export function encodeCursor(payload: CursorPayload): string {
   const json = JSON.stringify(payload);
-  return btoa(json).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
+  // UTF-8-safe base64url: names may contain non-Latin-1 characters (Japanese),
+  // which the legacy `btoa(unicode)` path rejects.
+  const bytes = new TextEncoder().encode(json);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '');
 }
 
 /** Returns null for malformed cursors — callers should map that to a 400. */
 export function decodeCursor(raw: string): CursorPayload | null {
   try {
     const b64 = raw.replaceAll('-', '+').replaceAll('_', '/');
-    const parsed: unknown = JSON.parse(atob(b64));
+    const padded = b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '=');
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
     if (
       typeof parsed === 'object' &&
       parsed !== null &&
-      'offset' in parsed &&
-      typeof (parsed as { offset: unknown }).offset === 'number' &&
-      Number.isInteger((parsed as { offset: number }).offset) &&
-      (parsed as { offset: number }).offset >= 0
+      'name' in parsed &&
+      typeof (parsed as { name: unknown }).name === 'string' &&
+      'id' in parsed &&
+      typeof (parsed as { id: unknown }).id === 'string'
     ) {
-      return { offset: (parsed as { offset: number }).offset };
+      return {
+        name: (parsed as { name: string }).name,
+        id: (parsed as { id: string }).id,
+      };
     }
     return null;
   } catch {

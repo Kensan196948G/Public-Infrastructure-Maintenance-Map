@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { runPipeline } from '@pimm/ingestion-core';
 import type { SourceAdapter } from '@pimm/ingestion-core';
 import {
@@ -14,8 +14,10 @@ import {
   osakaFacilitySchemaKeys,
   type OsakaCsvRow,
 } from '../src/adapters/osaka-facility-shared.js';
+import type { FetchTextFn } from '../src/transport.js';
 
 const CTX = { now: '2026-07-16T00:00:00.000Z' };
+const mockFetchText = vi.fn<FetchTextFn>();
 
 // The source repeats the "分類" header at column 4 and column 14 with the
 // same value on every observed row (実データ確認済み). csvToObjects keys on
@@ -229,7 +231,7 @@ describe('facility-osaka-park adapter (contract test)', () => {
       ]),
     ].join('\n');
 
-    const adapter = withFixedCsv(createFacilityOsakaParkAdapter(), csv);
+    const adapter = withFixedCsv(createFacilityOsakaParkAdapter(mockFetchText), csv);
     const result = await runPipeline(adapter, CTX);
 
     expect(result.aborted).toBeNull();
@@ -266,7 +268,7 @@ describe('facility-osaka-toilet adapter (contract test)', () => {
       ]),
     ].join('\n');
 
-    const adapter = withFixedCsv(createFacilityOsakaToiletAdapter(), csv);
+    const adapter = withFixedCsv(createFacilityOsakaToiletAdapter(mockFetchText), csv);
     const result = await runPipeline(adapter, CTX);
 
     expect(result.aborted).toBeNull();

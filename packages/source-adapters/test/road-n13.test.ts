@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { runPipeline } from '@pimm/ingestion-core';
 import type { SourceAdapter } from '@pimm/ingestion-core';
 import { ROAD_N13_DESCRIPTOR, createRoadN13Adapter } from '../src/adapters/road-n13.js';
+import type { FetchBinaryFn } from '../src/transport.js';
 
 const CTX = { now: '2026-07-16T00:00:00.000Z' };
+const mockFetchBinary = vi.fn<FetchBinaryFn>();
 
 type RoadN13Row = Parameters<ReturnType<typeof createRoadN13Adapter>['normalize']>[0];
 
@@ -47,7 +49,7 @@ const SAMPLE_FEATURE = {
 describe('road-n13 adapter (contract test)', () => {
   it('normalizes a LineString feature with code-list attributes', async () => {
     const geojson = { type: 'FeatureCollection', features: [SAMPLE_FEATURE] };
-    const adapter = withFixedGeoJson(createRoadN13Adapter(), geojson);
+    const adapter = withFixedGeoJson(createRoadN13Adapter(mockFetchBinary), geojson);
     const result = await runPipeline(adapter, CTX);
 
     expect(result.aborted).toBeNull();
@@ -77,7 +79,10 @@ describe('road-n13 adapter (contract test)', () => {
       properties: { ...SAMPLE_FEATURE.properties, N13_007: '' },
     };
     const geojson = { type: 'FeatureCollection', features: [feature] };
-    const result = await runPipeline(withFixedGeoJson(createRoadN13Adapter(), geojson), CTX);
+    const result = await runPipeline(
+      withFixedGeoJson(createRoadN13Adapter(mockFetchBinary), geojson),
+      CTX,
+    );
 
     const asset = result.accepted[0]?.asset;
     expect(asset?.attributes.find((a) => a.key === 'toll_category_code')).toBeUndefined();
@@ -90,7 +95,7 @@ describe('road-n13 adapter (contract test)', () => {
       // kill the entire ingestion run (Codex review on PR #17).
       features: [SAMPLE_FEATURE, { ...SAMPLE_FEATURE, geometry: null }],
     };
-    const adapter = withFixedGeoJson(createRoadN13Adapter(), geojson);
+    const adapter = withFixedGeoJson(createRoadN13Adapter(mockFetchBinary), geojson);
     const result = await runPipeline(adapter, CTX);
 
     expect(result.aborted).toBeNull();

@@ -19,6 +19,7 @@ import type {
   BBox,
   QualityStatus,
   SourceInfo,
+  SuggestItem,
 } from '@pimm/contracts';
 
 /** Filters shared by search / summary / export. */
@@ -65,6 +66,8 @@ export interface AssetRepository {
   countByType(filters: Pick<AssetQueryFilters, 'bbox' | 'types'>): Promise<AssetCountSummary>;
   listSources(): Promise<SourceInfo[]>;
   getSourceBySlug(slug: string): Promise<SourceInfo | null>;
+  /** Name suggestions for the search box, ordered by occurrence count. */
+  suggestNames(q: string, limit: number): Promise<SuggestItem[]>;
   /** Same filters as search, bounded by limit (no pagination); license control happens in the API layer. */
   exportAssets(input: AssetExportInput): Promise<AssetDetail[]>;
 
