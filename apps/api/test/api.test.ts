@@ -92,23 +92,27 @@ describe('GET /api/v1/suggest (Issue #50)', () => {
 describe('GET /api/v1/geocode (Issue #50)', () => {
   it('proxies the GSI geocoder and returns normalized coordinates', async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            features: [
-              {
-                geometry: { coordinates: [139.7, 35.6] },
-                properties: { title: '千代田区', address: '東京都千代田区丸の内' },
-              },
-            ],
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-    ) as typeof fetch;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      expect(String(input)).toBe(
+        `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent('千代田区')}`,
+      );
+      return new Response(
+        JSON.stringify({
+          features: [
+            {
+              geometry: { coordinates: [139.7, 35.6] },
+              properties: { title: '千代田区', address: '東京都千代田区丸の内' },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as typeof fetch;
+    globalThis.fetch = fetchMock;
     try {
       const res = await get('/api/v1/geocode?q=千代田区');
       expect(res.status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
       const body = (await res.json()) as {
         items: { lon: number; lat: number; municipalityCode: string | null }[];
       };
