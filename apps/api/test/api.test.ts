@@ -127,6 +127,43 @@ describe('GET /api/v1/geocode (Issue #50)', () => {
     }
   });
 
+  it('accepts the real GSI shape (bare Feature array) and normalizes it', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      expect(String(input)).toBe(
+        `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent('東京都千代田区')}`,
+      );
+      return new Response(
+        JSON.stringify([
+          {
+            geometry: { coordinates: [139.753616, 35.69389], type: 'Point' },
+            type: 'Feature',
+            properties: { addressCode: '', title: '東京都千代田区' },
+          },
+        ]),
+        { status: 200, headers: { 'Content-Type': 'application/json; charset=utf-8' } },
+      );
+    }) as typeof fetch;
+    globalThis.fetch = fetchMock;
+    try {
+      const res = await get('/api/v1/geocode?q=東京都千代田区');
+      expect(res.status).toBe(200);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const body = (await res.json()) as {
+        items: { lon: number; lat: number; municipalityCode: string | null }[];
+      };
+      expect(body.items).toHaveLength(1);
+      expect(body.items[0]).toMatchObject({
+        lon: 139.753616,
+        lat: 35.69389,
+        municipalityCode: '13101',
+        municipalityName: '千代田区',
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('fails closed when the geocoder is unavailable', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn(async () => new Response('', { status: 503 })) as typeof fetch;
