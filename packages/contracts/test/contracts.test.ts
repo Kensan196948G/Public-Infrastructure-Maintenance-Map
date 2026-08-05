@@ -20,6 +20,7 @@ import {
   SuggestResponseSchema,
   SourceInfoSchema,
   summarizeOperations,
+  municipalityCodeForAddress,
   prefectureCodeForKeyword,
 } from '../src/index.js';
 import type { AdminSourceOperations } from '../src/index.js';
@@ -293,6 +294,8 @@ describe('suggest / geocode schemas', () => {
         address: null,
         lon: 139.7,
         lat: 35.6,
+        municipalityCode: null,
+        municipalityName: null,
       }).success,
     ).toBe(true);
     expect(
@@ -301,7 +304,47 @@ describe('suggest / geocode schemas', () => {
         address: null,
         lon: 999,
         lat: 35.6,
+        municipalityCode: null,
+        municipalityName: null,
       }).success,
     ).toBe(false);
+    expect(
+      GeocodeItemSchema.safeParse({
+        title: 'bad',
+        address: null,
+        lon: 139.7,
+        lat: 35.6,
+        municipalityCode: '13',
+        municipalityName: null,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('municipalityCodeForAddress', () => {
+  it('extracts the most specific municipality with its 5-digit code', () => {
+    expect(municipalityCodeForAddress('東京都千代田区丸の内1-1')).toEqual({
+      code: '13101',
+      name: '千代田区',
+      prefecture: '東京都',
+    });
+    expect(municipalityCodeForAddress('北海道札幌市中央区北1条')).toMatchObject({
+      code: '01100',
+      name: '札幌市',
+    });
+  });
+
+  it('prefers the prefecture that appears at the start of the address', () => {
+    // 同名「中央区」は東京・大阪等に存在するが、先頭の都道府県で解決する。
+    expect(municipalityCodeForAddress('大阪府大阪市中央区')).toMatchObject({
+      name: '大阪市',
+      prefecture: '大阪府',
+    });
+  });
+
+  it('returns null for unknown/blank addresses', () => {
+    expect(municipalityCodeForAddress(null)).toBeNull();
+    expect(municipalityCodeForAddress('  ')).toBeNull();
+    expect(municipalityCodeForAddress('沖ノ鳥島')).toBeNull();
   });
 });

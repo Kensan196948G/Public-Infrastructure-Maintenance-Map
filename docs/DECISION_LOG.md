@@ -156,3 +156,27 @@ secret、credential、connection string、PII は記載しない。
 - 影響: 公開APIに読み取り専用2エンドポイント追加。DB スキーマ変更なし。
 - 検証: contracts / repository contract / API（fetch スタブ）/ web client・hook テストで固定。
 - Rollback: PR revert（追加エンドポイントと検索条件変更のみ）。
+
+### DL-019: W05 河川の自動化は GitHub Actions 外部ランナー（週次47県マトリクス）で実装
+
+- 判断: Worker の Cron 対象を軽量5ソースに限定したまま、W05 は `.github/workflows/w05-scheduled-ingest.yml`（毎週土 16:00 UTC = 日曜 01:00 JST、47 県マトリクス、`workflow_dispatch` で県指定可）から既存 `pnpm ingest --publish` を実行する。設計と代替案比較は `docs/W05_AUTOMATION_DESIGN.md` に記載。
+- 理由: 149MB XML を Worker で処理できないため。GitHub Actions は Node CLI をそのまま使い、失敗可視化・Secret 管理・不要時停止が容易。
+- 影響: `DATABASE_URL` を GitHub Actions Secret に追加する運用が発生。実行は既存品質ゲート経由で、失敗は `ingestion_runs.failed` に記録。
+- 検証: ワークフローは PR の CI では実行されない（schedule/dispatch のみ）。ローカル一括スクリプト `scripts/tools/ingest-river-w05-all.mjs` を追加し dry-run/publish/県指定をサポート。
+- Rollback: ワークフロー無効化 + DB は県単位 suspend-assets。
+
+### DL-020: OpenAPI コンポーネントは Zod v4 のネイティブ toJSONSchema() で自動生成
+
+- 判断: `openapi.ts` の手書きスキーマを廃止し、contracts の各 Zod スキーマから `toJSONSchema()` で生成した JSON Schema（draft 2020-12）を OpenAPI 3.1 の components に展開する。zod-to-json-schema / zod-openapi 等の追加依存は Zod v4 対応状況が不安定だったため不採用（導入・評価して破棄）。
+- 理由: 依存ゼロ・Worker バンドル非肥大化・スキーマ差分をテストで検出可能。
+- 影響: `/api/v1/openapi.json` の出力が JSON Schema 型（nullable は type 配列等）になる。3.1 ではそのまま有効。
+- 検証: API テストで `components.schemas.AssetSummary` / `GeocodeItem` の存在と構造を固定。
+- Rollback: 手書きスキーマへ戻す場合は revert。
+
+### DL-021: 住所ジオコーディング結果へ市区町村コードを付与し、一覧・エクスポートの絞り込みに接続
+
+- 判断: GSI ジオコーダは市区町村コードを返さないため、`piuccio/open-data-jp-municipalities`（JIS X 0402、1736件）を5桁コードへ整形して contracts に同梱し、住所文字列の最長一致＋先頭都道府県優先で `municipalityCode` / `municipalityName` を付与する。生成スクリプト `scripts/tools/generate-municipality-codes.mjs` で再生成可能。
+- 理由: 住所検索 → 一覧絞り込み → エクスポートの一連の流れを成立させるため。DB スキーマ変更なし。
+- 影響: `/geocode` レスポンスにフィールド2件追加。Web は URL（`muni`/`muniN`）に保持し、解除チップ・エクスポート条件へ反映。
+- 検証: contracts マッチャー単体、API テスト（fetch スタブ）、url-state 往復テスト。
+- Rollback: フィールドと UI を revert（データは同梱のまま無害）。

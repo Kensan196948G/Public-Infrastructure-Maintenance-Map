@@ -8,6 +8,7 @@ export interface ExportButtonsProps {
   quality: readonly QualityStatus[];
   q: string;
   prefectureCode?: string | null;
+  municipalityCode?: string | null;
 }
 
 /** Shared instance (same pattern as api/hooks.ts) to avoid per-render identity churn. */
@@ -24,17 +25,19 @@ export function ExportButtons({
   quality,
   q,
   prefectureCode = null,
+  municipalityCode = null,
 }: ExportButtonsProps) {
   const base = useMemo(
     () => ({
       ...(bbox ? { bbox } : {}),
       ...(prefectureCode ? { prefectureCode } : {}),
+      ...(municipalityCode ? { municipalityCode } : {}),
       types,
       quality,
       q,
       limit: 1000,
     }),
-    [bbox, prefectureCode, types, quality, q],
+    [bbox, prefectureCode, municipalityCode, types, quality, q],
   );
 
   const csvUrl = useMemo(() => defaultClient.getExportUrl({ ...base, format: 'csv' }), [base]);

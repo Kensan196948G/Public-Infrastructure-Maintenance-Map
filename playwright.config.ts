@@ -26,6 +26,13 @@ export default defineConfig({
     {
       command: 'pnpm --filter @pimm/api dev',
       url: `http://127.0.0.1:${apiPort}/api/v1/health`,
+      env: {
+        ...process.env,
+        // E2E では管理UIの認証済み経路を検証するため、ヘッダー注入した
+        // テスト利用者をサーバ側 allowlist へ登録する（Access JWT はオフのまま）。
+        ADMIN_EMAILS: 'admin@example.com',
+        REVIEWER_EMAILS: 'reviewer@example.com',
+      },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       stdout: 'pipe',

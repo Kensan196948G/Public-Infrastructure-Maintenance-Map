@@ -81,6 +81,8 @@ describe('serializeUrlState / round trip', () => {
       quality: ['review'],
       q: '大橋',
       pref: '27',
+      municipalityCode: null,
+      municipalityName: null,
     };
     expect(parseUrlState(serializeUrlState(state))).toEqual(state);
   });
@@ -93,11 +95,28 @@ describe('serializeUrlState / round trip', () => {
       quality: [],
       q: '',
       pref: null,
+      municipalityCode: null,
+      municipalityName: null,
     };
     expect(parseUrlState(serializeUrlState(state))).toEqual(state);
   });
 
   it('omits the q param when the search is blank', () => {
     expect(serializeUrlState({ ...DEFAULT_URL_STATE, q: '   ' })).not.toContain('q=');
+  });
+
+  it('round-trips a municipality filter from address search', () => {
+    const state: MapUrlState = {
+      ...DEFAULT_URL_STATE,
+      municipalityCode: '13101',
+      municipalityName: '千代田区',
+    };
+    expect(parseUrlState(serializeUrlState(state))).toEqual(state);
+  });
+
+  it('rejects malformed municipality codes', () => {
+    expect(parseUrlState('?muni=1310&muniN=千代田区').municipalityCode).toBeNull();
+    expect(parseUrlState('?muni=131010').municipalityCode).toBeNull();
+    expect(parseUrlState('?muni=13101').municipalityName).toBeNull();
   });
 });

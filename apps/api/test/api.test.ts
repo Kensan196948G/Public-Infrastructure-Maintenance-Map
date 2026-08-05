@@ -57,12 +57,20 @@ describe('GET /api/v1/openapi.json (Issue #49)', () => {
     const doc = (await res.json()) as {
       paths: Record<string, unknown>;
       info: { version: string };
+      components: { schemas: Record<string, unknown> };
     };
     expect(doc.paths['/assets']).toBeDefined();
     expect(doc.paths['/export']).toBeDefined();
     expect(doc.paths['/admin/operations']).toBeDefined();
     expect(doc.paths['/admin/sources']).toBeDefined();
     expect(doc.info.version).toBe('test');
+    // Zod 自動生成スキーマ（Issue #49）: 必須フィールドがドキュメントに現れる。
+    expect(doc.components.schemas['AssetSummary']).toBeDefined();
+    expect(doc.components.schemas['GeocodeItem']).toBeDefined();
+    expect(doc.components.schemas['AssetSummary']).toMatchObject({
+      type: 'object',
+      properties: expect.objectContaining({ id: expect.anything() }),
+    });
   });
 });
 
@@ -91,7 +99,7 @@ describe('GET /api/v1/geocode (Issue #50)', () => {
             features: [
               {
                 geometry: { coordinates: [139.7, 35.6] },
-                properties: { title: '千代田区', address: '東京都千代田区' },
+                properties: { title: '千代田区', address: '東京都千代田区丸の内' },
               },
             ],
           }),
@@ -101,8 +109,15 @@ describe('GET /api/v1/geocode (Issue #50)', () => {
     try {
       const res = await get('/api/v1/geocode?q=千代田区');
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { items: { lon: number; lat: number }[] };
-      expect(body.items[0]).toMatchObject({ lon: 139.7, lat: 35.6 });
+      const body = (await res.json()) as {
+        items: { lon: number; lat: number; municipalityCode: string | null }[];
+      };
+      expect(body.items[0]).toMatchObject({
+        lon: 139.7,
+        lat: 35.6,
+        municipalityCode: '13101',
+        municipalityName: '千代田区',
+      });
     } finally {
       globalThis.fetch = originalFetch;
     }

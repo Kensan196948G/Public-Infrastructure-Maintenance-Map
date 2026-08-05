@@ -51,6 +51,8 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusPoint, setFocusPoint] = useState<[number, number] | null>(null);
   const [prefecture, setPrefecture] = useState<string | null>(initial.pref);
+  const [municipalityCode, setMunicipalityCode] = useState<string | null>(initial.municipalityCode);
+  const [municipalityName, setMunicipalityName] = useState<string | null>(initial.municipalityName);
   const [resetNonce, setResetNonce] = useState(0);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [noticeOpen, setNoticeOpen] = useState(false);
@@ -60,12 +62,28 @@ export function App() {
 
   // Keep the shareable URL in sync with filters and viewport (FR-07).
   useEffect(() => {
-    const query = serializeUrlState({ center, zoom, types, quality, q, pref: prefecture });
+    const query = serializeUrlState({
+      center,
+      zoom,
+      types,
+      quality,
+      q,
+      pref: prefecture,
+      municipalityCode,
+      municipalityName,
+    });
     const next = `${window.location.pathname}?${query}`;
     window.history.replaceState(null, '', next);
-  }, [center, zoom, types, quality, q, prefecture]);
+  }, [center, zoom, types, quality, q, prefecture, municipalityCode, municipalityName]);
 
-  const pagedAssets = usePagedAssets({ bbox, types, quality, q, prefectureCode: prefecture });
+  const pagedAssets = usePagedAssets({
+    bbox,
+    types,
+    quality,
+    q,
+    prefectureCode: prefecture,
+    municipalityCode,
+  });
   const summaryQuery = useSummary();
   const suggestQuery = useSuggest(searchInput);
   const detailQuery = useAssetDetail(selectedId);
@@ -95,6 +113,8 @@ export function App() {
   /** Focus a prefecture (code) or return to the country-wide view (null). */
   const handleSelectPrefecture = useCallback((code: string | null) => {
     setPrefecture(code);
+    setMunicipalityCode(null);
+    setMunicipalityName(null);
     setSelectedId(null);
     setFocusPoint(null);
     if (code === null) setResetNonce((v) => v + 1);
@@ -163,6 +183,8 @@ export function App() {
       }
       setCenter([first.lon, first.lat]);
       setZoom(14);
+      setMunicipalityCode(first.municipalityCode);
+      setMunicipalityName(first.municipalityName);
       setSelectedId(null);
       setFocusPoint(null);
     } catch {
@@ -267,10 +289,16 @@ export function App() {
             quality,
             q,
             prefectureCode: prefecture,
+            municipalityCode,
           }}
           byPrefecture={summaryQuery.data?.byPrefecture ?? null}
           selectedPrefecture={prefecture}
           onSelectPrefecture={handleSelectPrefecture}
+          selectedMunicipality={municipalityName}
+          onClearMunicipality={() => {
+            setMunicipalityCode(null);
+            setMunicipalityName(null);
+          }}
         />
 
         <main id="map-content" className="map-area">

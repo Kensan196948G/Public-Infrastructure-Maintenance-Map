@@ -1,9 +1,43 @@
 /**
  * OpenAPI 3.1 document for the public + admin REST API (Issue #49).
- * Hand-authored against packages/contracts so the endpoint inventory and
- * error shape stay reviewable without pulling a schema-generation dependency
- * into the Worker bundle. Component schemas mirror the Zod contracts.
+ * Paths/security are hand-maintained; component schemas are generated from
+ * the Zod contracts (packages/contracts) via Zod v4's native toJSONSchema(),
+ * so schema drift between the API and its documentation is a compile/test
+ * concern and no schema-generation dependency enters the Worker bundle.
  */
+import {
+  AdminCreateSourceSchema,
+  AdminOperationsSummarySchema,
+  AdminUpdateSourceSchema,
+  AssetCountSummarySchema,
+  AssetDetailSchema,
+  AssetSummarySchema,
+  GeocodeItemSchema,
+  HealthResponseSchema,
+  ProblemDetailsSchema,
+  SourceInfoSchema,
+  SuggestItemSchema,
+} from '@pimm/contracts';
+
+/**
+ * Component schemas generated from the Zod contracts. Zod v4's native
+ * toJSONSchema() emits JSON Schema (draft 2020-12), which OpenAPI 3.1
+ * consumes directly.
+ */
+const generatedSchemas: Record<string, object> = {
+  ProblemDetails: ProblemDetailsSchema.toJSONSchema(),
+  AssetSummary: AssetSummarySchema.toJSONSchema(),
+  AssetDetail: AssetDetailSchema.toJSONSchema(),
+  AssetCountSummary: AssetCountSummarySchema.toJSONSchema(),
+  SourceInfo: SourceInfoSchema.toJSONSchema(),
+  AdminCreateSource: AdminCreateSourceSchema.toJSONSchema(),
+  AdminUpdateSource: AdminUpdateSourceSchema.toJSONSchema(),
+  AdminOperationsSummary: AdminOperationsSummarySchema.toJSONSchema(),
+  SuggestItem: SuggestItemSchema.toJSONSchema(),
+  GeocodeItem: GeocodeItemSchema.toJSONSchema(),
+  HealthResponse: HealthResponseSchema.toJSONSchema(),
+};
+
 export const openapiDocument = {
   openapi: '3.1.0',
   info: {
@@ -351,208 +385,8 @@ export const openapiDocument = {
         },
       },
     },
-    schemas: {
-      ProblemDetails: {
-        type: 'object',
-        properties: {
-          type: { type: 'string' },
-          title: { type: 'string' },
-          status: { type: 'integer' },
-          code: { type: 'string' },
-          detail: { type: 'string' },
-          requestId: { type: 'string' },
-          errors: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: { path: { type: 'string' }, message: { type: 'string' } },
-            },
-          },
-        },
-        required: ['type', 'title', 'status', 'code'],
-      },
-      AssetSummary: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' },
-          type: { type: 'string', enum: ['bridge', 'road', 'port', 'river', 'public_facility'] },
-          name: { type: 'string' },
-          representativePoint: {
-            type: 'array',
-            items: { type: 'number' },
-            minItems: 2,
-            maxItems: 2,
-          },
-          prefectureCode: { type: ['string', 'null'] },
-          municipalityCode: { type: ['string', 'null'] },
-          managingAuthority: { type: ['string', 'null'] },
-          quality: {
-            type: 'object',
-            properties: {
-              status: { type: 'string', enum: ['verified', 'review', 'reference', 'hidden'] },
-              updatedAtKnown: { type: 'boolean' },
-              openIssueCodes: { type: 'array', items: { type: 'string' } },
-            },
-            required: ['status', 'updatedAtKnown', 'openIssueCodes'],
-          },
-          sourceSlug: { type: 'string' },
-          sourceUpdatedAt: { type: ['string', 'null'], format: 'date-time' },
-        },
-        required: ['id', 'type', 'name', 'representativePoint', 'sourceSlug'],
-      },
-      AssetDetail: {
-        allOf: [
-          { $ref: '#/components/schemas/AssetSummary' },
-          {
-            type: 'object',
-            properties: {
-              originalName: { type: ['string', 'null'] },
-              publicationStatus: { type: 'string', enum: ['draft', 'published', 'suspended'] },
-              attributes: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    key: { type: 'string' },
-                    valueText: { type: ['string', 'null'] },
-                    valueNumber: { type: ['number', 'null'] },
-                    unit: { type: ['string', 'null'] },
-                  },
-                },
-              },
-              source: {
-                type: 'object',
-                properties: {
-                  slug: { type: 'string' },
-                  provider: { type: 'string' },
-                  dataset: { type: 'string' },
-                  sourceUrl: { type: 'string' },
-                  licenseName: { type: 'string' },
-                  licenseUrl: { type: ['string', 'null'] },
-                  redistribution: {
-                    type: 'string',
-                    enum: ['allowed', 'restricted', 'prohibited', 'unknown'],
-                  },
-                },
-                required: [
-                  'slug',
-                  'provider',
-                  'dataset',
-                  'sourceUrl',
-                  'licenseName',
-                  'redistribution',
-                ],
-              },
-            },
-            required: ['publicationStatus', 'attributes', 'source'],
-          },
-        ],
-      },
-      AssetCountSummary: {
-        type: 'object',
-        properties: {
-          total: { type: 'integer', minimum: 0 },
-          byType: { type: 'object', additionalProperties: { type: 'integer', minimum: 0 } },
-          byPrefecture: { type: 'object', additionalProperties: { type: 'integer', minimum: 0 } },
-        },
-        required: ['total', 'byType', 'byPrefecture'],
-      },
-      SourceInfo: {
-        type: 'object',
-        properties: {
-          slug: { type: 'string' },
-          name: { type: 'string' },
-          providerName: { type: 'string' },
-          sourceUrl: { type: 'string', format: 'uri' },
-          accessType: { type: 'string', enum: ['api', 'file', 'manual'] },
-          format: { type: 'string', enum: ['csv', 'geojson', 'json', 'xml'] },
-          licenseName: { type: 'string' },
-          licenseUrl: { type: ['string', 'null'], format: 'uri' },
-          redistribution: {
-            type: 'string',
-            enum: ['allowed', 'restricted', 'prohibited', 'unknown'],
-          },
-          attributionText: { type: ['string', 'null'] },
-          refreshCron: { type: ['string', 'null'], example: '0 3 * * *' },
-          enabled: { type: 'boolean' },
-          lastFetchedAt: { type: ['string', 'null'], format: 'date-time' },
-          sourceUpdatedAt: { type: ['string', 'null'], format: 'date-time' },
-          publishedAssetCount: { type: 'integer', minimum: 0 },
-        },
-        required: ['slug', 'name', 'providerName', 'sourceUrl', 'enabled'],
-      },
-      AdminCreateSource: {
-        type: 'object',
-        properties: {
-          slug: { type: 'string', pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$' },
-          name: { type: 'string' },
-          providerName: { type: 'string' },
-          sourceUrl: { type: 'string', format: 'uri' },
-          accessType: { type: 'string', enum: ['api', 'file', 'manual'] },
-          format: { type: 'string', enum: ['csv', 'geojson', 'json', 'xml'] },
-          licenseName: { type: 'string' },
-          licenseUrl: { type: ['string', 'null'], format: 'uri' },
-          redistribution: {
-            type: 'string',
-            enum: ['allowed', 'restricted', 'prohibited', 'unknown'],
-          },
-          attributionText: { type: ['string', 'null'] },
-          refreshCron: { type: ['string', 'null'] },
-          enabled: { type: 'boolean', default: false },
-        },
-        required: [
-          'slug',
-          'name',
-          'providerName',
-          'sourceUrl',
-          'accessType',
-          'format',
-          'licenseName',
-          'redistribution',
-        ],
-      },
-      AdminUpdateSource: {
-        type: 'object',
-        description: 'At least one field is required',
-        properties: {
-          name: { type: 'string' },
-          providerName: { type: 'string' },
-          sourceUrl: { type: 'string', format: 'uri' },
-          accessType: { type: 'string', enum: ['api', 'file', 'manual'] },
-          format: { type: 'string', enum: ['csv', 'geojson', 'json', 'xml'] },
-          licenseName: { type: 'string' },
-          licenseUrl: { type: ['string', 'null'] },
-          redistribution: {
-            type: 'string',
-            enum: ['allowed', 'restricted', 'prohibited', 'unknown'],
-          },
-          attributionText: { type: ['string', 'null'] },
-          refreshCron: { type: ['string', 'null'] },
-          enabled: { type: 'boolean' },
-        },
-      },
-      AdminOperationsSummary: {
-        type: 'object',
-        properties: {
-          generatedAt: { type: 'string', format: 'date-time' },
-          recentRunWindow: { type: 'integer' },
-          totals: {
-            type: 'object',
-            properties: {
-              sourceCount: { type: 'integer' },
-              enabledSourceCount: { type: 'integer' },
-              publishedCount: { type: 'integer' },
-              suspendedCount: { type: 'integer' },
-              hiddenCount: { type: 'integer' },
-              openQualityIssueCount: { type: 'integer' },
-            },
-          },
-          sources: { type: 'array', items: { type: 'object' } },
-        },
-        required: ['generatedAt', 'recentRunWindow', 'totals', 'sources'],
-      },
-    },
+    schemas: generatedSchemas,
   },
-} as const;
+};
 
 export type OpenApiDocument = typeof openapiDocument;

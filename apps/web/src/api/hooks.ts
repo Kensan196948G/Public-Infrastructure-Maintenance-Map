@@ -14,6 +14,8 @@ export interface AssetsQueryInput {
   q: string;
   /** When set, the list is prefecture-scoped and the viewport bbox is ignored. */
   prefectureCode?: string | null;
+  /** 5桁市区町村コード（住所検索結果から設定）。設定時は prefecture と併用可。 */
+  municipalityCode?: string | null;
   /** Page size sent to the API. Defaults to 200 (the API cap is 500). */
   limit?: number;
 }
@@ -29,6 +31,7 @@ export interface AssetsRequest {
  */
 export function buildAssetsRequest(input: AssetsQueryInput & { limit: number }): AssetsRequest {
   const prefectureCode = input.prefectureCode ?? null;
+  const municipalityCode = input.municipalityCode ?? null;
   // At low zoom (e.g. the default country-wide view) the viewport can exceed
   // the server's bbox area guard — omit bbox rather than erroring; the query
   // still runs, just unfiltered by area (bounded by `limit` instead).
@@ -49,6 +52,7 @@ export function buildAssetsRequest(input: AssetsQueryInput & { limit: number }):
     'assets',
     requestBbox,
     prefectureCode,
+    municipalityCode,
     [...input.types].sort(),
     [...input.quality].sort(),
     input.q.trim(),
@@ -57,6 +61,7 @@ export function buildAssetsRequest(input: AssetsQueryInput & { limit: number }):
   const params: AssetSearchParams = {
     ...(requestBbox ? { bbox: requestBbox } : {}),
     ...(prefectureCode ? { prefectureCode } : {}),
+    ...(municipalityCode ? { municipalityCode } : {}),
     types: input.types,
     quality: input.quality,
     q: input.q,
@@ -67,18 +72,19 @@ export function buildAssetsRequest(input: AssetsQueryInput & { limit: number }):
 
 /** Fetches assets within the current viewport; re-runs when bbox/filters change. */
 export function useAssets(input: AssetsQueryInput, client: ApiClient = defaultClient) {
-  const { bbox, prefectureCode, types, quality, q, limit } = input;
+  const { bbox, prefectureCode, municipalityCode, types, quality, q, limit } = input;
   const request = useMemo(
     () =>
       buildAssetsRequest({
         bbox,
         prefectureCode: prefectureCode ?? null,
+        municipalityCode: municipalityCode ?? null,
         types,
         quality,
         q,
         limit: limit ?? 200,
       }),
-    [bbox, prefectureCode, types, quality, q, limit],
+    [bbox, prefectureCode, municipalityCode, types, quality, q, limit],
   );
 
   return useQuery({
@@ -119,18 +125,19 @@ export function usePagedAssets(
   client: ApiClient = defaultClient,
 ): PagedAssetsResult {
   const base = useAssets(input, client);
-  const { bbox, prefectureCode, types, quality, q, limit } = input;
+  const { bbox, prefectureCode, municipalityCode, types, quality, q, limit } = input;
   const request = useMemo(
     () =>
       buildAssetsRequest({
         bbox,
         prefectureCode: prefectureCode ?? null,
+        municipalityCode: municipalityCode ?? null,
         types,
         quality,
         q,
         limit: limit ?? 200,
       }),
-    [bbox, prefectureCode, types, quality, q, limit],
+    [bbox, prefectureCode, municipalityCode, types, quality, q, limit],
   );
 
   const [extraItems, setExtraItems] = useState<AssetSummary[]>([]);
