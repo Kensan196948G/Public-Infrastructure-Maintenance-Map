@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { AssetSummary, AssetType, BBox, QualityStatus } from '@pimm/contracts';
-import { useAssetDetail, useHealth, usePagedAssets, useSources, useSummary } from './api/hooks.js';
+import { ApiClient } from './api/client.js';
+import {
+  useAssetDetail,
+  useAdminAccess,
+  useHealth,
+  usePagedAssets,
+  useSources,
+  useSuggest,
+  useSummary,
+} from './api/hooks.js';
 import { prefectureName } from './lib/prefectures.js';
 import { AuditLogDialog } from './components/AuditLogDialog.js';
 import { DataRefreshButton } from './components/DataRefreshButton.js';
@@ -16,6 +25,9 @@ import { SettingsDialog } from './components/SettingsDialog.js';
 import { ShareButton } from './components/ShareButton.js';
 import { SourcesDialog } from './components/SourcesDialog.js';
 import { parseUrlState, serializeUrlState } from './lib/url-state.js';
+
+/** Shared client for header-level calls (geocode). */
+const defaultApiClient = new ApiClient();
 
 /** Toggles a value in an array (add if absent, remove if present). */
 function toggle<T>(list: readonly T[], value: T): T[] {
@@ -32,6 +44,9 @@ export function App() {
   const [quality, setQuality] = useState<QualityStatus[]>(initial.quality);
   const [q, setQ] = useState<string>(initial.q);
   const [searchInput, setSearchInput] = useState<string>(initial.q);
+  const [addressInput, setAddressInput] = useState('');
+  const [addressError, setAddressError] = useState<string | null>(null);
+  const [isGeocoding, setIsGeocoding] = useState(false);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focusPoint, setFocusPoint] = useState<[number, number] | null>(null);
@@ -52,10 +67,12 @@ export function App() {
 
   const pagedAssets = usePagedAssets({ bbox, types, quality, q, prefectureCode: prefecture });
   const summaryQuery = useSummary();
+  const suggestQuery = useSuggest(searchInput);
   const detailQuery = useAssetDetail(selectedId);
   // Sources feed three views (catalogue, settings summary, audit status).
   const sourcesQuery = useSources(sourcesOpen || settingsOpen || auditOpen);
   const healthQuery = useHealth(settingsOpen);
+  const adminAccess = useAdminAccess();
 
   const items = pagedAssets.items;
 
@@ -130,6 +147,31 @@ export function App() {
     setQ(searchInput.trim());
   };
 
+  /** 住所検索: GSI ジオコーダ経由で座標を取得し地図中心を移動する。 */
+  const onAddressSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const query = addressInput.trim();
+    if (query === '') return;
+    setIsGeocoding(true);
+    setAddressError(null);
+    try {
+      const result = await defaultApiClient.geocode(query);
+      const first = result.items[0];
+      if (!first) {
+        setAddressError('住所が見つかりませんでした。表記を変えてお試しください。');
+        return;
+      }
+      setCenter([first.lon, first.lat]);
+      setZoom(14);
+      setSelectedId(null);
+      setFocusPoint(null);
+    } catch {
+      setAddressError('住所検索に失敗しました。時間をおいて再度お試しください。');
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#map-content">
@@ -151,11 +193,40 @@ export function App() {
             placeholder="名称で検索"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
+            list="asset-suggestions"
           />
           <button type="submit" className="search-button">
             🔍 検索
           </button>
+          <datalist id="asset-suggestions">
+            {(suggestQuery.data?.items ?? []).map((item) => (
+              <option key={item.name} value={item.name}>
+                {item.name}（{item.count.toLocaleString('ja-JP')}件）
+              </option>
+            ))}
+          </datalist>
         </form>
+        <form className="search-form" role="search" onSubmit={(e) => void onAddressSubmit(e)}>
+          <label htmlFor="address" className="visually-hidden">
+            住所で検索
+          </label>
+          <input
+            id="address"
+            type="search"
+            className="search-input"
+            placeholder="住所で検索（例: 大阪市北区）"
+            value={addressInput}
+            onChange={(e) => setAddressInput(e.target.value)}
+          />
+          <button type="submit" className="search-button" disabled={isGeocoding}>
+            {isGeocoding ? '⏳ 検索中…' : '📍 住所検索'}
+          </button>
+        </form>
+        {addressError ? (
+          <p className="address-error" role="alert">
+            {addressError}
+          </p>
+        ) : null}
         <DataRefreshButton />
         <ShareButton />
         <button type="button" className="header-link" onClick={() => setNoticeOpen(true)}>
@@ -164,12 +235,20 @@ export function App() {
         <button type="button" className="header-link" onClick={() => setFeedbackOpen(true)}>
           📣 誤りを報告
         </button>
-        <button type="button" className="header-link" onClick={() => setAuditOpen(true)}>
-          📋 監査ログ
-        </button>
-        <button type="button" className="header-link" onClick={() => setSettingsOpen(true)}>
-          ⚙️ システム設定
-        </button>
+        {adminAccess.status === 'granted' ? (
+          <>
+            <button type="button" className="header-link" onClick={() => setAuditOpen(true)}>
+              📋 監査ログ
+            </button>
+            <button type="button" className="header-link" onClick={() => setSettingsOpen(true)}>
+              ⚙️ システム設定
+            </button>
+          </>
+        ) : adminAccess.status === 'denied' ? (
+          <span className="admin-access-note" role="note">
+            🔒 管理機能は認証後に表示されます
+          </span>
+        ) : null}
       </header>
 
       <DisclaimerBanner onOpenNotice={() => setNoticeOpen(true)} />

@@ -5,6 +5,8 @@ import {
   AssetTypeSchema,
   BBoxParamSchema,
   ExportQuerySchema,
+  GeocodeItemSchema,
+  GeocodeQuerySchema,
   GeometrySchema,
   isExportAllowed,
   LonLatTupleSchema,
@@ -14,8 +16,11 @@ import {
   problem,
   ProblemDetailsSchema,
   QUALITY_RULES,
+  SuggestQuerySchema,
+  SuggestResponseSchema,
   SourceInfoSchema,
   summarizeOperations,
+  prefectureCodeForKeyword,
 } from '../src/index.js';
 import type { AdminSourceOperations } from '../src/index.js';
 
@@ -255,6 +260,47 @@ describe('admin operations summary (Issue #52)', () => {
       AdminOperationsSummarySchema.safeParse({
         ...valid,
         sources: [{ ...row({}), lastRunStatus: 'exploded' }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('prefectureCodeForKeyword', () => {
+  it('maps exact prefecture names (with width/space normalization) to codes', () => {
+    expect(prefectureCodeForKeyword('東京都')).toBe('13');
+    expect(prefectureCodeForKeyword(' 大阪府 ')).toBe('27');
+    expect(prefectureCodeForKeyword('北海道')).toBe('01');
+    expect(prefectureCodeForKeyword('大橋')).toBeNull();
+    expect(prefectureCodeForKeyword('')).toBeNull();
+  });
+});
+
+describe('suggest / geocode schemas', () => {
+  it('coerces suggest limit and bounds it', () => {
+    expect(SuggestQuerySchema.parse({ q: '橋', limit: '5' })).toEqual({ q: '橋', limit: 5 });
+    expect(SuggestQuerySchema.parse({ q: '橋' })).toEqual({ q: '橋', limit: 10 });
+    expect(SuggestQuerySchema.safeParse({ q: '', limit: 99 }).success).toBe(false);
+  });
+
+  it('validates suggest and geocode responses', () => {
+    expect(SuggestResponseSchema.parse({ items: [{ name: '大橋', count: 3 }] })).toEqual({
+      items: [{ name: '大橋', count: 3 }],
+    });
+    expect(GeocodeQuerySchema.safeParse({ q: '   ' }).success).toBe(false);
+    expect(
+      GeocodeItemSchema.safeParse({
+        title: '千代田区',
+        address: null,
+        lon: 139.7,
+        lat: 35.6,
+      }).success,
+    ).toBe(true);
+    expect(
+      GeocodeItemSchema.safeParse({
+        title: 'bad',
+        address: null,
+        lon: 999,
+        lat: 35.6,
       }).success,
     ).toBe(false);
   });

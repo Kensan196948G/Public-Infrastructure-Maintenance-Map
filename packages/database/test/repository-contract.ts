@@ -62,6 +62,32 @@ export function registerAssetRepositoryContract(
       expect(res.items.map((i) => i.name)).toEqual(['都心橋', '都心第二橋']);
     });
 
+    it('ANDs multiple whitespace-separated keywords (Issue #50)', async () => {
+      const { repo } = await setup();
+
+      const res = await repo.searchAssets({ q: '都心 橋', limit: 20 });
+      expect(res.items.map((i) => i.name)).toEqual(['都心橋', '都心第二橋']);
+
+      const none = await repo.searchAssets({ q: '都心 川', limit: 20 });
+      expect(none.items).toHaveLength(0);
+    });
+
+    it('routes a prefecture-name keyword to the spatial filter', async () => {
+      const { repo } = await setup();
+
+      const res = await repo.searchAssets({ q: '東京都', limit: 20 });
+      expect(res.items.length).toBeGreaterThan(0);
+      expect(res.items.every((i) => i.prefectureCode === '13')).toBe(true);
+    });
+
+    it('suggests names by occurrence count', async () => {
+      const { repo } = await setup();
+
+      const items = await repo.suggestNames('都心', 10);
+      expect(new Set(items.map((i) => i.name))).toEqual(new Set(['都心橋', '都心第二橋']));
+      expect(items.every((i) => i.count >= 1)).toBe(true);
+    });
+
     it('paginates with a stable cursor and rejects malformed cursors', async () => {
       const { repo } = await setup();
 

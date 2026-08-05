@@ -39,48 +39,11 @@ test('supports public type filtering', async ({ page }) => {
   await expect(page).not.toHaveURL(/types=bridge/);
 });
 
-test('opens the system settings source-management form', async ({ page }) => {
+test('hides admin entry points from unauthenticated visitors', async ({ page }) => {
   await page.goto('/');
   await waitForPublicResults(page);
 
-  await page.getByRole('button', { name: /システム設定/ }).click();
-
-  const dialog = page.getByRole('dialog', { name: 'システム設定' });
-  await expect(dialog).toContainText('データソース登録 / 編集');
-  await expect(dialog.getByRole('heading', { name: /運用ダッシュボード/ })).toBeVisible();
-  await expect(dialog.getByLabel('対象')).toBeVisible();
-  await expect(dialog.getByLabel('slug')).toBeVisible();
-  await expect(dialog.getByRole('button', { name: /登録/ })).toBeVisible();
-});
-
-test('rejects unauthenticated source registration from the settings form', async ({ page }) => {
-  await page.goto('/');
-  await waitForPublicResults(page);
-
-  await page.getByRole('button', { name: /システム設定/ }).click();
-
-  const dialog = page.getByRole('dialog', { name: 'システム設定' });
-  await dialog.getByLabel('slug').fill('e2e-source');
-  await dialog.getByLabel('名称').fill('E2E ソース');
-  await dialog.getByLabel('提供者').fill('E2E 提供者');
-  await dialog.getByLabel('URL', { exact: true }).fill('https://example.com/e2e.geojson');
-  await dialog.getByLabel('ライセンス', { exact: true }).fill('CC-BY-4.0');
-  await dialog.getByRole('button', { name: /登録/ }).click();
-
-  // 運用ダッシュボードの Access 案内 (role=alert) と区別するため管理フォーム側の文言で絞る。
-  await expect(dialog.getByRole('alert').filter({ hasText: '管理API' })).toContainText('401');
-});
-
-test('rejects unauthenticated source-wide suspension from the settings form', async ({ page }) => {
-  await page.goto('/');
-  await waitForPublicResults(page);
-
-  await page.getByRole('button', { name: /システム設定/ }).click();
-
-  const dialog = page.getByRole('dialog', { name: 'システム設定' });
-  await dialog.getByLabel('対象').selectOption('sample-bridges');
-  await dialog.getByLabel('一括公開停止理由').fill('ライセンス変更のため再確認');
-  await dialog.getByRole('button', { name: /選択ソースの公開資産を一括停止/ }).click();
-
-  await expect(dialog.getByRole('alert').filter({ hasText: '管理API' })).toContainText('401');
+  await expect(page.getByRole('button', { name: /システム設定/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /監査ログ/ })).toHaveCount(0);
+  await expect(page.getByText(/管理機能は認証後に表示されます/)).toBeVisible();
 });

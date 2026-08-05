@@ -16,6 +16,8 @@ import {
   AssetSearchQuerySchema,
   AssetSummaryQuerySchema,
   ExportQuerySchema,
+  GeocodeQuerySchema,
+  SuggestQuerySchema,
   problem,
 } from '@pimm/contracts';
 import type { AssetRepository } from '@pimm/database';
@@ -23,6 +25,7 @@ import { InvalidCursorError } from '@pimm/database';
 import type { ApiConfig } from './config.js';
 import { verifyAccessJwt } from './access-jwt.js';
 import { assetsToCsv, assetsToGeoJson, partitionByLicense } from './csv-export.js';
+import { openapiDocument } from './openapi.js';
 
 interface AdminIdentity {
   email: string;
@@ -189,6 +192,14 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     c.json({ status: 'ok' as const, version: config.version, time: new Date().toISOString() }),
   );
 
+  // OpenAPI 3.1 document (Issue #49) — version follows the runtime config.
+  v1.get('/openapi.json', (c) =>
+    c.json({
+      ...openapiDocument,
+      info: { ...openapiDocument.info, version: config.version },
+    }),
+  );
+
   v1.get('/assets', async (c) => {
     const parsed = AssetSearchQuerySchema.safeParse(c.req.query());
     if (!parsed.success) {
@@ -238,6 +249,64 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     const items = await repo.listSources();
     c.header('Cache-Control', 'public, max-age=300');
     return c.json({ items });
+  });
+
+  v1.get('/suggest', async (c) => {
+    const parsed = SuggestQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'サジェスト条件が不正です', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    const items = await repo.suggestNames(parsed.data.q, parsed.data.limit);
+    c.header('Cache-Control', 'public, max-age=60');
+    return c.json({ items });
+  });
+
+  v1.get('/geocode', async (c) => {
+    const parsed = GeocodeQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', '住所検索条件が不正です', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    try {
+      const geocoderUrl = `https://msearch.gsi.go.jp/address/search?q=${encodeURIComponent(parsed.data.q)}`;
+      const res = await fetch(geocoderUrl, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return fail(c, 'SOURCE_UNAVAILABLE', '住所検索サービスが応答できませんでした');
+      }
+      const body = (await res.json()) as {
+        features?: Array<{
+          geometry?: { coordinates?: unknown };
+          properties?: { title?: unknown; address?: unknown };
+        }>;
+      };
+      const items = (body.features ?? [])
+        .slice(0, 10)
+        .map((feature) => {
+          const coords = feature.geometry?.coordinates;
+          const lon = Array.isArray(coords) ? coords[0] : undefined;
+          const lat = Array.isArray(coords) ? coords[1] : undefined;
+          return {
+            title: String(feature.properties?.title ?? ''),
+            address:
+              typeof feature.properties?.address === 'string'
+                ? feature.properties.address
+                : null,
+            lon: Number(lon),
+            lat: Number(lat),
+          };
+        })
+        .filter((item) => Number.isFinite(item.lon) && Number.isFinite(item.lat));
+      return c.json({ items });
+    } catch {
+      // fetch throws on timeout / DNS / network errors; never leak internals.
+      return fail(c, 'SOURCE_UNAVAILABLE', '住所検索サービスに接続できませんでした');
+    }
   });
 
   v1.get('/sources/:slug', async (c) => {

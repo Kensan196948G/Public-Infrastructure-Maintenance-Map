@@ -208,3 +208,46 @@ export function useHealth(enabled: boolean, client: ApiClient = defaultClient) {
     staleTime: 60_000,
   });
 }
+
+/**
+ * Debounced name suggestions for the search box (Issue #50). The API is only
+ * called after the user pauses typing for 250ms.
+ */
+export function useSuggest(rawQ: string, client: ApiClient = defaultClient) {
+  const q = rawQ.trim();
+  const [debounced, setDebounced] = useState(q);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(q), 250);
+    return () => window.clearTimeout(timer);
+  }, [q]);
+
+  return useQuery({
+    queryKey: ['suggest', debounced],
+    enabled: debounced.length >= 1,
+    queryFn: () => client.suggest(debounced, 10),
+    staleTime: 30_000,
+  });
+}
+
+export type AdminAccessStatus = 'checking' | 'granted' | 'denied';
+
+/**
+ * Probes the admin API once per session (5 min stale) so the header can hide
+ * admin entry points from unauthenticated visitors instead of showing 401
+ * flows. Public users never see the buttons; Access-authenticated admins do.
+ */
+export function useAdminAccess(client: ApiClient = defaultClient) {
+  const query = useQuery({
+    queryKey: ['admin', 'access'],
+    queryFn: async () => {
+      await client.getAdminOperations();
+      return true;
+    },
+    retry: 1,
+    staleTime: 5 * 60_000,
+  });
+  return {
+    status: (query.isLoading ? 'checking' : query.isSuccess ? 'granted' : 'denied') as AdminAccessStatus,
+  };
+}

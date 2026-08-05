@@ -63,11 +63,15 @@ describe('representativePoint', () => {
 
 describe('cursor', () => {
   it('round-trips a payload', () => {
-    expect(decodeCursor(encodeCursor({ offset: 42 }))).toEqual({ offset: 42 });
+    expect(decodeCursor(encodeCursor({ name: '都心橋', id: 'abc' }))).toEqual({
+      name: '都心橋',
+      id: 'abc',
+    });
   });
   it('returns null for malformed input', () => {
     expect(decodeCursor('not-base64!')).toBeNull();
     expect(decodeCursor(btoa(JSON.stringify({ offset: -1 })))).toBeNull();
+    expect(decodeCursor(btoa(JSON.stringify({ name: 1, id: 'x' })))).toBeNull();
     expect(decodeCursor(btoa(JSON.stringify({ nope: 1 })))).toBeNull();
   });
 });
