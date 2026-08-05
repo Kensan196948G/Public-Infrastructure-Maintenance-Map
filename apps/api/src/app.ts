@@ -272,7 +272,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
       });
     }
     try {
-      const geocoderUrl = `https://msearch.gsi.go.jp/address/search?q=${encodeURIComponent(parsed.data.q)}`;
+      const geocoderUrl = `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(parsed.data.q)}`;
       const res = await fetch(geocoderUrl, {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(5000),
