@@ -41,6 +41,11 @@ interface AppState {
 
 type AppContext = { Variables: AppState };
 
+interface GeocoderFeature {
+  geometry?: { coordinates?: unknown };
+  properties?: { title?: unknown; address?: unknown };
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 function problemResponse(p: ProblemDetails): Response {
@@ -280,13 +285,14 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
       if (!res.ok) {
         return fail(c, 'SOURCE_UNAVAILABLE', '住所検索サービスが応答できませんでした');
       }
-      const body = (await res.json()) as {
-        features?: Array<{
-          geometry?: { coordinates?: unknown };
-          properties?: { title?: unknown; address?: unknown };
-        }>;
-      };
-      const items = (body.features ?? [])
+      const body = (await res.json()) as
+        | {
+            features?: GeocoderFeature[];
+          }
+        | GeocoderFeature[];
+      // GSI は素の Feature 配列を返す（旧仕様の { features: [...] } も互換受容）。
+      const features = Array.isArray(body) ? body : (body.features ?? []);
+      const items = features
         .slice(0, 10)
         .map((feature) => {
           const coords = feature.geometry?.coordinates;
