@@ -21,6 +21,7 @@ const source: SourceInfo = {
   licenseUrl: 'https://example.com/license',
   redistribution: 'allowed',
   attributionText: null,
+  refreshCron: null,
   enabled: true,
   lastFetchedAt: '2026-07-10T00:00:00Z',
   sourceUpdatedAt: '2026-04-01T00:00:00Z',
@@ -115,8 +116,10 @@ function setup(overrides: Partial<Parameters<typeof AuditLogDialog>[0]> = {}) {
 describe('AuditLogDialog', () => {
   it('discloses that admin actions are protected and explicit', () => {
     setup();
-    expect(screen.getByRole('note')).toHaveTextContent(/Cloudflare Access/);
-    expect(screen.getByRole('note')).toHaveTextContent(/ボタン操作した場合だけ実行/);
+    const notes = screen.getAllByRole('note');
+    expect(notes[0]).toHaveTextContent(/Cloudflare Access/);
+    expect(notes[0]).toHaveTextContent(/ボタン操作した場合だけ実行/);
+    expect(notes[1]).toHaveTextContent(/実データの取得・DB反映は CLI/);
   });
 
   it('renders per-source ingestion status', () => {

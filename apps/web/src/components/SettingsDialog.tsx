@@ -81,7 +81,7 @@ function sourceToForm(source: SourceInfo): SourceFormState {
     licenseUrl: source.licenseUrl ?? '',
     redistribution: source.redistribution,
     attributionText: source.attributionText ?? '',
-    refreshCron: '',
+    refreshCron: source.refreshCron ?? '',
     enabled: source.enabled,
   };
 }

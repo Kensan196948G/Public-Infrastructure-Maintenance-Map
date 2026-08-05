@@ -48,6 +48,17 @@ export interface AssetSearchParams {
   cursor?: string;
 }
 
+/** Filters shared by search and export; export adds the required `format`. */
+export interface ExportParams {
+  format: 'csv' | 'geojson';
+  bbox?: BBox;
+  types?: readonly AssetType[];
+  quality?: readonly QualityStatus[];
+  q?: string;
+  prefectureCode?: string;
+  limit?: number;
+}
+
 function buildAssetQuery(params: AssetSearchParams): string {
   const search = new URLSearchParams();
   if (params.bbox) {
@@ -70,6 +81,31 @@ function buildAssetQuery(params: AssetSearchParams): string {
   }
   if (params.cursor) {
     search.set('cursor', params.cursor);
+  }
+  return search.toString();
+}
+
+/** Builds the query string for GET /export (format is required by the API). */
+function buildExportQuery(params: ExportParams): string {
+  const search = new URLSearchParams();
+  search.set('format', params.format);
+  if (params.bbox) {
+    search.set('bbox', params.bbox.join(','));
+  }
+  if (params.types && params.types.length > 0) {
+    search.set('types', params.types.join(','));
+  }
+  if (params.quality && params.quality.length > 0) {
+    search.set('quality', params.quality.join(','));
+  }
+  if (params.q && params.q.trim() !== '') {
+    search.set('q', params.q.trim());
+  }
+  if (params.prefectureCode) {
+    search.set('prefectureCode', params.prefectureCode);
+  }
+  if (typeof params.limit === 'number') {
+    search.set('limit', String(params.limit));
   }
   return search.toString();
 }
@@ -162,6 +198,16 @@ export class ApiClient {
     return getJson<HealthResponse>(`${this.base}/health`, this.fetchImpl);
   }
 
+  /**
+   * Returns the download URL for the license-controlled export endpoint.
+   * The server enforces redistribution policy; excluded sources are reported
+   * via the X-Excluded-Sources response header.
+   */
+  getExportUrl(params: ExportParams): string {
+    const qs = buildExportQuery(params);
+    return `${this.base}/export${qs ? `?${qs}` : ''}`;
+  }
+
   createAdminSource(input: AdminCreateSource): Promise<AdminSourceResponse> {
     return postJson<AdminSourceResponse>(`${this.base}/admin/sources`, this.fetchImpl, input);
   }
@@ -239,4 +285,4 @@ export class ApiClient {
 }
 
 /** Exposed for tests that assert query-string construction. */
-export const _internal = { buildAssetQuery };
+export const _internal = { buildAssetQuery, buildExportQuery };

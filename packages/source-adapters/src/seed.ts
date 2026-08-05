@@ -120,6 +120,7 @@ export async function buildSampleSeed(): Promise<SampleSeed> {
       licenseUrl: d.licenseUrl,
       redistribution: d.redistribution,
       attributionText: d.attributionText,
+      refreshCron: null,
       enabled: true,
       lastFetchedAt: SAMPLE_FETCHED_AT,
       sourceUpdatedAt: null,

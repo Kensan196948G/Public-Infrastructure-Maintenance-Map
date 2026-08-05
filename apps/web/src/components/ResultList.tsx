@@ -16,6 +16,11 @@ interface ResultListProps {
   groupByPrefecture?: boolean;
   /** Overrides the default empty-state text (e.g. prefecture-scoped mode). */
   emptyMessage?: string | undefined;
+  /** When true, the server reported more pages (nextCursor present). */
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  loadMoreError?: boolean;
+  onLoadMore?: () => void;
 }
 
 /** Groups items by prefecture code (JIS order, unknown last), keeping row order inside a group. */
@@ -46,6 +51,10 @@ export function ResultList({
   onSelect,
   groupByPrefecture = false,
   emptyMessage,
+  hasMore = false,
+  isLoadingMore = false,
+  loadMoreError = false,
+  onLoadMore,
 }: ResultListProps) {
   if (isError) {
     return (
@@ -116,6 +125,24 @@ export function ResultList({
           })}
         </Fragment>
       ))}
+      {hasMore ? (
+        <li className="result-load-more">
+          <button
+            type="button"
+            className="load-more-button"
+            disabled={isLoadingMore}
+            onClick={onLoadMore}
+            aria-busy={isLoadingMore}
+          >
+            {isLoadingMore ? '⏳ 読み込み中…' : 'さらに表示'}
+          </button>
+          {loadMoreError ? (
+            <p className="load-more-error" role="alert">
+              追加読み込みに失敗しました。時間をおいて再度お試しください。
+            </p>
+          ) : null}
+        </li>
+      ) : null}
     </ul>
   );
 }

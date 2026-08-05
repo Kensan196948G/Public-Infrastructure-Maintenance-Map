@@ -75,6 +75,7 @@ export function makeSource(overrides: Partial<SourceInfo> & { slug: string }): S
     licenseUrl: null,
     redistribution: 'allowed',
     attributionText: null,
+    refreshCron: null,
     enabled: true,
     lastFetchedAt: null,
     sourceUpdatedAt: null,

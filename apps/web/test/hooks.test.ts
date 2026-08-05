@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type { AssetSearchResponse } from '@pimm/contracts';
 import { ApiClient } from '../src/api/client.js';
-import { useAssets } from '../src/api/hooks.js';
+import { useAssets, usePagedAssets } from '../src/api/hooks.js';
+import { bridgeSummary, riverSummary } from './fixtures.js';
 
 function makeClient(searchAssets: ApiClient['searchAssets']) {
   const client = new ApiClient({ fetchImpl: vi.fn() });
@@ -107,5 +108,67 @@ describe('useAssets', () => {
     expect(searchAssets.mock.calls[0]?.[0]).toMatchObject({
       bbox: [139.6, 35.6, 139.9, 35.8],
     });
+  });
+});
+
+describe('usePagedAssets', () => {
+  it('appends cursor pages and exposes hasMore', async () => {
+    const searchAssets = vi
+      .fn<ApiClient['searchAssets']>()
+      .mockResolvedValueOnce({ items: [bridgeSummary], nextCursor: 'c1' })
+      .mockResolvedValueOnce({ items: [riverSummary], nextCursor: null });
+    const client = makeClient(searchAssets);
+
+    const { result } = renderHook(
+      () =>
+        usePagedAssets(
+          {
+            bbox: [139, 35, 140, 36],
+            types: ['bridge', 'river'],
+            quality: ['verified'],
+            q: '',
+          },
+          client,
+        ),
+      { wrapper: wrapper() },
+    );
+
+    await waitFor(() => expect(result.current.items).toEqual([bridgeSummary]));
+    expect(result.current.hasMore).toBe(true);
+
+    await act(async () => {
+      await result.current.loadMore();
+    });
+
+    expect(result.current.items).toEqual([bridgeSummary, riverSummary]);
+    expect(result.current.hasMore).toBe(false);
+    expect(searchAssets).toHaveBeenCalledTimes(2);
+    expect(searchAssets.mock.calls[1]?.[0]).toMatchObject({ cursor: 'c1' });
+  });
+
+  it('surfaces load-more failures without losing the first page', async () => {
+    const searchAssets = vi
+      .fn<ApiClient['searchAssets']>()
+      .mockResolvedValueOnce({ items: [bridgeSummary], nextCursor: 'c1' })
+      .mockRejectedValueOnce(new Error('boom'));
+    const client = makeClient(searchAssets);
+
+    const { result } = renderHook(
+      () =>
+        usePagedAssets(
+          { bbox: [139, 35, 140, 36], types: ['bridge'], quality: ['verified'], q: '' },
+          client,
+        ),
+      { wrapper: wrapper() },
+    );
+
+    await waitFor(() => expect(result.current.items).toEqual([bridgeSummary]));
+    await act(async () => {
+      await result.current.loadMore();
+    });
+
+    expect(result.current.loadMoreError).toBe(true);
+    expect(result.current.items).toEqual([bridgeSummary]);
+    expect(result.current.hasMore).toBe(true);
   });
 });

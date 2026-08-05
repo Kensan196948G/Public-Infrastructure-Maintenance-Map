@@ -153,6 +153,7 @@ export class InMemoryAssetRepository implements AssetRepository {
       licenseUrl: input.licenseUrl ?? null,
       redistribution: input.redistribution,
       attributionText: input.attributionText ?? null,
+      refreshCron: input.refreshCron ?? null,
       enabled: input.enabled,
       lastFetchedAt: null,
       sourceUpdatedAt: null,
@@ -179,6 +180,7 @@ export class InMemoryAssetRepository implements AssetRepository {
       ...(input.licenseUrl !== undefined ? { licenseUrl: input.licenseUrl } : {}),
       ...(input.redistribution !== undefined ? { redistribution: input.redistribution } : {}),
       ...(input.attributionText !== undefined ? { attributionText: input.attributionText } : {}),
+      ...(input.refreshCron !== undefined ? { refreshCron: input.refreshCron } : {}),
       ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
     };
     this.sources[this.sources.indexOf(source)] = updated;
