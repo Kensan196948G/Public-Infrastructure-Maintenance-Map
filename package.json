@@ -20,6 +20,7 @@
     "test:e2e": "playwright test",
     "db:migrate": "node scripts/db/migrate.mjs",
     "ingest": "pnpm --filter @pimm/api ingest",
+    "ingest:w05:all": "node scripts/tools/ingest-river-w05-all.mjs",
     "ratelimit:cloudflare": "node scripts/tools/cloudflare-rate-limit.mjs",
     "smoke:cloudflare": "node scripts/tools/cloudflare-production-smoke.mjs",
     "smoke:cloudflare:pending": "node scripts/tools/cloudflare-production-smoke.mjs --allow-pending-dns",

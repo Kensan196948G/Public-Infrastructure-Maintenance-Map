@@ -14,6 +14,10 @@ export interface MapUrlState {
   q: string;
   /** 2-digit JIS prefecture code when prefecture navigation is active. */
   pref: string | null;
+  /** 5桁市区町村コード（住所検索から設定） */
+  municipalityCode: string | null;
+  /** 表示用の市区町村名（URL に保持して再読込時も表示） */
+  municipalityName: string | null;
 }
 
 /** Roughly the geographic center of Japan; used when the URL has no location. */
@@ -27,6 +31,8 @@ export const DEFAULT_URL_STATE: MapUrlState = {
   quality: [...VISIBLE_QUALITY_STATUSES],
   q: '',
   pref: null,
+  municipalityCode: null,
+  municipalityName: null,
 };
 
 const LON_DECIMALS = 5;
@@ -94,7 +100,15 @@ export function parseUrlState(search: string): MapUrlState {
   const rawPref = params.get('pref');
   const pref = rawPref && /^\d{2}$/.test(rawPref) ? rawPref : null;
 
-  return { center: [lon, lat], zoom, types, quality, q, pref };
+  const rawMuni = params.get('muni');
+  const municipalityCode = rawMuni && /^\d{5}$/.test(rawMuni) ? rawMuni : null;
+  const rawMuniName = params.get('muniN');
+  const municipalityName =
+    municipalityCode && rawMuniName && rawMuniName.length > 0 && rawMuniName.length <= 50
+      ? rawMuniName
+      : null;
+
+  return { center: [lon, lat], zoom, types, quality, q, pref, municipalityCode, municipalityName };
 }
 
 /**
@@ -111,6 +125,10 @@ export function serializeUrlState(state: MapUrlState): string {
   params.set('quality', state.quality.join(','));
   if (state.pref) {
     params.set('pref', state.pref);
+  }
+  if (state.municipalityCode) {
+    params.set('muni', state.municipalityCode);
+    if (state.municipalityName) params.set('muniN', state.municipalityName);
   }
   if (state.q.trim() !== '') {
     params.set('q', state.q.trim());

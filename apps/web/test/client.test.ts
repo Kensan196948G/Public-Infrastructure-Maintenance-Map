@@ -370,7 +370,18 @@ describe('ApiClient', () => {
   });
 
   it('requests address geocoding', async () => {
-    const payload = { items: [{ title: '千代田区', address: null, lon: 139.7, lat: 35.6 }] };
+    const payload = {
+      items: [
+        {
+          title: '千代田区',
+          address: null,
+          lon: 139.7,
+          lat: 35.6,
+          municipalityCode: '13101',
+          municipalityName: '千代田区',
+        },
+      ],
+    };
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
       jsonResponse(payload),
     );

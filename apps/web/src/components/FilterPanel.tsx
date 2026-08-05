@@ -16,6 +16,9 @@ interface FilterPanelProps {
   selectedPrefecture?: string | null;
   /** Called with a code to focus a prefecture, or null to return to Japan. */
   onSelectPrefecture?: (code: string | null) => void;
+  /** 住所検索で絞り込んだ市区町村名（null で非表示） */
+  selectedMunicipality?: string | null;
+  onClearMunicipality?: () => void;
   /** Current viewport/filters used to build the CSV / GeoJSON export URLs. */
   exportState?: ExportButtonsProps;
 }
@@ -31,6 +34,8 @@ export function FilterPanel({
   byPrefecture = null,
   selectedPrefecture = null,
   onSelectPrefecture,
+  selectedMunicipality = null,
+  onClearMunicipality,
   exportState,
 }: FilterPanelProps) {
   return (
@@ -40,6 +45,16 @@ export function FilterPanel({
           <h2 id="filter-pref-heading" className="filter-heading">
             都道府県
           </h2>
+          {selectedMunicipality ? (
+            <button
+              type="button"
+              className="pref-reset-button"
+              onClick={onClearMunicipality}
+              aria-label={`市区町村 ${selectedMunicipality} の絞り込みを解除`}
+            >
+              🏘️ {selectedMunicipality} を解除
+            </button>
+          ) : null}
           {selectedPrefecture ? (
             <button
               type="button"

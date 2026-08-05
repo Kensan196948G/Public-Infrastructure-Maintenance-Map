@@ -17,6 +17,7 @@ import {
   AssetSummaryQuerySchema,
   ExportQuerySchema,
   GeocodeQuerySchema,
+  municipalityCodeForAddress,
   SuggestQuerySchema,
   problem,
 } from '@pimm/contracts';
@@ -291,12 +292,18 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
           const coords = feature.geometry?.coordinates;
           const lon = Array.isArray(coords) ? coords[0] : undefined;
           const lat = Array.isArray(coords) ? coords[1] : undefined;
-          return {
+          const item = {
             title: String(feature.properties?.title ?? ''),
             address:
               typeof feature.properties?.address === 'string' ? feature.properties.address : null,
             lon: Number(lon),
             lat: Number(lat),
+          };
+          const match = municipalityCodeForAddress(item.address ?? item.title);
+          return {
+            ...item,
+            municipalityCode: match?.code ?? null,
+            municipalityName: match?.name ?? null,
           };
         })
         .filter((item) => Number.isFinite(item.lon) && Number.isFinite(item.lat));

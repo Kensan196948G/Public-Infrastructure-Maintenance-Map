@@ -133,6 +133,12 @@ export const GeocodeItemSchema = z.object({
   address: z.string().nullable(),
   lon: LongitudeSchema,
   lat: LatitudeSchema,
+  /** 5桁市区町村コード（住所から推定。不明は null） */
+  municipalityCode: z
+    .string()
+    .regex(/^\d{5}$/)
+    .nullable(),
+  municipalityName: z.string().nullable(),
 });
 export type GeocodeItem = z.infer<typeof GeocodeItemSchema>;
 

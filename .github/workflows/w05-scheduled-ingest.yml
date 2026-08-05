@@ -1,0 +1,122 @@
+name: W05 Scheduled Ingest
+
+on:
+  schedule:
+    # Sat 16:00 UTC = Sun 01:00 JST（週次・河川データ定期更新）
+    - cron: '0 16 * * 6'
+  workflow_dispatch:
+    inputs:
+      prefecture:
+        description: '対象県コード（例: 01）。all で47県全部'
+        required: false
+        default: 'all'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: w05-scheduled-ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    # スケジュール or all 指定: 47 県マトリクスで実行
+    if: ${{ github.event_name == 'schedule' || inputs.prefecture == 'all' || inputs.prefecture == '' }}
+    name: 🏞️ river-w05-${{ matrix.prefecture }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        prefecture:
+          [
+            '01',
+            '02',
+            '03',
+            '04',
+            '05',
+            '06',
+            '07',
+            '08',
+            '09',
+            '10',
+            '11',
+            '12',
+            '13',
+            '14',
+            '15',
+            '16',
+            '17',
+            '18',
+            '19',
+            '20',
+            '21',
+            '22',
+            '23',
+            '24',
+            '25',
+            '26',
+            '27',
+            '28',
+            '29',
+            '30',
+            '31',
+            '32',
+            '33',
+            '34',
+            '35',
+            '36',
+            '37',
+            '38',
+            '39',
+            '40',
+            '41',
+            '42',
+            '43',
+            '44',
+            '45',
+            '46',
+            '47',
+          ]
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: 📦 Install
+        run: pnpm install --frozen-lockfile
+
+      - name: 🏞️ Ingest river-w05-${{ matrix.prefecture }} --publish
+        run: pnpm ingest --source river-w05-${{ matrix.prefecture }} --publish
+
+  ingest-single:
+    # workflow_dispatch で特定県コード指定時: その1県のみ実行
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.prefecture != 'all' && inputs.prefecture != '' }}
+    name: 🏞️ river-w05-${{ inputs.prefecture }}
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: 📦 Install
+        run: pnpm install --frozen-lockfile
+
+      - name: 🏞️ Ingest river-w05-${{ inputs.prefecture }} --publish
+        run: pnpm ingest --source river-w05-${{ inputs.prefecture }} --publish
