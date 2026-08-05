@@ -16,7 +16,7 @@
     "@pimm/database": "workspace:*",
     "@pimm/ingestion-core": "workspace:*",
     "@pimm/source-adapters": "workspace:*",
-    "hono": "^4.8.0",
+    "hono": "^4.13.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
