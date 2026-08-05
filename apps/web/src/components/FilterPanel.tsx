@@ -1,6 +1,7 @@
 import type { AssetType, QualityStatus } from '@pimm/contracts';
 import { ASSET_TYPE_LIST, QUALITY_META, VISIBLE_QUALITY_STATUSES } from '../lib/asset-meta.js';
 import { listPrefectureEntries, prefectureName } from '../lib/prefectures.js';
+import { ExportButtons, type ExportButtonsProps } from './ExportButtons.js';
 
 interface FilterPanelProps {
   selectedTypes: readonly AssetType[];
@@ -15,6 +16,8 @@ interface FilterPanelProps {
   selectedPrefecture?: string | null;
   /** Called with a code to focus a prefecture, or null to return to Japan. */
   onSelectPrefecture?: (code: string | null) => void;
+  /** Current viewport/filters used to build the CSV / GeoJSON export URLs. */
+  exportState?: ExportButtonsProps;
 }
 
 /** Left panel: prefecture menu, category filter, quality filter and result count (UI-01). */
@@ -28,6 +31,7 @@ export function FilterPanel({
   byPrefecture = null,
   selectedPrefecture = null,
   onSelectPrefecture,
+  exportState,
 }: FilterPanelProps) {
   return (
     <aside className="filter-panel" aria-label="絞り込み">
@@ -132,6 +136,8 @@ export function FilterPanel({
           📚 データソース一覧
         </button>
       </section>
+
+      {exportState ? <ExportButtons {...exportState} /> : null}
     </aside>
   );
 }

@@ -25,6 +25,33 @@ describe('buildAssetQuery', () => {
   });
 });
 
+describe('buildExportQuery / getExportUrl', () => {
+  it('builds an export URL with format and current filters', () => {
+    const qs = _internal.buildExportQuery({
+      format: 'geojson',
+      bbox: [139, 35, 140, 36],
+      types: ['bridge'],
+      quality: ['verified', 'reference'],
+      q: '大橋',
+      limit: 1000,
+    });
+    const params = new URLSearchParams(qs);
+    expect(params.get('format')).toBe('geojson');
+    expect(params.get('bbox')).toBe('139,35,140,36');
+    expect(params.get('types')).toBe('bridge');
+    expect(params.get('quality')).toBe('verified,reference');
+    expect(params.get('q')).toBe('大橋');
+    expect(params.get('limit')).toBe('1000');
+  });
+
+  it('omits empty filters from the export URL', () => {
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl: vi.fn() });
+    expect(client.getExportUrl({ format: 'csv', types: [], quality: [], q: '  ' })).toBe(
+      '/api/v1/export?format=csv',
+    );
+  });
+});
+
 function jsonResponse(body: unknown, init: { ok?: boolean; status?: number } = {}) {
   return {
     ok: init.ok ?? true,
@@ -116,6 +143,7 @@ describe('ApiClient', () => {
       licenseUrl: null,
       redistribution: 'allowed',
       attributionText: null,
+      refreshCron: null,
       enabled: false,
       lastFetchedAt: null,
       sourceUpdatedAt: null,
@@ -164,6 +192,7 @@ describe('ApiClient', () => {
       licenseUrl: null,
       redistribution: 'allowed',
       attributionText: null,
+      refreshCron: null,
       enabled: true,
       lastFetchedAt: null,
       sourceUpdatedAt: null,

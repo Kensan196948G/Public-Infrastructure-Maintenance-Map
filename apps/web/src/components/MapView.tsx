@@ -6,16 +6,16 @@ import { ASSET_TYPE_LIST } from '../lib/asset-meta.js';
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from '../lib/url-state.js';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-/** Minimal GeoJSON shapes for the point layer (avoids a @types/geojson import). */
-interface PointFeature {
+/** GeoJSON shapes for the asset layer — real geometry, not just anchor points. */
+interface AssetFeature {
   type: 'Feature';
   id: string;
-  geometry: { type: 'Point'; coordinates: [number, number] };
+  geometry: AssetSummary['geometry'];
   properties: { id: string; assetType: AssetType; name: string };
 }
-interface PointFeatureCollection {
+interface AssetFeatureCollection {
   type: 'FeatureCollection';
-  features: PointFeature[];
+  features: AssetFeature[];
 }
 
 interface MapViewProps {
@@ -37,8 +37,13 @@ interface MapViewProps {
 }
 
 const SOURCE_ID = 'assets';
+const CLUSTER_LAYER_ID = 'asset-clusters';
+const CLUSTER_COUNT_LAYER_ID = 'asset-cluster-count';
 const LAYER_ID = 'asset-points';
 const SELECTED_LAYER_ID = 'asset-points-selected';
+const LINE_LAYER_ID = 'asset-lines';
+const SELECTED_LINE_LAYER_ID = 'asset-lines-selected';
+const FILL_LAYER_ID = 'asset-fills';
 const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
 
 /** Raster basemap using public OSM tiles. Attribution is legally required. */
@@ -66,16 +71,13 @@ function typeColorExpression(): unknown[] {
   return expr;
 }
 
-function toFeatureCollection(items: readonly AssetSummary[]): PointFeatureCollection {
+function toFeatureCollection(items: readonly AssetSummary[]): AssetFeatureCollection {
   return {
     type: 'FeatureCollection',
     features: items.map((a) => ({
       type: 'Feature',
       id: a.id,
-      geometry: {
-        type: 'Point',
-        coordinates: [a.representativePoint[0], a.representativePoint[1]],
-      },
+      geometry: a.geometry,
       properties: { id: a.id, assetType: a.type, name: a.name },
     })),
   };
@@ -138,11 +140,60 @@ export function MapView({
       map.addSource(SOURCE_ID, {
         type: 'geojson',
         data: toFeatureCollection(itemsRef.current),
+        cluster: true,
+        clusterMaxZoom: 13,
+        clusterRadius: 50,
+      });
+      map.addLayer({
+        id: CLUSTER_LAYER_ID,
+        type: 'circle',
+        source: SOURCE_ID,
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': '#1d4ed8',
+          'circle-radius': ['step', ['get', 'point_count'], 16, 50, 20, 200, 26],
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#ffffff',
+        },
+      });
+      map.addLayer({
+        id: CLUSTER_COUNT_LAYER_ID,
+        type: 'symbol',
+        source: SOURCE_ID,
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': ['get', 'point_count_abbreviated'],
+          'text-size': 12,
+        },
+        paint: { 'text-color': '#ffffff' },
+      });
+      map.addLayer({
+        id: FILL_LAYER_ID,
+        type: 'fill',
+        source: SOURCE_ID,
+        filter: ['in', ['geometry-type'], ['literal', ['Polygon', 'MultiPolygon']]],
+        paint: {
+          'fill-color': typeColorExpression() as never,
+          'fill-opacity': 0.4,
+          'fill-outline-color': typeColorExpression() as never,
+        },
+      });
+      map.addLayer({
+        id: LINE_LAYER_ID,
+        type: 'line',
+        source: SOURCE_ID,
+        filter: ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': typeColorExpression() as never,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 2, 12, 5],
+        },
       });
       map.addLayer({
         id: LAYER_ID,
         type: 'circle',
         source: SOURCE_ID,
+        filter: ['==', ['geometry-type'], 'Point'],
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 4, 12, 7],
           'circle-color': typeColorExpression() as never,
@@ -154,12 +205,31 @@ export function MapView({
         id: SELECTED_LAYER_ID,
         type: 'circle',
         source: SOURCE_ID,
-        filter: ['==', ['get', 'id'], selectedIdRef.current ?? '__none__'],
+        filter: [
+          'all',
+          ['==', ['get', 'id'], selectedIdRef.current ?? '__none__'],
+          ['==', ['geometry-type'], 'Point'],
+        ],
         paint: {
           'circle-radius': 10,
           'circle-color': 'rgba(0,0,0,0)',
           'circle-stroke-width': 3,
           'circle-stroke-color': '#111827',
+        },
+      });
+      map.addLayer({
+        id: SELECTED_LINE_LAYER_ID,
+        type: 'line',
+        source: SOURCE_ID,
+        filter: [
+          'all',
+          ['==', ['get', 'id'], selectedIdRef.current ?? '__none__'],
+          ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]],
+        ],
+        paint: {
+          'line-color': '#111827',
+          'line-width': 6,
+          'line-opacity': 0.9,
         },
       });
 
@@ -173,19 +243,43 @@ export function MapView({
         if (asset) onSelectAssetRef.current(asset);
       };
       map.on('click', LAYER_ID, onPointClick as never);
+      // Line / polygon assets are clickable exactly like point assets.
+      map.on('click', LINE_LAYER_ID, onPointClick as never);
+      map.on('click', FILL_LAYER_ID, onPointClick as never);
+      // Clicking a cluster zooms to its extent instead of selecting an asset.
+      map.on(
+        'click',
+        CLUSTER_LAYER_ID,
+        (
+          e: MapMouseEvent & { features?: Array<{ properties: Record<string, unknown> | null }> },
+        ) => {
+          void (async () => {
+            const feature = e.features?.[0];
+            const clusterId = feature?.properties?.['cluster_id'];
+            const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
+            if (typeof clusterId !== 'number' || !source) return;
+            const zoom = await source.getClusterExpansionZoom(clusterId);
+            map.easeTo({ center: e.lngLat, zoom: Math.min(zoom + 1, 16), duration: 500 });
+          })();
+        },
+      );
       // Clicking empty map space returns to the list (deselect). The layer
       // click above still wins for marker hits because we re-query here.
       map.on('click', (e: MapMouseEvent) => {
         if (!map.getLayer(LAYER_ID)) return;
-        const hits = map.queryRenderedFeatures(e.point, { layers: [LAYER_ID] });
+        const hits = map.queryRenderedFeatures(e.point, {
+          layers: [LAYER_ID, LINE_LAYER_ID, FILL_LAYER_ID, CLUSTER_LAYER_ID],
+        });
         if (hits.length === 0) onClearSelectionRef.current();
       });
-      map.on('mouseenter', LAYER_ID, () => {
-        map.getCanvas().style.cursor = 'pointer';
-      });
-      map.on('mouseleave', LAYER_ID, () => {
-        map.getCanvas().style.cursor = '';
-      });
+      for (const layerId of [LAYER_ID, LINE_LAYER_ID, FILL_LAYER_ID, CLUSTER_LAYER_ID]) {
+        map.on('mouseenter', layerId, () => {
+          map.getCanvas().style.cursor = 'pointer';
+        });
+        map.on('mouseleave', layerId, () => {
+          map.getCanvas().style.cursor = '';
+        });
+      }
 
       emitViewport();
     });
@@ -212,7 +306,18 @@ export function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.getLayer(SELECTED_LAYER_ID)) return;
-    map.setFilter(SELECTED_LAYER_ID, ['==', ['get', 'id'], selectedId ?? '__none__']);
+    map.setFilter(SELECTED_LAYER_ID, [
+      'all',
+      ['==', ['get', 'id'], selectedId ?? '__none__'],
+      ['==', ['geometry-type'], 'Point'],
+    ]);
+    if (map.getLayer(SELECTED_LINE_LAYER_ID)) {
+      map.setFilter(SELECTED_LINE_LAYER_ID, [
+        'all',
+        ['==', ['get', 'id'], selectedId ?? '__none__'],
+        ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]],
+      ]);
+    }
   }, [selectedId]);
 
   // Ease to a point when a list row is chosen.

@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { AssetSummary, AssetType, BBox, QualityStatus } from '@pimm/contracts';
-import { useAssetDetail, useAssets, useHealth, useSources, useSummary } from './api/hooks.js';
+import { useAssetDetail, useHealth, usePagedAssets, useSources, useSummary } from './api/hooks.js';
 import { prefectureName } from './lib/prefectures.js';
 import { AuditLogDialog } from './components/AuditLogDialog.js';
 import { DataRefreshButton } from './components/DataRefreshButton.js';
 import { DisclaimerBanner } from './components/DisclaimerBanner.js';
 import { DetailPanel } from './components/DetailPanel.js';
+import { FeedbackDialog } from './components/FeedbackDialog.js';
 import { FilterPanel } from './components/FilterPanel.js';
 import { MapView } from './components/MapView.js';
 import { NoticeDialog } from './components/NoticeDialog.js';
 import { ResultList } from './components/ResultList.js';
 import { SettingsDialog } from './components/SettingsDialog.js';
+import { ShareButton } from './components/ShareButton.js';
 import { SourcesDialog } from './components/SourcesDialog.js';
 import { parseUrlState, serializeUrlState } from './lib/url-state.js';
 
@@ -39,6 +41,7 @@ export function App() {
   const [noticeOpen, setNoticeOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   // Keep the shareable URL in sync with filters and viewport (FR-07).
   useEffect(() => {
@@ -47,14 +50,14 @@ export function App() {
     window.history.replaceState(null, '', next);
   }, [center, zoom, types, quality, q, prefecture]);
 
-  const assetsQuery = useAssets({ bbox, types, quality, q, prefectureCode: prefecture });
+  const pagedAssets = usePagedAssets({ bbox, types, quality, q, prefectureCode: prefecture });
   const summaryQuery = useSummary();
   const detailQuery = useAssetDetail(selectedId);
   // Sources feed three views (catalogue, settings summary, audit status).
   const sourcesQuery = useSources(sourcesOpen || settingsOpen || auditOpen);
   const healthQuery = useHealth(settingsOpen);
 
-  const items = assetsQuery.data?.items ?? [];
+  const items = pagedAssets.items;
 
   const handleViewportChange = useCallback(
     (view: { bbox: BBox; center: [number, number]; zoom: number }) => {
@@ -112,7 +115,7 @@ export function App() {
 
   // Escape closes the detail and returns to the list — but never while a
   // dialog is open, so the key keeps meaning "close the topmost layer".
-  const dialogOpen = sourcesOpen || noticeOpen || settingsOpen || auditOpen;
+  const dialogOpen = sourcesOpen || noticeOpen || settingsOpen || auditOpen || feedbackOpen;
   useEffect(() => {
     if (!selectedId || dialogOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -129,6 +132,9 @@ export function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#map-content">
+        地図へ移動
+      </a>
       <header className="app-header">
         <div className="app-title">
           <span aria-hidden="true">🗺️</span>
@@ -151,8 +157,12 @@ export function App() {
           </button>
         </form>
         <DataRefreshButton />
+        <ShareButton />
         <button type="button" className="header-link" onClick={() => setNoticeOpen(true)}>
           ℹ️ 利用上の注意
+        </button>
+        <button type="button" className="header-link" onClick={() => setFeedbackOpen(true)}>
+          📣 誤りを報告
         </button>
         <button type="button" className="header-link" onClick={() => setAuditOpen(true)}>
           📋 監査ログ
@@ -168,16 +178,23 @@ export function App() {
         <FilterPanel
           selectedTypes={types}
           selectedQuality={quality}
-          resultCount={assetsQuery.isFetching && items.length === 0 ? null : items.length}
+          resultCount={pagedAssets.isLoading && items.length === 0 ? null : items.length}
           onToggleType={(t) => setTypes((prev) => toggle(prev, t))}
           onToggleQuality={(s) => setQuality((prev) => toggle(prev, s))}
           onOpenSources={() => setSourcesOpen(true)}
+          exportState={{
+            bbox,
+            types,
+            quality,
+            q,
+            prefectureCode: prefecture,
+          }}
           byPrefecture={summaryQuery.data?.byPrefecture ?? null}
           selectedPrefecture={prefecture}
           onSelectPrefecture={handleSelectPrefecture}
         />
 
-        <main className="map-area">
+        <main id="map-content" className="map-area">
           <MapView
             items={items}
             center={center}
@@ -226,10 +243,14 @@ export function App() {
               <ResultList
                 items={items}
                 selectedId={selectedId}
-                isLoading={assetsQuery.isLoading}
-                isError={assetsQuery.isError}
+                isLoading={pagedAssets.isLoading}
+                isError={pagedAssets.isError}
                 onSelect={handleSelect}
                 groupByPrefecture={prefecture === null}
+                hasMore={pagedAssets.hasMore}
+                isLoadingMore={pagedAssets.isLoadingMore}
+                loadMoreError={pagedAssets.loadMoreError}
+                onLoadMore={() => void pagedAssets.loadMore()}
                 emptyMessage={
                   prefecture
                     ? `${prefectureName(prefecture)}の公開データはまだ収録されていません（または絞り込み条件に該当がありません）。「🗾 全国地図に戻る」で全国表示へ戻れます。`
@@ -251,6 +272,8 @@ export function App() {
       ) : null}
 
       {noticeOpen ? <NoticeDialog onClose={() => setNoticeOpen(false)} /> : null}
+
+      {feedbackOpen ? <FeedbackDialog onClose={() => setFeedbackOpen(false)} /> : null}
 
       {auditOpen ? (
         <AuditLogDialog

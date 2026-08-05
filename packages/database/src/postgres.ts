@@ -145,6 +145,7 @@ function rowToSource(row: Row): SourceInfo {
     licenseUrl: (row['license_url'] as string | null) ?? null,
     redistribution: row['redistribution'] as SourceInfo['redistribution'],
     attributionText: (row['attribution_text'] as string | null) ?? null,
+    refreshCron: (row['refresh_cron'] as string | null) ?? null,
     enabled: Boolean(row['enabled']),
     lastFetchedAt: toIso(row['last_fetched_at']),
     sourceUpdatedAt: toIso(row['source_updated_at']),

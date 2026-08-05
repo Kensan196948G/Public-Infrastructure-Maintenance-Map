@@ -41,6 +41,7 @@ export function SourcesDialog({ sources, isLoading, isError, onClose }: SourcesD
                 <th scope="col">提供元 / データセット</th>
                 <th scope="col">ライセンス</th>
                 <th scope="col">再配布</th>
+                <th scope="col">更新スケジュール</th>
                 <th scope="col">最終取得</th>
                 <th scope="col">公開件数</th>
               </tr>
@@ -65,6 +66,7 @@ export function SourcesDialog({ sources, isLoading, isError, onClose }: SourcesD
                     )}
                   </td>
                   <td>{REDISTRIBUTION_LABEL[s.redistribution]}</td>
+                  <td className="mono">{s.refreshCron ?? '—'}</td>
                   <td>{formatDate(s.lastFetchedAt)}</td>
                   <td className="num">{s.publishedAssetCount.toLocaleString('ja-JP')}</td>
                 </tr>

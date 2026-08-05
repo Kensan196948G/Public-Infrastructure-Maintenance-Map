@@ -82,4 +82,39 @@ describe('ResultList', () => {
     );
     expect(screen.getByRole('alert')).toHaveTextContent(/取得に失敗/);
   });
+
+  it('renders a load-more button when another page exists and calls onLoadMore', async () => {
+    const onLoadMore = vi.fn();
+    render(
+      <ResultList
+        items={[bridgeSummary]}
+        selectedId={null}
+        isLoading={false}
+        isError={false}
+        onSelect={() => {}}
+        hasMore
+        onLoadMore={onLoadMore}
+      />,
+    );
+    const button = screen.getByRole('button', { name: 'さらに表示' });
+    expect(button).toBeInTheDocument();
+    await userEvent.click(button);
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a load-more error message and keeps the button clickable', () => {
+    render(
+      <ResultList
+        items={[bridgeSummary]}
+        selectedId={null}
+        isLoading={false}
+        isError={false}
+        onSelect={() => {}}
+        hasMore
+        loadMoreError
+        onLoadMore={() => {}}
+      />,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(/追加読み込みに失敗/);
+  });
 });

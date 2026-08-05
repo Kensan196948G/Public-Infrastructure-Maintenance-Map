@@ -17,6 +17,8 @@ export const SourceInfoSchema = z.object({
   redistribution: RedistributionPolicySchema,
   /** Attribution line to display when data from this source is shown/exported. */
   attributionText: z.string().nullable(),
+  /** Scheduled refresh expression (e.g. cron) managed by administrators; null when no schedule is set. */
+  refreshCron: z.string().nullable(),
   enabled: z.boolean(),
   lastFetchedAt: z.iso.datetime().nullable(),
   sourceUpdatedAt: z.iso.datetime().nullable(),

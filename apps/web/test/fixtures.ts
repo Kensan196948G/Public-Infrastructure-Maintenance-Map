@@ -28,6 +28,28 @@ export const riverSummary: AssetSummary = {
   sourceUpdatedAt: null,
 };
 
+/** Line-shaped asset (e.g. 道路 N13 / 河川 W05) exercising line-layer rendering. */
+export const riverLineSummary: AssetSummary = {
+  id: '33333333-3333-4333-8333-333333333333',
+  type: 'river',
+  name: 'ライン河川',
+  representativePoint: [139.71, 35.61],
+  geometry: {
+    type: 'LineString',
+    coordinates: [
+      [139.7, 35.6],
+      [139.71, 35.61],
+      [139.72, 35.6],
+    ],
+  },
+  prefectureCode: '13',
+  municipalityCode: null,
+  managingAuthority: null,
+  quality: { status: 'verified', updatedAtKnown: true, openIssueCodes: [] },
+  sourceSlug: 'mlit-rivers',
+  sourceUpdatedAt: '2026-03-01T00:00:00Z',
+};
+
 /** Detail with several missing values to exercise the 「不明」 fallbacks. */
 export const detailWithGaps: AssetDetail = {
   ...riverSummary,

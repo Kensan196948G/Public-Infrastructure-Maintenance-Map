@@ -149,6 +149,11 @@ export function AuditLogDialog({
         🔒 管理APIは Cloudflare Access とサーバー側 allowlist
         で保護されます。取込記録の作成は管理者がボタン操作した場合だけ実行します。
       </p>
+      <p className="admin-note" role="note">
+        ℹ️ この「取込記録」は監査用の取込実行記録を作成します。実データの取得・DB反映は CLI（
+        <code className="mono">pnpm ingest --source &lt;slug&gt; --publish</code>
+        ）で実行してください。
+      </p>
       {adminError ? (
         <p className="admin-error" role="alert">
           {adminError}

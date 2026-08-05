@@ -49,6 +49,23 @@ body {
   outline-offset: 2px;
 }
 
+/* Skip link: visible only on keyboard focus (WCAG 2.4.1). */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 1000;
+  background: var(--color-surface);
+  padding: 8px 14px;
+  border-radius: 0 0 6px 0;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+}
+
+.skip-link:focus {
+  left: 0;
+}
+
 button {
   font-family: inherit;
   cursor: pointer;
@@ -211,6 +228,66 @@ a {
 .result-count {
   margin: 0;
   font-size: 14px;
+}
+
+/* ---------- Export ---------- */
+.export-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.export-button {
+  display: inline-block;
+  padding: 7px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-decoration: none;
+  text-align: center;
+}
+
+.export-button:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.export-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+/* ---------- Load more ---------- */
+.result-load-more {
+  list-style: none;
+  padding: 10px 0;
+  text-align: center;
+}
+
+.load-more-button {
+  padding: 8px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+}
+
+.load-more-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.load-more-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.feedback-submit {
+  margin-top: 8px;
 }
 
 /* ---------- Quality badge ---------- */

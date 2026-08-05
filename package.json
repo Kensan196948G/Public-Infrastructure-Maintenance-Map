@@ -26,6 +26,10 @@
     "smoke:cloudflare:preflight": "node scripts/tools/cloudflare-production-smoke.mjs --allow-pending-dns --skip-wrangler"
   },
   "pnpm": {
+    "overrides": {
+      "brace-expansion@^1.1.7": "1.1.18",
+      "postcss": "8.5.25"
+    },
     "onlyBuiltDependencies": [
       "esbuild"
     ]

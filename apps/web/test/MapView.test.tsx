@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { MapView } from '../src/components/MapView.js';
-import { bridgeSummary, riverSummary } from './fixtures.js';
+import { _mapInternals } from '../src/components/MapView.js';
+import { bridgeSummary, riverLineSummary, riverSummary } from './fixtures.js';
 
 type Handler = () => void;
 
@@ -70,8 +71,55 @@ describe('MapView', () => {
     expect(maplibreMock.addLayer).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'asset-points-selected',
-        filter: ['==', ['get', 'id'], riverSummary.id],
+        filter: ['all', ['==', ['get', 'id'], riverSummary.id], ['==', ['geometry-type'], 'Point']],
       }),
     );
+  });
+
+  it('registers cluster, line and fill layers for mixed geometry data', () => {
+    maplibreMock.loadHandler = null;
+    maplibreMock.addLayer.mockClear();
+
+    render(
+      <MapView
+        items={[bridgeSummary, riverLineSummary]}
+        center={[139, 35] as [number, number]}
+        zoom={10}
+        selectedId={null}
+        focusPoint={null}
+        onViewportChange={vi.fn()}
+        onSelectAsset={vi.fn()}
+        onClearSelection={vi.fn()}
+      />,
+    );
+
+    const handler = maplibreMock.loadHandler as Handler | null;
+    handler?.();
+
+    const layerIds = maplibreMock.addLayer.mock.calls.map((call) => call[0]?.id);
+    expect(layerIds).toEqual(
+      expect.arrayContaining([
+        'asset-clusters',
+        'asset-cluster-count',
+        'asset-fills',
+        'asset-lines',
+        'asset-points',
+      ]),
+    );
+  });
+});
+
+describe('toFeatureCollection', () => {
+  it('keeps the original geometry so lines and polygons render as shapes', () => {
+    const fc = _mapInternals.toFeatureCollection([bridgeSummary, riverLineSummary]);
+    expect(fc.features).toHaveLength(2);
+    const line = fc.features.find((f) => f.id === riverLineSummary.id);
+    expect(line?.geometry).toEqual(riverLineSummary.geometry);
+    expect(line?.geometry.type).toBe('LineString');
+  });
+
+  it('keeps point assets as points', () => {
+    const fc = _mapInternals.toFeatureCollection([bridgeSummary]);
+    expect(fc.features[0]?.geometry).toEqual(bridgeSummary.geometry);
   });
 });

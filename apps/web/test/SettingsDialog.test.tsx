@@ -22,6 +22,7 @@ const source: SourceInfo = {
   licenseUrl: null,
   redistribution: 'allowed',
   attributionText: null,
+  refreshCron: null,
   enabled: true,
   lastFetchedAt: '2026-07-10T00:00:00Z',
   sourceUpdatedAt: '2026-04-01T00:00:00Z',
