@@ -294,9 +294,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
           return {
             title: String(feature.properties?.title ?? ''),
             address:
-              typeof feature.properties?.address === 'string'
-                ? feature.properties.address
-                : null,
+              typeof feature.properties?.address === 'string' ? feature.properties.address : null,
             lon: Number(lon),
             lat: Number(lat),
           };

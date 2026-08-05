@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { runPipeline } from '@pimm/ingestion-core';
 import type { SourceAdapter } from '@pimm/ingestion-core';
 import {
@@ -8,8 +8,10 @@ import {
   parsePortC02Xml,
 } from '../src/adapters/port-c02.js';
 import type { PortC02Record } from '../src/adapters/port-c02.js';
+import type { FetchBinaryFn } from '../src/transport.js';
 
 const CTX = { now: '2026-07-30T00:00:00.000Z' };
+const mockFetchBinary = vi.fn<FetchBinaryFn>();
 
 /**
  * 実ファイル(C02-14-g.xml)と同じ構造の縮小 fixture。
@@ -121,7 +123,7 @@ describe('parsePortC02Xml', () => {
 
 describe('port-c02 adapter (contract test)', () => {
   it('normalizes ports with natural key, admin codes and raw-value attributes', async () => {
-    const result = await runPipeline(withFixedXml(createPortC02Adapter()), CTX);
+    const result = await runPipeline(withFixedXml(createPortC02Adapter(mockFetchBinary)), CTX);
 
     expect(result.aborted).toBeNull();
     expect(result.counts.fetched).toBe(3);

@@ -18,7 +18,7 @@ import {
   parseNumeric,
 } from '@pimm/ingestion-core';
 import type { AssetAttribute, Geometry } from '@pimm/contracts';
-import { fetchTextOverHttps } from '../http.js';
+import type { FetchTextFn } from '../transport.js';
 
 const SOURCE_URL =
   'https://data.bodik.jp/dataset/494c4978-94fa-4994-8f95-2e928313ee83/resource/aa313774-90ee-419d-b5b8-af817ac80446/download/173_241031__r6.10.1.csv';
@@ -96,7 +96,9 @@ const NUMERIC_ATTRIBUTE_COLUMNS = [
   ['inspection_year', '点検実施\n年度', null],
 ] as const;
 
-export function createBridgeKumamotoAdapter(): SourceAdapter<BridgeKumamotoRow> {
+export function createBridgeKumamotoAdapter(
+  transport: FetchTextFn,
+): SourceAdapter<BridgeKumamotoRow> {
   // fetch → parse → normalize は runPipeline が単一実行内で順に await するため、
   // fetch 時点で一度だけ抽出したデータセット基準日を各行の normalize で使い回せる。
   let datasetUpdatedAt: string | null = null;
@@ -104,7 +106,7 @@ export function createBridgeKumamotoAdapter(): SourceAdapter<BridgeKumamotoRow> 
   return {
     descriptor: BRIDGE_KUMAMOTO_DESCRIPTOR,
     fetch: async (context: FetchContext): Promise<FetchResult> => {
-      const content = await fetchTextOverHttps(SOURCE_URL, { encoding: 'shift_jis' });
+      const content = await transport(SOURCE_URL, { encoding: 'shift_jis' });
       datasetUpdatedAt = extractDatasetDate(content);
       return { content, contentType: 'text/csv', fetchedAt: context.now };
     },

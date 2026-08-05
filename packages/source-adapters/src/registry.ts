@@ -1,4 +1,5 @@
 import type { SourceAdapter } from '@pimm/ingestion-core';
+import { nodeFetchBinary, nodeFetchText } from './http.js';
 import { createBridgeKumamotoAdapter } from './adapters/bridge-kumamoto.js';
 import { createFacilityOsakaParkAdapter } from './adapters/facility-osaka-park.js';
 import { createFacilityOsakaToiletAdapter } from './adapters/facility-osaka-toilet.js';
@@ -15,15 +16,15 @@ export function listAdapters(): SourceAdapter<never>[] {
     createSampleBridgesAdapter(),
     createSampleRiversAdapter(),
     createSampleFacilitiesAdapter(),
-    createFacilityOsakaParkAdapter(),
-    createFacilityOsakaToiletAdapter(),
-    createBridgeKumamotoAdapter(),
-    createRoadN13Adapter(),
-    createPortC02Adapter(),
+    createFacilityOsakaParkAdapter(nodeFetchText),
+    createFacilityOsakaToiletAdapter(nodeFetchText),
+    createBridgeKumamotoAdapter(nodeFetchText),
+    createRoadN13Adapter(nodeFetchBinary),
+    createPortC02Adapter(nodeFetchBinary),
     // 河川 W05 は都道府県別ソース(47件)。年度対応表から slug river-w05-XX を生成する。
     ...Object.keys(RIVER_W05_YEARS)
       .sort()
-      .map((prefCode) => createRiverW05Adapter(prefCode)),
+      .map((prefCode) => createRiverW05Adapter(prefCode, nodeFetchBinary)),
   ] as SourceAdapter<never>[];
 }
 

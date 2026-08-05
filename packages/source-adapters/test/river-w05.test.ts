@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { runPipeline } from '@pimm/ingestion-core';
 import type { SourceAdapter } from '@pimm/ingestion-core';
 import {
@@ -9,6 +9,9 @@ import {
   riverW05SourceUrl,
 } from '../src/adapters/river-w05.js';
 import type { RiverW05Record } from '../src/adapters/river-w05.js';
+import type { FetchBinaryFn } from '../src/transport.js';
+
+const mockFetchBinary = vi.fn<FetchBinaryFn>();
 
 const CTX = { now: '2026-07-30T00:00:00.000Z' };
 
@@ -126,7 +129,10 @@ describe('parseRiverW05Xml', () => {
 
 describe('river-w05 adapter (contract test)', () => {
   it('normalizes merged rivers and quarantines curve-less rivers as Q002', async () => {
-    const result = await runPipeline(withFixedXml(createRiverW05Adapter('36')), CTX);
+    const result = await runPipeline(
+      withFixedXml(createRiverW05Adapter('36', mockFetchBinary)),
+      CTX,
+    );
 
     expect(result.aborted).toBeNull();
     expect(result.counts.fetched).toBe(3);

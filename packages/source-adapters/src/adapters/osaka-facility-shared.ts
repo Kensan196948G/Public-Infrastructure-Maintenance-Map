@@ -12,7 +12,7 @@ import type {
 } from '@pimm/ingestion-core';
 import { fixLatLonSwap, geometryToWgs84, normalizeText, parseNumeric } from '@pimm/ingestion-core';
 import type { AssetAttribute, AssetType, Geometry } from '@pimm/contracts';
-import { fetchTextOverHttps } from '../http.js';
+import type { FetchTextFn } from '../transport.js';
 
 export type OsakaCsvRow = Record<string, string>;
 
@@ -56,9 +56,9 @@ const ATTRIBUTE_COLUMNS = [
 /** The site's TLS endpoint still serves a 1024-bit DHE group (§ dh key too small). */
 const OSAKA_TLS_OPTIONS = { ciphers: 'DEFAULT@SECLEVEL=1' };
 
-export function createOsakaFacilityFetch(sourceUrl: string) {
+export function createOsakaFacilityFetch(sourceUrl: string, transport: FetchTextFn) {
   return async (context: FetchContext): Promise<FetchResult> => ({
-    content: await fetchTextOverHttps(sourceUrl, OSAKA_TLS_OPTIONS),
+    content: await transport(sourceUrl, OSAKA_TLS_OPTIONS),
     contentType: 'text/csv',
     fetchedAt: context.now,
   });

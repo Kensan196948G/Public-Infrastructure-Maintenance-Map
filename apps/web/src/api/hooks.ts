@@ -248,6 +248,10 @@ export function useAdminAccess(client: ApiClient = defaultClient) {
     staleTime: 5 * 60_000,
   });
   return {
-    status: (query.isLoading ? 'checking' : query.isSuccess ? 'granted' : 'denied') as AdminAccessStatus,
+    status: (query.isLoading
+      ? 'checking'
+      : query.isSuccess
+        ? 'granted'
+        : 'denied') as AdminAccessStatus,
   };
 }

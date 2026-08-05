@@ -152,7 +152,12 @@ export const openapiDocument = {
       get: {
         summary: 'License-controlled CSV / GeoJSON export',
         parameters: [
-          { name: 'format', in: 'query', required: true, schema: { type: 'string', enum: ['csv', 'geojson'] } },
+          {
+            name: 'format',
+            in: 'query',
+            required: true,
+            schema: { type: 'string', enum: ['csv', 'geojson'] },
+          },
           { name: 'bbox', in: 'query', schema: { type: 'string' } },
           { name: 'types', in: 'query', schema: { type: 'string' } },
           { name: 'quality', in: 'query', schema: { type: 'string' } },
@@ -163,7 +168,8 @@ export const openapiDocument = {
         ],
         responses: {
           '200': {
-            description: 'CSV (text/csv) or GeoJSON (application/geo+json) download; X-Excluded-Sources header lists license-excluded sources',
+            description:
+              'CSV (text/csv) or GeoJSON (application/geo+json) download; X-Excluded-Sources header lists license-excluded sources',
           },
           '403': { $ref: '#/components/responses/Problem' },
         },
@@ -177,7 +183,9 @@ export const openapiDocument = {
           '200': {
             description: 'Operations summary',
             content: {
-              'application/json': { schema: { $ref: '#/components/schemas/AdminOperationsSummary' } },
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AdminOperationsSummary' },
+              },
             },
           },
           '401': { $ref: '#/components/responses/Problem' },
@@ -426,7 +434,14 @@ export const openapiDocument = {
                     enum: ['allowed', 'restricted', 'prohibited', 'unknown'],
                   },
                 },
-                required: ['slug', 'provider', 'dataset', 'sourceUrl', 'licenseName', 'redistribution'],
+                required: [
+                  'slug',
+                  'provider',
+                  'dataset',
+                  'sourceUrl',
+                  'licenseName',
+                  'redistribution',
+                ],
               },
             },
             required: ['publicationStatus', 'attributes', 'source'],
@@ -485,7 +500,16 @@ export const openapiDocument = {
           refreshCron: { type: ['string', 'null'] },
           enabled: { type: 'boolean', default: false },
         },
-        required: ['slug', 'name', 'providerName', 'sourceUrl', 'accessType', 'format', 'licenseName', 'redistribution'],
+        required: [
+          'slug',
+          'name',
+          'providerName',
+          'sourceUrl',
+          'accessType',
+          'format',
+          'licenseName',
+          'redistribution',
+        ],
       },
       AdminUpdateSource: {
         type: 'object',
