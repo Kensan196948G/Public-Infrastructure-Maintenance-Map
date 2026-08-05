@@ -20,7 +20,7 @@ import type {
 } from '@pimm/ingestion-core';
 import { geometryToWgs84 } from '@pimm/ingestion-core';
 import type { AssetAttribute, Geometry } from '@pimm/contracts';
-import { fetchBinaryOverHttps } from '../http.js';
+import type { FetchBinaryFn } from '../transport.js';
 
 /** 県コード → 整備年度(下2桁)。データ詳細ページのダウンロード表と1:1。 */
 export const RIVER_W05_YEARS: Record<string, string> = {
@@ -283,12 +283,15 @@ export function parseRiverW05Xml(xml: string): RiverW05Record[] {
   }));
 }
 
-export function createRiverW05Adapter(prefCode: string): SourceAdapter<RiverW05Record> {
+export function createRiverW05Adapter(
+  prefCode: string,
+  transport: FetchBinaryFn,
+): SourceAdapter<RiverW05Record> {
   const descriptor = riverW05Descriptor(prefCode);
   return {
     descriptor,
     fetch: async (context: FetchContext): Promise<FetchResult> => {
-      const zipBuffer = await fetchBinaryOverHttps(descriptor.sourceUrl, { timeoutMs: 300_000 });
+      const zipBuffer = await transport(descriptor.sourceUrl, { timeoutMs: 300_000 });
       const unzipped = unzipSync(zipBuffer);
       const xmlPath = Object.keys(unzipped).find(
         (path) => path.endsWith('-g.xml') && !path.includes('KS-META'),

@@ -19,9 +19,14 @@ import type {
   AssetSearchResponse,
   AssetType,
   SourceInfo,
+  SuggestItem,
 } from '@pimm/contracts';
-import { OPERATIONS_RECENT_RUN_WINDOW, summarizeOperations } from '@pimm/contracts';
-import { decodeCursor, encodeCursor } from './cursor.js';
+import {
+  OPERATIONS_RECENT_RUN_WINDOW,
+  prefectureCodeForKeyword,
+  summarizeOperations,
+} from '@pimm/contracts';
+import { decodeCursor, encodeCursor, type CursorPayload } from './cursor.js';
 import { bboxIntersects, geometryBBox } from './geo.js';
 import type {
   AssetExportInput,
@@ -49,7 +54,7 @@ function matches(asset: AssetDetail, filters: AssetQueryFilters): boolean {
     if (Date.parse(asset.sourceUpdatedAt) < Date.parse(filters.updatedSince)) return false;
   }
   if (filters.q) {
-    const needle = searchable(filters.q);
+    const tokens = searchable(filters.q).split(/\s+/u).filter(Boolean);
     const haystack = [
       asset.name,
       asset.originalName,
@@ -58,9 +63,26 @@ function matches(asset: AssetDetail, filters: AssetQueryFilters): boolean {
     ]
       .map(searchable)
       .join('\n');
-    if (!haystack.includes(needle)) return false;
+    for (const token of tokens) {
+      // A prefecture name routes to the spatial filter, not a name match.
+      const prefCode = prefectureCodeForKeyword(token);
+      if (prefCode) {
+        if (asset.prefectureCode !== prefCode) return false;
+      } else if (!haystack.includes(token)) {
+        return false;
+      }
+    }
   }
   return true;
+}
+
+/**
+ * Keyset comparison against the (name asc, id asc) sort order used by the
+ * constructor's sort. Must stay in sync with that comparator.
+ */
+function compareForCursor(a: Pick<AssetDetail, 'name' | 'id'>, cursor: CursorPayload): number {
+  const byName = a.name.localeCompare(cursor.name, 'ja');
+  return byName !== 0 ? byName : a.id.localeCompare(cursor.id);
 }
 
 /**
@@ -88,12 +110,15 @@ export class InMemoryAssetRepository implements AssetRepository {
   }
 
   async searchAssets(input: AssetSearchInput): Promise<AssetSearchResponse> {
-    const offset = input.cursor === undefined ? 0 : decodeCursor(input.cursor)?.offset;
-    if (offset === undefined) throw new InvalidCursorError();
-
-    const filtered = this.visibleAssets().filter((a) => matches(a, input));
-    const page = filtered.slice(offset, offset + input.limit);
-    const nextOffset = offset + page.length;
+    let filtered = this.visibleAssets().filter((a) => matches(a, input));
+    if (input.cursor !== undefined) {
+      const cursor = decodeCursor(input.cursor);
+      if (!cursor) throw new InvalidCursorError();
+      // Keyset: only rows strictly after the last-seen (name, id).
+      filtered = filtered.filter((a) => compareForCursor(a, cursor) > 0);
+    }
+    const page = filtered.slice(0, input.limit);
+    const last = page[page.length - 1];
     const summaries = page.map(
       ({
         originalName: _o,
@@ -106,7 +131,10 @@ export class InMemoryAssetRepository implements AssetRepository {
     );
     return {
       items: summaries,
-      nextCursor: nextOffset < filtered.length ? encodeCursor({ offset: nextOffset }) : null,
+      nextCursor:
+        filtered.length > input.limit && last
+          ? encodeCursor({ name: last.name, id: last.id })
+          : null,
     };
   }
 
@@ -134,6 +162,23 @@ export class InMemoryAssetRepository implements AssetRepository {
 
   getSourceBySlug(slug: string): Promise<SourceInfo | null> {
     return Promise.resolve(this.sources.find((s) => s.slug === slug && s.enabled) ?? null);
+  }
+
+  suggestNames(q: string, limit: number): Promise<SuggestItem[]> {
+    const needle = searchable(q);
+    const counts = new Map<string, number>();
+    for (const asset of this.visibleAssets()) {
+      const name = asset.name.trim();
+      if (name.length > 0 && searchable(name).includes(needle)) {
+        counts.set(name, (counts.get(name) ?? 0) + 1);
+      }
+    }
+    return Promise.resolve(
+      [...counts.entries()]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ja'))
+        .slice(0, limit),
+    );
   }
 
   exportAssets(input: AssetExportInput): Promise<AssetDetail[]> {

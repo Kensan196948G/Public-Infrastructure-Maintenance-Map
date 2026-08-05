@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AssetTypeSchema, QualityStatusSchema } from './enums.js';
 import { AssetSummarySchema } from './asset.js';
-import { BBoxParamSchema } from './geometry.js';
+import { BBoxParamSchema, LatitudeSchema, LongitudeSchema } from './geometry.js';
 import { SourceInfoSchema } from './source.js';
 
 /** Comma-separated list helper: "bridge,road" → ['bridge','road']. */
@@ -102,3 +102,41 @@ export const HealthResponseSchema = z.object({
   time: z.iso.datetime(),
 });
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
+
+/** Query for GET /suggest — name suggestions for the search box (Issue #50). */
+export const SuggestQuerySchema = z.object({
+  q: z.string().trim().min(1).max(100),
+  limit: z.coerce.number().int().min(1).max(20).default(10),
+});
+export type SuggestQuery = z.infer<typeof SuggestQuerySchema>;
+
+export const SuggestItemSchema = z.object({
+  name: z.string(),
+  /** Number of published assets carrying this name. */
+  count: z.number().int().positive(),
+});
+export type SuggestItem = z.infer<typeof SuggestItemSchema>;
+
+export const SuggestResponseSchema = z.object({
+  items: z.array(SuggestItemSchema),
+});
+export type SuggestResponse = z.infer<typeof SuggestResponseSchema>;
+
+/** Query for GET /geocode — address search proxied to the GSI geocoder (Issue #50). */
+export const GeocodeQuerySchema = z.object({
+  q: z.string().trim().min(1).max(200),
+});
+export type GeocodeQuery = z.infer<typeof GeocodeQuerySchema>;
+
+export const GeocodeItemSchema = z.object({
+  title: z.string(),
+  address: z.string().nullable(),
+  lon: LongitudeSchema,
+  lat: LatitudeSchema,
+});
+export type GeocodeItem = z.infer<typeof GeocodeItemSchema>;
+
+export const GeocodeResponseSchema = z.object({
+  items: z.array(GeocodeItemSchema),
+});
+export type GeocodeResponse = z.infer<typeof GeocodeResponseSchema>;

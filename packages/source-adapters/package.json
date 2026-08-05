@@ -8,7 +8,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./registry": "./src/registry.ts"
+    "./registry": "./src/registry.ts",
+    "./worker-adapters": "./src/worker-adapters.ts",
+    "./worker-http": "./src/worker-http.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

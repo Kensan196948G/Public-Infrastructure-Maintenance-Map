@@ -26,7 +26,7 @@ flowchart LR
 | アイコン | 機能 | 内容 |
 | --- | --- | --- |
 | 🗺️ | インフラ地図 | 橋梁、道路、港湾、河川、公共施設をレイヤー表示 |
-| 🔍 | 横断検索 | 施設名、住所、自治体、管理主体、座標から検索 |
+| 🔍 | 横断検索 | 施設名、複数キーワード、都道府県名、住所（ジオコーディング）、サジェストから検索 |
 | 🎛️ | 絞り込み | 種別、地域、管理主体、更新日、品質状態で絞り込み |
 | 🗺️ | 実形状表示 | 道路・河川などの線・面データを実際の形状で描画（点はクラスタリング表示） |
 | 🏗️ | 詳細表示 | 公開属性、位置、更新状況、注意点を表示 |
@@ -35,7 +35,9 @@ flowchart LR
 | 📤 | データ出力 | 許諾された範囲を画面からCSV／GeoJSONで出力（ライセンス制御付き） |
 | 🔗 | 共有URL | 現在の地図表示・絞り込み条件をURLに保存して共有 |
 | 📣 | フィードバック | 位置誤り・リンク切れ等をGitHub Issue下書きとして報告 |
-| 📄 | ページング | 200件を超える結果は「さらに表示」で続きを読み込み |
+| 📄 | ページング | 200件を超える結果は「さらに表示」で続きを読み込み（keyset方式） |
+| 📖 | APIリファレンス | `/api/v1/openapi.json` で OpenAPI 3.1 仕様を公開 |
+| ⏰ | 自動取込 | Cloudflare Cron Trigger が `refresh_cron` に一致するソースを自動取込・公開 |
 | 📊 | 運用監視 | データ取得、エラー、鮮度、品質を管理者が確認 |
 
 ## 👥 想定利用者
@@ -272,6 +274,9 @@ flowchart LR
 - 🗺️ 地図・検索・絞り込み・一覧・詳細・出典表示（サンプルデータ）
 - 🧹 取込パイプライン: 正規化（NFC/和暦→ISO 8601/SI単位/座標系→WGS 84）+ 品質ルール Q001〜Q008 + 重複検出
 - 🔌 REST API `/api/v1`: bbox検索・詳細・集計・ソース一覧・CSV/GeoJSONエクスポート（ライセンス制御付き）
+- 🔎 検索強化: 複数キーワードAND・都道府県名ルーティング・名称サジェスト（`/suggest`）・住所ジオコーディング（`/geocode`、GSI APIプロキシ）
+- 📖 API仕様公開: `/api/v1/openapi.json`（OpenAPI 3.1、Issue #49）
+- ⏰ 自動取込: `[triggers] crons = ["0 * * * *"]` で毎時実行。`refresh_cron` 一致ソースを Worker 内で取込→Publish
 - 🔒 セキュリティ: レート制限・セキュリティヘッダ・CSV数式インジェクション対策・Problem Details（RFC 9457）
 - ⚙️ CI: lint / format / typecheck / test / build / secret scan（gitleaks）/ 依存脆弱性スキャン（osv-scanner）
 
@@ -281,7 +286,9 @@ flowchart LR
 - 🐘 `PostgresAssetPublisher` は CI の `📤 Publish PostGIS integration` で publish→公開Repository参照・監査ログ記録・rollback・同一自然キーへの並行 publish 回帰を検証する。Neon dev branch での接続先固有検証はリリース手順で実施
 - 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。公開前は runbook の手動 publish と API 件数突合を必須とする
 - 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込履歴一覧、取込詳細、未解決品質issue一覧、品質issue解決、個別資産公開停止、ソース単位の公開一括停止の基本経路を実装済み。監査ログ画面からは取込履歴・未解決品質issueの一覧更新、ソース別の取込記録作成、取込詳細確認、理由入力付きの品質issue解決、詳細画面からは理由入力付きの個別資産公開停止、システム設定画面からはソース登録/編集とライセンス変更時の公開一括停止まで接続済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタと管理系の未認証拒否を導入済み。実 Cloudflare Access 認証済み管理E2Eと custom domain 本番スモークは Issue #38 で追跡
+- ⏰ 自動取込は Worker 対応アダプターのみ（橋梁/大阪2種/道路/港湾）。河川 W05（県別 XML 最大149MB）とサンプルは対象外で CLI 運用。`refresh_cron` は 5 フィールド cron（`*`/数値/範囲/ステップ/リスト）
 - 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。共有の実効上限は edge 側の Rate Limiting ルール（`infra/cloudflare/http-ratelimit.entrypoint.json` に IaC 化、20 req/10s ≒ 120/分・per IP）が担う。**2026-07-23 に zone へ適用済み・`--verify` で 429 発効を実測済み**（Issue #41 完了）。変更時は `pnpm ratelimit:cloudflare`（`--apply` は承認範囲内でのみ実行）
+- 🗂️ ページングは keyset 方式（`(name, id)` シーク）。カーソルはバックエンドの照合順序に依存するため、Postgres と InMemory の間でカーソルを移し替えることはできない（同一バックエンド内では安定）
 
 ## 🗺️ ロードマップ
 

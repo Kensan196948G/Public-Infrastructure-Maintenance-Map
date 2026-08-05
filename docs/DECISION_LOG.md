@@ -130,3 +130,29 @@ secret、credential、connection string、PII は記載しない。
 - 影響: registry は 8+47 slug。初回投入はパイロット3県(徳島672・東京116・大阪252 = 1,040河川、年式 06/08/09 を各1県)とし、残り44県は同一コマンドの反復で段階投入する(大容量県は個別に所要を確認)。
 - 検証: unit/契約テスト(集約・緯度経度入替・名称不明保持・Q002/Q005/Q008)、実データドライラン3県 全件 accepted・隔離0・メモリ≤267MB。
 - Rollback: 県単位 `POST /admin/sources/river-w05-XX/suspend-assets`(非破壊)。コードは revert。
+
+## 2026-08-05
+
+### DL-016: 自動取込は Cloudflare Cron Trigger + Worker 内パイプラインとし、大容量ソースは CLI 運用を維持
+
+- 判断: `wrangler.toml` に毎時 Cron Trigger（`0 * * * *`）を追加し、`refresh_cron` が現在時刻に一致する有効ソースを Worker 内で fetch→parse→normalize→publish する。アダプターはトランスポート注入式（`transport.ts` / `worker-http.ts`）へリファクタリングし、Worker バンドルから `node:https` を完全排除した（`dist/worker.js` に node:https 非含有を grep 検証）。
+- 理由: 手動 CLI 依存ではスケジュール運用が成立しない一方、河川 W05 は県別 XML 最大149MB で Worker の CPU/メモリ制約を超えるため。Worker 対応は橋梁・大阪2種・道路・港湾の5ソースに限定し、W05 とサンプルはスケジューラ対象外とする。
+- 影響: 管理UIの `refresh_cron` が実際の実行スケジュールとして機能する。実行間隔ガード（55分）により同一 Cron 時刻の再実行重複を防止。実行結果は既存の `ingestion_runs` に `triggered_by='cron'` で記録され、監査・運用ダッシュボードにそのまま現れる。
+- 検証: scheduler の cron 解析/対象選定ユニットテスト、worker-adapters 登録テスト、worker-http トランスポートテスト、`pnpm build` で Worker バンドル成功。
+- Rollback: `wrangler.toml` の triggers 削除 + PR revert（DB スキーマ変更なし）。
+
+### DL-017: ページングを OFFSET から keyset（name, id）へ移行
+
+- 判断: カーソルのペイロードを「最後に表示した行の (name, id)」へ変更し、Postgres は行値比較 `(a.name, a.id) > ($1, $2)`、InMemory は localeCompare で後続行を特定する。カーソルは UTF-8 対応 base64url 化（日本語名対応）。
+- 理由: OFFSET 方式は大ページで遅延し、途中に挿入/削除があると重複・欠落するため。データ規模拡大（河川全国投入等）に先立つ基盤改善。
+- 影響: カーソルはバックエンドの照合順序に依存（Postgres と InMemory 間で非互換だが、同一バックエンド内では安定）。API のカーソル形状は不透明のまま。
+- 検証: repository contract（InMemory/Postgres 共通）、cursor ユニット、API テスト。
+- Rollback: cursor.ts + 各リポジトリの実装を revert。
+
+### DL-018: 検索は複数キーワードAND・都道府県名ルーティング・サジェスト・住所ジオコーディングで強化
+
+- 判断: `q` を空白区切りトークンとして AND 検索に変更。都道府県名と完全一致するトークンは名称一致ではなく `prefecture_code` フィルタへルーティング（「東京都」だけで空結果になる問題を回避）。`GET /suggest`（名称の出現数順サジェスト）と `GET /geocode`（国土地理院 `msearch.gsi.go.jp` の住所ジオコーダをプロキシ、5秒タイムアウト）を追加し、Web は datalist サジェストと住所検索フォームを実装。
+- 理由: Issue #50 のうち MVP で効果が高い範囲。外部ジオコーダのキー管理を避けるため GSI 公開 API をサーバ側プロキシし、エラー時は 502 でフェイルクローズ。
+- 影響: 公開APIに読み取り専用2エンドポイント追加。DB スキーマ変更なし。
+- 検証: contracts / repository contract / API（fetch スタブ）/ web client・hook テストで固定。
+- Rollback: PR revert（追加エンドポイントと検索条件変更のみ）。

@@ -7,46 +7,8 @@
  * the run to Neon: data_sources / dataset_versions / infrastructure_assets /
  * asset_attributes / quality_issues / ingestion_runs (Issue #5).
  */
-import type { PublishableAsset } from '@pimm/database';
-import { PostgresAssetPublisher } from '@pimm/database';
-import type { ProcessedAsset } from '@pimm/ingestion-core';
-import { recordKey, runPipeline } from '@pimm/ingestion-core';
 import { getAdapterBySlug, listAdapters } from '@pimm/source-adapters/registry';
-
-/**
- * Geometry-less records cannot be written (infrastructure_assets.geometry is
- * NOT NULL) so they are dropped and counted; a missing sourceRecordId instead
- * falls back to the same deterministic recordKey sample-mode seeding uses, so
- * re-publishing the same source upserts instead of duplicating.
- */
-async function toPublishableAssets(items: readonly ProcessedAsset[]): Promise<{
-  assets: PublishableAsset[];
-  droppedCount: number;
-}> {
-  const assets: PublishableAsset[] = [];
-  let droppedCount = 0;
-  for (const { asset, qualityStatus, issues } of items) {
-    if (asset.geometry === null) {
-      droppedCount += 1;
-      continue;
-    }
-    assets.push({
-      sourceRecordId: await recordKey(asset),
-      assetType: asset.assetType,
-      name: asset.name,
-      originalName: asset.originalName,
-      geometry: asset.geometry,
-      prefectureCode: asset.prefectureCode,
-      municipalityCode: asset.municipalityCode,
-      managingAuthority: asset.managingAuthority,
-      sourceUpdatedAt: asset.sourceUpdatedAt,
-      attributes: asset.attributes,
-      qualityStatus,
-      issues,
-    });
-  }
-  return { assets, droppedCount };
-}
+import { ingestSource, publishIngestion } from './ingest-runner.js';
 
 const args = process.argv.slice(2);
 const sourceIndex = args.indexOf('--source');
@@ -77,7 +39,7 @@ if (shouldPublish && !databaseUrl) {
 }
 
 async function main(): Promise<void> {
-  const result = await runPipeline(selectedAdapter, { now: new Date().toISOString() });
+  const result = await ingestSource(selectedAdapter);
 
   console.log(
     `\n📥 source: ${selectedAdapter.descriptor.slug} (${selectedAdapter.descriptor.name})`,
@@ -92,20 +54,12 @@ async function main(): Promise<void> {
   if (result.aborted) {
     console.error(`🚨 aborted: [${result.aborted.ruleCode}] ${result.aborted.message}`);
     if (shouldPublish && databaseUrl) {
-      const publisher = new PostgresAssetPublisher(databaseUrl);
-      const sourceId = await publisher.ensureDataSource(selectedAdapter.descriptor);
-      await publisher.publish({
-        sourceId,
-        sourceUpdatedAt: null,
-        contentHash: result.contentHash,
-        schemaFingerprint: result.schemaFingerprint,
-        fetchedCount: result.counts.fetched,
-        droppedCount: 0,
-        warningCount: 0,
+      await publishIngestion({
+        adapter: selectedAdapter,
+        result,
+        databaseUrl,
         triggeredBy: 'cli',
         correlationId: crypto.randomUUID(),
-        assets: [],
-        aborted: result.aborted,
       });
     }
     process.exit(2);
@@ -123,28 +77,12 @@ async function main(): Promise<void> {
   if (!shouldPublish || !databaseUrl) {
     console.log('\n✅ dry-run complete (DB publication skipped — pass --publish to write to Neon)');
   } else {
-    const publisher = new PostgresAssetPublisher(databaseUrl);
-    const sourceId = await publisher.ensureDataSource(selectedAdapter.descriptor);
-    const [
-      { assets: acceptedAssets, droppedCount: droppedAccepted },
-      { assets: quarantinedAssets, droppedCount: droppedQuarantined },
-    ] = await Promise.all([
-      toPublishableAssets(result.accepted),
-      toPublishableAssets(result.quarantined),
-    ]);
-
-    const summary = await publisher.publish({
-      sourceId,
-      sourceUpdatedAt: null,
-      contentHash: result.contentHash,
-      schemaFingerprint: result.schemaFingerprint,
-      fetchedCount: result.counts.fetched,
-      droppedCount: droppedAccepted + droppedQuarantined,
-      warningCount: result.counts.warnings,
+    const { summary } = await publishIngestion({
+      adapter: selectedAdapter,
+      result,
+      databaseUrl,
       triggeredBy: 'cli',
       correlationId: crypto.randomUUID(),
-      assets: [...acceptedAssets, ...quarantinedAssets],
-      aborted: null,
     });
 
     console.log(

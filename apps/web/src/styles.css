@@ -286,6 +286,20 @@ a {
   color: var(--color-danger);
 }
 
+.address-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.admin-access-note {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
 .feedback-submit {
   margin-top: 8px;
 }
