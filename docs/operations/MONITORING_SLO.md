@@ -39,7 +39,7 @@
 - Workers Observability（`wrangler.toml` `[observability] enabled = true`）が有効
 - 死活・DB 監視は `/api/v1/health/ready` を 5 分間隔で監視（`database: unavailable` 時に 503 を返す）
 - 実時間ログ: `npx wrangler tail --env production`（`apps/api` で実行）
-- スモーク: `pnpm smoke:cloudflare`（本番 9 チェック）をデプロイ毎に実行
+- スモーク: `pnpm smoke:cloudflare`（本番 10 チェック・`--monitor` は 9 チェック）をデプロイ毎に実行
 
 ### 定期監視（GitHub Actions）
 - `.github/workflows/production-smoke.yml` が 15 分間隔で本番 URL を検査
