@@ -103,6 +103,18 @@ export const HealthResponseSchema = z.object({
 });
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
 
+/**
+ * Readiness for monitoring (Issue: 評価・改善ラウンド). `status` is the
+ * service-level verdict, `database` reflects the storage probe; a failed
+ * database probe is answered with HTTP 503 so external monitors can page.
+ */
+export const ReadinessResponseSchema = z.object({
+  status: z.enum(['ok', 'unavailable']),
+  database: z.enum(['ok', 'unavailable']),
+  time: z.iso.datetime(),
+});
+export type ReadinessResponse = z.infer<typeof ReadinessResponseSchema>;
+
 /** Query for GET /suggest — name suggestions for the search box (Issue #50). */
 export const SuggestQuerySchema = z.object({
   q: z.string().trim().min(1).max(100),

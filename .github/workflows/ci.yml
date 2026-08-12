@@ -14,14 +14,14 @@ jobs:
     name: 🧪 Lint / Type / Test / Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6.0.10
         # version is taken from packageManager in package.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -50,14 +50,14 @@ jobs:
     needs: quality
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6.0.10
         # version is taken from packageManager in package.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -94,14 +94,14 @@ jobs:
       PIMM_RUN_POSTGRES_INTEGRATION: '1'
       PIMM_TEST_DATABASE_URL: postgresql://pimm:pimm@localhost:5432/pimm_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6.0.10
         # version is taken from packageManager in package.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -137,14 +137,14 @@ jobs:
       PIMM_RUN_POSTGRES_PUBLISH_INTEGRATION: '1'
       PIMM_TEST_DATABASE_URL: postgresql://pimm:pimm@localhost:5432/pimm_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6.0.10
         # version is taken from packageManager in package.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -165,10 +165,10 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -176,12 +176,12 @@ jobs:
     name: 📦 Dependency vulnerability scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # The osv-scanner-reusable.yml *reusable workflow* call consistently
       # failed at parse time (startup_failure, 0 jobs scheduled) for reasons
       # not surfaced by the Actions API. Using the underlying scanner action
       # directly as a normal step avoids that call mechanism entirely.
-      - uses: google/osv-scanner-action/osv-scanner-action@v2.3.8
+      - uses: google/osv-scanner-action/osv-scanner-action@v2.5.0
         with:
           scan-args: |-
             --lockfile=pnpm-lock.yaml

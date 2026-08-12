@@ -19,9 +19,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check-secret:
+    name: 🔐 Check DATABASE_URL secret
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - name: Check GitHub Actions secret
+        id: check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::GitHub Actions secret DATABASE_URL is not set. Add it via Settings > Secrets and variables > Actions before the weekly W05 ingest can run."
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
   ingest:
     # スケジュール or all 指定: 47 県マトリクスで実行
-    if: ${{ github.event_name == 'schedule' || inputs.prefecture == 'all' || inputs.prefecture == '' }}
+    needs: check-secret
+    if: ${{ needs.check-secret.outputs.configured == 'true' && (github.event_name == 'schedule' || inputs.prefecture == 'all' || inputs.prefecture == '') }}
     name: 🏞️ river-w05-${{ matrix.prefecture }}
     runs-on: ubuntu-latest
     strategy:
@@ -79,13 +97,13 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6.0.10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
           cache: pnpm
@@ -98,19 +116,20 @@ jobs:
 
   ingest-single:
     # workflow_dispatch で特定県コード指定時: その1県のみ実行
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.prefecture != 'all' && inputs.prefecture != '' }}
+    needs: check-secret
+    if: ${{ needs.check-secret.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.prefecture != 'all' && inputs.prefecture != '' }}
     name: 🏞️ river-w05-${{ inputs.prefecture }}
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6.0.10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
           cache: pnpm

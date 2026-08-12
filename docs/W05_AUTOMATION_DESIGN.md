@@ -46,6 +46,8 @@ flowchart LR
 - `workflow_dispatch` で任意県・全県の手動実行も可能
 - 47 県をマトリクスで並列実行（GitHub Actions の同時実行制限内でキューイング）
 - `DATABASE_URL` は GitHub Actions の Secret として設定（リポジトリ管理者のみ）
+- 2026-08-12 より `check-secret` ガード job を追加。Secret 未設定時は 47 ジョブの
+  失敗/キャンセルの代わりに 1 ジョブで「DATABASE_URL 未設定」を明確に失敗させる
 
 ### 4.2 安全性
 
@@ -60,6 +62,7 @@ flowchart LR
 ### 初回セットアップ
 
 1. GitHub リポジトリ Settings → Secrets and variables → Actions へ `DATABASE_URL` を追加
+   （未設定のまま実行すると `check-secret` ジョブが設定手順を表示して停止する）
 2. 手動実行: Actions → **W05 Scheduled Ingest** → Run workflow → `all`
 3. 運用ダッシュボード / `ingestion_runs` で 47 県の成功を確認
 

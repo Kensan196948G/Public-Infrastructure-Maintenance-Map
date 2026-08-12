@@ -198,6 +198,27 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     c.json({ status: 'ok' as const, version: config.version, time: new Date().toISOString() }),
   );
 
+  // Readiness: probes the underlying repository (DB in production). External
+  // monitors should watch this endpoint, not the liveness-only /health.
+  v1.get('/health/ready', async (c) => {
+    const database = await repo.ping();
+    if (!database) {
+      return c.json(
+        {
+          status: 'unavailable' as const,
+          database: 'unavailable' as const,
+          time: new Date().toISOString(),
+        },
+        503,
+      );
+    }
+    return c.json({
+      status: 'ok' as const,
+      database: 'ok' as const,
+      time: new Date().toISOString(),
+    });
+  });
+
   // OpenAPI 3.1 document (Issue #49) — version follows the runtime config.
   v1.get('/openapi.json', (c) =>
     c.json({

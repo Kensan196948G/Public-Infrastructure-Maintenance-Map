@@ -16,6 +16,11 @@ export function registerAssetRepositoryContract(
   setup: () => Promise<RepositoryContractFixture>,
 ) {
   describe(`${name} AssetRepository contract`, () => {
+    it('reports storage readiness', async () => {
+      const { repo } = await setup();
+      await expect(repo.ping()).resolves.toBe(true);
+    });
+
     it('filters visible assets by bbox', async () => {
       const { repo } = await setup();
       const res = await repo.searchAssets({ bbox: [139.0, 35.0, 140.0, 36.0], limit: 20 });

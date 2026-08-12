@@ -22,7 +22,7 @@
 1. Neon コンソールで `pimm-production` プロジェクトを開く
 2. **Branches → Restore**（または PITR で任意の時点を選択）
 3. 復元先ブランチ（例: `restore-<日付>`）を作成
-4. 復元ブランチの接続文字列で `/api/v1/assets/summary` の件数・主要機能をスモーク
+4. 復元ブランチの接続文字列で `/api/v1/health/ready`（200）・`/api/v1/assets/summary` の件数・主要機能をスモーク
 5. 問題なければ本番ブランチを復元結果へ切り替え（または接続文字列を差し替え）
 6. API の `DATABASE_URL` Secret を更新し、`wrangler secret put` で反映
 7. 復元後スモーク（`pnpm smoke:cloudflare`）を実行

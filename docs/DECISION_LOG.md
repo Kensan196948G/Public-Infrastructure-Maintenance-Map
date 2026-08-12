@@ -198,3 +198,19 @@ secret、credential、connection string、PII は記載しない。
   3. main ブランチ保護（必須レビュー・必須CI）未設定
   4. 外部死活監視・アラート通知・Neon バックアップ API 確認が未設定（監視/SLO・通知先は docs/operations で定義済み）
 - 検証: 本番 curl・スモーク・CI 全成功。Cron Trigger は本番登録済み（実働ログ捕捉は 2026-08-05 14:00 UTC 予定）。
+
+### DL-024: 2026-08-12 総合評価ラウンド（readiness API・W05 ガード・a11y・バンドル・文書）
+
+- 判断: 本番運用水準への総合評価を実施し、重大/高リスクのうちコードで解決できるものを最小差分で実装した。① `GET /api/v1/health/ready` を追加し `AssetRepository.ping()`（InMemory=true / Postgres=`SELECT 1`）で DB 可用性を監視可能にした（失敗時 503・内部情報非露出）。② W05 ワークフローに `check-secret` ガード job を追加し、GitHub Actions Secret `DATABASE_URL` 未設定を 1 ジョブで明確に失敗させる（2026-08-08 の週次 failure の原因は Secret 未設定と判定、`gh secret list` 空で確認）。③ Modal にフォーカストラップ・Escape・フォーカス復元を実装（アクセシビリティ）。④ Web のダイアログ群を遅延読込し react/maplibre を vendor chunk へ分割。⑤ 評価書・改善台帳・AI 設計・ロードマップを docs へ追加。
+- 理由: 運用停止・検知不能・監査不足リスクを優先し、外部承認/秘密値を要する項目（Secret 設定・Pages 権限・ブランチ保護・監視通知）は実装せずユーザー対応事項として報告するため。
+- 影響: API に読み取り専用エンドポイント 1 本追加（DB スキーマ変更なし）。Web は動的 import 化（動作不変）。W05 workflow は Secret 未設定時に失敗箇所が 1 ジョブへ集約。
+- 検証: typecheck 全 PASS・API 86/86・database 49/49・contracts 37/37・web 122/122・build 成功（main chunk 401KB・ダイアログ別 chunk）・lint 0。PostGIS 統合・E2E・secret/dependency scan は PR CI で検証。
+- Rollback: 該当 PR を revert（API 経路・UI・workflow・docs のみ）。
+
+### DL-025: 2026-08-12 総合評価ラウンド補完（CI Actions 最新化・未使用依存削除・PORT 対応）
+
+- 判断: PR #75 のレビュー監査で、① CI Actions の Node 20 非推奨警告（checkout v4 / setup-node v4 / pnpm v4 / gitleaks v2 / osv-scanner v2.3.8）を最新版へ更新、② `apps/api`・`packages/database` の直接依存 `zod` が未使用（import 実績なし・schemas は @pimm/contracts 経由）のため削除、③ ローカル開発・並列実行で困るポート固定を `PORT` 環境変数対応へ変更した。
+- 理由: CI の将来互換性・依存の最小化・開発の並列化は本番運用継続の前提。いずれも動作不変の小さな変更。
+- 影響: CI Actions のメジャー更新（v5/v6/gitleaks v3/osv v2.5）は PR CI で検証。`zod` は workspace 解決上 contracts 経由で引き続き利用可能。
+- 検証: リンク監査（内部 Markdown リンク全解決）・依存スキャン（js-yaml/nanoid 修正済み）・lint/typecheck/unit/build・PR CI 全ジョブ PASS。
+- Rollback: 該当コミット revert（package.json・workflow・node.ts）。

@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | GSI ジオコーダ | 住所検索（`/geocode`） | 公開 API（鍵なし） | ✅ 稼働 |
 | 公開データソース（橋梁/道路/港湾/大阪/河川 W05） | 取込 | 公開データのみ | ✅ 4 ソース稼働、W05 は CI Secret 待ち |
-| GitHub Actions | 週次取込 | repo secrets | ⚠️ `DATABASE_URL` 未設定 |
+| GitHub Actions | 週次取込 | repo secrets | ⚠️ `DATABASE_URL` 未設定（2026-08-12 より workflow の `check-secret` ジョブが未設定時に明確なエラーで停止） |
 
 ## 🧹 不要権限の除去方針
 

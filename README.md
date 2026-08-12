@@ -37,6 +37,7 @@ flowchart LR
 | 📣 | フィードバック | 位置誤り・リンク切れ等をGitHub Issue下書きとして報告 |
 | 📄 | ページング | 200件を超える結果は「さらに表示」で続きを読み込み（keyset方式） |
 | 📖 | APIリファレンス | `/api/v1/openapi.json` で OpenAPI 3.1 仕様を公開（Zod から自動生成） |
+| 🩺 | 死活監視 | `/api/v1/health/ready` が DB 接続を含む readiness を返却（503 フェイル） |
 | ⏰ | 自動取込 | Cloudflare Cron Trigger（軽量5ソース）＋ GitHub Actions 週次（W05 河川47県） |
 | 📊 | 運用監視 | データ取得、エラー、鮮度、品質を管理者が確認 |
 
@@ -290,7 +291,7 @@ flowchart LR
 - 📥 `pnpm ingest --source <slug>` は既定 dry-run（品質レポートのみ）。`--publish`（要 `DATABASE_URL`）で本番DBへ反映する経路は実装済み。公開前は runbook の手動 publish と API 件数突合を必須とする
 - 🛠️ 管理APIは Cloudflare Access 前提の認証ゲート、`admin`／`reviewer` ロール確認、ソース登録・更新、取込トリガー記録、取込履歴一覧、取込詳細、未解決品質issue一覧、品質issue解決、個別資産公開停止、ソース単位の公開一括停止の基本経路を実装済み。監査ログ画面からは取込履歴・未解決品質issueの一覧更新、ソース別の取込記録作成、取込詳細確認、理由入力付きの品質issue解決、詳細画面からは理由入力付きの個別資産公開停止、システム設定画面からはソース登録/編集とライセンス変更時の公開一括停止まで接続済み。Playwright E2E は公開地図の初期表示・検索・詳細表示・種別フィルタと管理系の未認証拒否を導入済み。実 Cloudflare Access 認証済み管理E2Eと custom domain 本番スモークは Issue #38 で追跡
 - ⏰ 自動取込は Worker 対応アダプターのみ（橋梁/大阪2種/道路/港湾）。河川 W05（県別 XML 最大149MB）とサンプルは対象外で CLI 運用。`refresh_cron` は 5 フィールド cron（`*`/数値/範囲/ステップ/リスト）
-- 🏞️ W05 は GitHub Actions の週次スケジュール＋ `workflow_dispatch` で 47 県を並列実行（要 `DATABASE_URL` Secret）。ローカル一括は `pnpm ingest:w05:all`
+- 🏞️ W05 は GitHub Actions の週次スケジュール＋ `workflow_dispatch` で 47 県を並列実行（要 `DATABASE_URL` Secret）。2026-08-12 より `check-secret` ガードが未設定時に 1 ジョブで明確に失敗する。ローカル一括は `pnpm ingest:w05:all`
 - 🔒 レート制限（`RATE_LIMIT_PER_MINUTE`、既定 120/分）は Worker isolate ごとの in-memory カウンタによる「ベストエフォート」実装。共有の実効上限は edge 側の Rate Limiting ルール（`infra/cloudflare/http-ratelimit.entrypoint.json` に IaC 化、20 req/10s ≒ 120/分・per IP）が担う。**2026-07-23 に zone へ適用済み・`--verify` で 429 発効を実測済み**（Issue #41 完了）。変更時は `pnpm ratelimit:cloudflare`（`--apply` は承認範囲内でのみ実行）
 - 🗂️ ページングは keyset 方式（`(name, id)` シーク）。カーソルはバックエンドの照合順序に依存するため、Postgres と InMemory の間でカーソルを移し替えることはできない（同一バックエンド内では安定）
 
@@ -306,6 +307,10 @@ flowchart LR
 - `Public-Infrastructure-Maintenance-Map_要件定義書_20260716.md` — 何を、なぜ、どこまで実現するか
 - `Public-Infrastructure-Maintenance-Map_詳細設計仕様書_20260716.md` — どのような構造・データ・処理で実装するか
 - `docs/DECISION_LOG.md` — CTO代行/Supervisor判断による暫定前提・技術判断・運用判断の記録
+- `docs/EVALUATION_REPORT.md` — 2026-08-12 総合評価（18項目採点・競合比較・代替率・改善計画）
+- `docs/IMPROVEMENT_LEDGER.md` — 改善台帳・テスト証跡
+- `docs/AI_DESIGN.md` — AI 活用設計（Phase 3 実装予定）
+- `docs/ROADMAP.md` — Phase 0〜4 ロードマップ
 - `docs/operations/` — 運用ハンドブック（監視/SLO、バックアップ/復旧、インシデント対応、運用台帳、保守、権限棚卸し、予算）
 
 ## ⚖️ 利用上の注意

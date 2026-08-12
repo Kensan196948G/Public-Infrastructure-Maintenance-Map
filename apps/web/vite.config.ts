@@ -18,5 +18,15 @@ export default defineConfig({
     // Pages serves everything under dist/, so shipped .map files would let
     // anyone reconstruct the full frontend source (Issue #42 L-1).
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        // Split stable vendor code so it is cached across deploys and the
+        // first-paint script stays smaller (評価・改善ラウンド).
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', '@tanstack/react-query'],
+          maplibre: ['maplibre-gl'],
+        },
+      },
+    },
   },
 });

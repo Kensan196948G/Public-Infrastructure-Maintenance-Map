@@ -103,6 +103,10 @@ export class InMemoryAssetRepository implements AssetRepository {
     this.sources = [...seed.sources].sort((a, b) => a.slug.localeCompare(b.slug));
   }
 
+  async ping(): Promise<boolean> {
+    return true;
+  }
+
   private visibleAssets(): AssetDetail[] {
     return this.assets.filter(
       (a) => a.publicationStatus === 'published' && a.quality.status !== 'hidden',
