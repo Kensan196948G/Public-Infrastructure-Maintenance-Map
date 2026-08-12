@@ -9,6 +9,9 @@ const API_BASE_URL = `https://${API_HOST}/api/v1`;
 const ADMIN_PROBE_URL = `${API_BASE_URL}/admin/ingestions?limit=1`;
 const ALLOW_PENDING_DNS = process.argv.includes('--allow-pending-dns');
 const SKIP_WRANGLER = process.argv.includes('--skip-wrangler');
+// Scheduled monitoring (GitHub Actions) has no local wrangler credentials.
+// wrangler-auth is intentionally not counted as a check in this mode.
+const MONITOR_MODE = process.argv.includes('--monitor');
 
 const results = [];
 
@@ -73,6 +76,7 @@ async function checkZoneDelegation() {
 }
 
 function checkWranglerAuth() {
+  if (MONITOR_MODE) return;
   if (SKIP_WRANGLER) {
     skip('wrangler-auth', 'not checked (--skip-wrangler)');
     return;
@@ -234,6 +238,11 @@ if (apiDnsOk) {
   await checkJson('api-health', `${API_BASE_URL}/health`, (body) =>
     body?.status === 'ok' ? true : `status=${body?.status}`,
   );
+  await checkJson('api-readiness', `${API_BASE_URL}/health/ready`, (body) =>
+    body?.status === 'ok' && body?.database === 'ok'
+      ? true
+      : `status=${body?.status} database=${body?.database}`,
+  );
   // Shape must match the AssetCountSummary contract: { total, byType }.
   await checkJson('api-summary', `${API_BASE_URL}/assets/summary`, (body) =>
     Number.isFinite(body?.total) && body?.byType && typeof body.byType === 'object'
@@ -243,6 +252,7 @@ if (apiDnsOk) {
   await checkAdminUnauthenticatedRejection();
 } else {
   skip('api-health', 'API hostname is not resolvable yet');
+  skip('api-readiness', 'API hostname is not resolvable yet');
   skip('api-summary', 'API hostname is not resolvable yet');
   skip('admin-unauthenticated-rejection', 'API hostname is not resolvable yet');
 }
@@ -265,14 +275,16 @@ if (failed.length > 0) {
   console.error(`\n${failed.length} production smoke check(s) FAILED.`);
   process.exitCode = 1;
 } else if (skipped.length > 0) {
-  // Exit 0 keeps preflight usable as a pre-deployment gate, but the banner must
-  // make it impossible to read this run as production verification.
-  console.log(
-    '\nPREFLIGHT ONLY — production was NOT verified.\n' +
-      `Deferred check(s): ${skipped.map((result) => result.name).join(', ')}.\n` +
-      'Run `pnpm smoke:cloudflare` (no flags) after deployment and DNS propagation ' +
-      'to obtain a production verification result.',
-  );
+  if (!MONITOR_MODE) {
+    // Exit 0 keeps preflight usable as a pre-deployment gate, but the banner must
+    // make it impossible to read this run as production verification.
+    console.log(
+      '\nPREFLIGHT ONLY — production was NOT verified.\n' +
+        `Deferred check(s): ${skipped.map((result) => result.name).join(', ')}.\n` +
+        'Run `pnpm smoke:cloudflare` (no flags) after deployment and DNS propagation ' +
+        'to obtain a production verification result.',
+    );
+  }
 } else {
   console.log('\nAll production smoke checks passed.');
 }

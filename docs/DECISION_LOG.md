@@ -214,3 +214,14 @@ secret、credential、connection string、PII は記載しない。
 - 影響: CI Actions のメジャー更新（v5/v6/gitleaks v3/osv v2.5）は PR CI で検証。`zod` は workspace 解決上 contracts 経由で引き続き利用可能。
 - 検証: リンク監査（内部 Markdown リンク全解決）・依存スキャン（js-yaml/nanoid 修正済み）・lint/typecheck/unit/build・PR CI 全ジョブ PASS。
 - Rollback: 該当コミット revert（package.json・workflow・node.ts）。
+
+### DL-026: 2026-08-12 承認後の本番運用化（PR #75 マージ・API デプロイ・定期死活監視）
+
+- 判断: ユーザー承認を受けて PR #75 を main へ squash マージ（commit `3de2db3`）し、API を本番デプロイ（version `047bfd6a`）。スモークは 9/9 PASS を確認。あわせて外部死活監視の代替として GitHub Actions `production-smoke.yml`（15 分間隔・`--monitor` モード）と `/health/ready` スモークチェック（計 10 チェック）を追加した。
+- 未解決（ユーザー/外部依存）:
+  1. Web（Pages）再配信は API トークンに Pages:Edit 権限が無く失敗（wrangler `upload-token` で Authentication error 10000）。トークンへ「Cloudflare Pages: Edit」追加が必要
+  2. GitHub Actions `DATABASE_URL` は値が環境・ローカルに存在せず設定不可。Neon API（api.neon.tech）はこの実行環境から DNS 解決不可のため、接続文字列の提示または DNS 解放が必要
+  3. Neon PITR 復元試験は API 到達不可のため未実施（手順は BACKUP_RESTORE.md）
+  4. Cloudflare Access 実認証のブラウザ E2E は SSO 対話操作が必要。Access アプリ `pimm-admin-api`（ポリシー `pimm-admins`）の存在は API で確認済み・未認証拒否 302 はスモークで確認済み
+- 検証: 本番スモーク 9/9 PASS・API デプロイ成功・Access アプリ構成確認。
+- Rollback: API は `wrangler rollback --env production`。監視ワークフローは無効化または PR revert。

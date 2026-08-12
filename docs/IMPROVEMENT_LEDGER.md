@@ -13,6 +13,7 @@
 | IMP-005 | 文書 | 評価書・改善台帳・AI 設計・ロードマップ作成、監視/W05/README/DECISION_LOG 更新 | ✅ 実装 | 本 PR の docs 差分 | 運用・監査・再開 |
 | IMP-006 | セキュリティ | `js-yaml` 4.3.1・`nanoid` 3.3.17 へ override 更新（GHSA-5p4m-2wfm-xmqj / GHSA-2v37-7h3g-55p8） | ✅ 実装 | pnpm-lock.yaml 更新・CI dependency scan | 依存ツールチェーン |
 | IMP-007 | CI/保守 | GitHub Actions を最新化（checkout v5・setup-node v5・pnpm v6・gitleaks v3・osv-scanner v2.5）、未使用 zod 依存を削除、node.ts の `PORT` 対応 | ✅ 実装 | CI 全ジョブ PASS（PR #75 最終コミット） | CI・開発環境 |
+| IMP-008 | 監視 | 15 分間隔の本番死活監視ワークフロー追加・スモークに `/health/ready` チェック追加（10 チェック化・`--monitor` 対応） | ✅ 実装 | 本番スモーク 9/9→10 チェック・定期ワークフロー PR | 監視・障害検知 |
 
 ## ⏳ 未実装（優先順・Issue 連携）
 
