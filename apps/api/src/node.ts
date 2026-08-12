@@ -10,6 +10,7 @@ const config = configFromEnv(envBindingsFromProcessEnv(process.env));
 const repo = await getRepository(config);
 const app = createApp(repo, config);
 
-serve({ fetch: app.fetch, port: 8787 }, (info) => {
+const port = Number(process.env.PORT ?? 8787);
+serve({ fetch: app.fetch, port }, (info) => {
   console.log(`🚀 pimm-api listening on http://localhost:${info.port}/api/v1/health`);
 });

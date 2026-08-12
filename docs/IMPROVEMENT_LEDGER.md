@@ -12,6 +12,7 @@
 | IMP-004 | 性能 | ダイアログ遅延読込・react/maplibre vendor chunk 分割 | ✅ 実装・ビルド確認 | `vite build` で main 401KB・ダイアログ別 chunk 生成 | Web 初回読み込み |
 | IMP-005 | 文書 | 評価書・改善台帳・AI 設計・ロードマップ作成、監視/W05/README/DECISION_LOG 更新 | ✅ 実装 | 本 PR の docs 差分 | 運用・監査・再開 |
 | IMP-006 | セキュリティ | `js-yaml` 4.3.1・`nanoid` 3.3.17 へ override 更新（GHSA-5p4m-2wfm-xmqj / GHSA-2v37-7h3g-55p8） | ✅ 実装 | pnpm-lock.yaml 更新・CI dependency scan | 依存ツールチェーン |
+| IMP-007 | CI/保守 | GitHub Actions を最新化（checkout v5・setup-node v5・pnpm v6・gitleaks v3・osv-scanner v2.5）、未使用 zod 依存を削除、node.ts の `PORT` 対応 | ✅ 実装 | CI 全ジョブ PASS（PR #75 最終コミット） | CI・開発環境 |
 
 ## ⏳ 未実装（優先順・Issue 連携）
 
