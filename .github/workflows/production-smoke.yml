@@ -23,6 +23,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: pnpm/action-setup@v6.0.10
+        # setup-node の corepack 経由の pnpm 解決を避け、他 workflow と同一の
+        # 初期化手順にする（2026-08-12 手動実行で setup-node が pnpm を
+        # 見つけられず失敗したため）
+
       - uses: actions/setup-node@v5
         with:
           node-version-file: .node-version
