@@ -254,7 +254,7 @@ flowchart LR
 | 公開データソース選定・アダプター実装 | ✅ 実データ4ソース・3種別（公共施設／橋梁／道路） |
 | 実データ取込→公開DB反映（Phase 2） | ✅ 取込→Publish経路を実装（`ingest --publish`）。CI の disposable PostGIS で publish→公開Repository参照を検証 |
 | 管理API・管理画面（UI-05/06/07・FR-13/14） | ✅ 管理APIゲート・基本操作・取込履歴一覧・未解決品質issue一覧・監査ログ画面からの取込記録/詳細確認/品質issue解決・詳細画面からの個別資産公開停止・システム設定からのソース登録/編集とソース単位の公開一括停止を実装済（Issue #4 完了） |
-| UAT・本番公開判定 | ✅ 2026-07-23 に v0.1.0 を本番公開（PR #46 承認範囲）。2026-08-05 に機能統合 3 PR（#68/#70/#71）と geocode 修正 2 PR（#72/#73）を main へ統合し、API を本番再デプロイ・フルスモーク 9/9 成功 |
+| UAT・本番公開判定 | ✅ 2026-07-23 に v0.1.0 を本番公開（PR #46 承認範囲）。2026-08-05 に機能統合 3 PR（#68/#70/#71）と geocode 修正 2 PR（#72/#73）を main へ統合し、API を本番再デプロイ・フルスモーク 9/9 成功。2026-08-12 に PR #75/#76 をマージし、API を本番再デプロイ（version `047bfd6a`）・スモーク 9/9 PASS・15 分間隔の定期死活監視を追加 |
 
 ### 🚦 Release Gate（2026-08-05）
 
@@ -263,12 +263,12 @@ flowchart LR
 | ✅ main CI | PR #68 / #70 / #71 / #72 / #73 すべて lint / typecheck / test / build、Playwright E2E、PostGIS integration、publish PostGIS integration、secret scan、dependency scan 成功 |
 | ✅ 機能統合 | 実形状地図・クラスタリング・出力/共有/報告UI・ページング（#68）、自動取込Cron・検索強化・keyset・OpenAPI・管理UI認証ゲート（#70）、W05自動化・OpenAPI Zod生成・市町村絞り込み・管理E2E（#71） |
 | ✅ geocode 本番修正 | GSI エンドポイント URL 修正（#72）＋実レスポンス形状（素の Feature 配列）対応（#73）。本番で `東京都千代田区` → 座標＋`13101` を確認 |
-| ✅ 本番スモーク | `pnpm smoke:cloudflare` 9/9 PASS（zone / wrangler auth / DNS / health / summary / admin 302 / web shell / bundle API base） |
+| ✅ 本番スモーク | `pnpm smoke:cloudflare` 10/10 PASS（zone / wrangler auth / DNS / health / readiness / summary / admin 302 / web shell / bundle API base。定期監視は `--monitor` で 9 チェック） |
 | ✅ 本番リリース | **API を 2026-08-05 に再デプロイ**（Version `771d94f2`）。Web は Pages `pimm-web` に前回デプロイが配信中（現行 main より古いため要再配信） |
 
-> 📌 **2026-08-05 実測**: API `/health` 200、`/assets/summary` 8,011 件、`/geocode` は GSI 連携で座標＋市区町村コード返却、`/suggest?q=橋` は実データ候補を返却、`/export?format=csv` はライセンス制御付き CSV を返却、管理 API は未認証 302（Cloudflare Access）で保護。セキュリティヘッダ（CSP / HSTS / nosniff / Referrer-Policy）を確認済み。Cron Trigger（毎時）は本番登録済み。 |
+> 📌 **2026-08-12 実測（承認後フォローアップ）**: Worker `pimm-api-production`（version `047bfd6a`）が custom domain で稼働。`/health`・`/health/ready`（DB readiness）・`/assets/summary`・管理API未認証拒否（302）を確認。Pages `pimm-web` の再配信は API トークンの Pages:Edit 権限不足で待機中（Issue #77）。 |
 
-> ⚠️ **未解決の運用ギャップ（ユーザー対応事項）**: ① Cloudflare API トークンに Pages: Edit 権限がなく Web 再配信不可、② GitHub Actions Secrets に `DATABASE_URL` 未設定で W05 週次取込未実行、③ main ブランチ保護未設定、④ 外部死活監視・アラート通知未設定。詳細は [docs/operations/](./docs/operations/README.md) を参照。 |
+> ⚠️ **未解決の運用ギャップ（ユーザー対応事項・Issue #77）**: ① Cloudflare API トークンに Pages: Edit 権限がなく Web 再配信不可、② GitHub Actions Secrets に `DATABASE_URL` 未設定で W05 週次取込未実行、③ Neon 復元試験・Access ブラウザ E2E 未実施。※ main ブランチ保護（必須 CI・レビュー）と 15 分間隔死活監視は 2026-08-12 に有効化済み。 |
 
 本番デプロイ前の機械確認は `pnpm smoke:cloudflare` で行います。Cloudflare認証またはサブドメインDNS反映前の事前確認だけなら `pnpm smoke:cloudflare:preflight` を使用します。
 
