@@ -61,6 +61,8 @@ export class InvalidCursorError extends Error {
  * records are ever returned.
  */
 export interface AssetRepository {
+  /** Liveness of the underlying storage (used by /health/ready). */
+  ping(): Promise<boolean>;
   searchAssets(input: AssetSearchInput): Promise<AssetSearchResponse>;
   getAssetById(id: string): Promise<AssetDetail | null>;
   countByType(filters: Pick<AssetQueryFilters, 'bbox' | 'types'>): Promise<AssetCountSummary>;

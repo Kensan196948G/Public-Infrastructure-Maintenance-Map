@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { AssetSummary, AssetType, BBox, QualityStatus } from '@pimm/contracts';
 import { ApiClient } from './api/client.js';
@@ -12,19 +12,32 @@ import {
   useSummary,
 } from './api/hooks.js';
 import { prefectureName } from './lib/prefectures.js';
-import { AuditLogDialog } from './components/AuditLogDialog.js';
 import { DataRefreshButton } from './components/DataRefreshButton.js';
 import { DisclaimerBanner } from './components/DisclaimerBanner.js';
 import { DetailPanel } from './components/DetailPanel.js';
-import { FeedbackDialog } from './components/FeedbackDialog.js';
 import { FilterPanel } from './components/FilterPanel.js';
 import { MapView } from './components/MapView.js';
-import { NoticeDialog } from './components/NoticeDialog.js';
 import { ResultList } from './components/ResultList.js';
-import { SettingsDialog } from './components/SettingsDialog.js';
 import { ShareButton } from './components/ShareButton.js';
-import { SourcesDialog } from './components/SourcesDialog.js';
 import { parseUrlState, serializeUrlState } from './lib/url-state.js';
+
+// Dialogs are large admin/auxiliary surfaces; lazy-load them so the first
+// paint only pays for the map + list core (評価・改善ラウンド, chunk 1.5MB).
+const AuditLogDialog = lazy(() =>
+  import('./components/AuditLogDialog.js').then((m) => ({ default: m.AuditLogDialog })),
+);
+const FeedbackDialog = lazy(() =>
+  import('./components/FeedbackDialog.js').then((m) => ({ default: m.FeedbackDialog })),
+);
+const NoticeDialog = lazy(() =>
+  import('./components/NoticeDialog.js').then((m) => ({ default: m.NoticeDialog })),
+);
+const SettingsDialog = lazy(() =>
+  import('./components/SettingsDialog.js').then((m) => ({ default: m.SettingsDialog })),
+);
+const SourcesDialog = lazy(() =>
+  import('./components/SourcesDialog.js').then((m) => ({ default: m.SourcesDialog })),
+);
 
 /** Shared client for header-level calls (geocode). */
 const defaultApiClient = new ApiClient();
@@ -369,38 +382,48 @@ export function App() {
         </div>
       </div>
 
-      {sourcesOpen ? (
-        <SourcesDialog
-          sources={sourcesQuery.data?.items ?? []}
-          isLoading={sourcesQuery.isLoading}
-          isError={sourcesQuery.isError}
-          onClose={() => setSourcesOpen(false)}
-        />
-      ) : null}
+      <Suspense fallback={null}>
+        {sourcesOpen ? (
+          <SourcesDialog
+            sources={sourcesQuery.data?.items ?? []}
+            isLoading={sourcesQuery.isLoading}
+            isError={sourcesQuery.isError}
+            onClose={() => setSourcesOpen(false)}
+          />
+        ) : null}
+      </Suspense>
 
-      {noticeOpen ? <NoticeDialog onClose={() => setNoticeOpen(false)} /> : null}
+      <Suspense fallback={null}>
+        {noticeOpen ? <NoticeDialog onClose={() => setNoticeOpen(false)} /> : null}
+      </Suspense>
 
-      {feedbackOpen ? <FeedbackDialog onClose={() => setFeedbackOpen(false)} /> : null}
+      <Suspense fallback={null}>
+        {feedbackOpen ? <FeedbackDialog onClose={() => setFeedbackOpen(false)} /> : null}
+      </Suspense>
 
-      {auditOpen ? (
-        <AuditLogDialog
-          sources={sourcesQuery.data?.items ?? []}
-          isLoading={sourcesQuery.isLoading}
-          isError={sourcesQuery.isError}
-          onClose={() => setAuditOpen(false)}
-        />
-      ) : null}
+      <Suspense fallback={null}>
+        {auditOpen ? (
+          <AuditLogDialog
+            sources={sourcesQuery.data?.items ?? []}
+            isLoading={sourcesQuery.isLoading}
+            isError={sourcesQuery.isError}
+            onClose={() => setAuditOpen(false)}
+          />
+        ) : null}
+      </Suspense>
 
-      {settingsOpen ? (
-        <SettingsDialog
-          health={healthQuery.data ?? null}
-          sources={sourcesQuery.data?.items ?? []}
-          isLoading={sourcesQuery.isLoading || healthQuery.isLoading}
-          isError={healthQuery.isError}
-          onSourcesChanged={() => void sourcesQuery.refetch()}
-          onClose={() => setSettingsOpen(false)}
-        />
-      ) : null}
+      <Suspense fallback={null}>
+        {settingsOpen ? (
+          <SettingsDialog
+            health={healthQuery.data ?? null}
+            sources={sourcesQuery.data?.items ?? []}
+            isLoading={sourcesQuery.isLoading || healthQuery.isLoading}
+            isError={healthQuery.isError}
+            onSourcesChanged={() => void sourcesQuery.refetch()}
+            onClose={() => setSettingsOpen(false)}
+          />
+        ) : null}
+      </Suspense>
     </div>
   );
 }

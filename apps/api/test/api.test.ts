@@ -50,6 +50,31 @@ describe('GET /api/v1/health', () => {
   });
 });
 
+describe('GET /api/v1/health/ready', () => {
+  it('reports ready when the repository probe succeeds', async () => {
+    const res = await get('/api/v1/health/ready');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { status: string; database: string };
+    expect(body).toMatchObject({ status: 'ok', database: 'ok' });
+  });
+
+  it('answers 503 when the repository probe fails (no internals leaked)', async () => {
+    // Route under test only probes ping(); other repository methods are never
+    // reached, so a minimal stub keeps this test isolated from the module
+    // mock state that repo.test.ts owns for buildSampleSeed.
+    const failing = {
+      ping: async () => false,
+    } as unknown as InMemoryAssetRepository;
+    const readyApp = createApp(failing, CONFIG) as unknown as Hono<never>;
+    const res = await readyApp.request('http://localhost/api/v1/health/ready');
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { status: string; database: string };
+    expect(body).toMatchObject({ status: 'unavailable', database: 'unavailable' });
+    expect(JSON.stringify(body)).not.toContain('stack');
+    expect(JSON.stringify(body)).not.toContain('postgres');
+  });
+});
+
 describe('GET /api/v1/openapi.json (Issue #49)', () => {
   it('serves an OpenAPI document covering public and admin paths', async () => {
     const res = await get('/api/v1/openapi.json');
@@ -63,10 +88,12 @@ describe('GET /api/v1/openapi.json (Issue #49)', () => {
     expect(doc.paths['/export']).toBeDefined();
     expect(doc.paths['/admin/operations']).toBeDefined();
     expect(doc.paths['/admin/sources']).toBeDefined();
+    expect(doc.paths['/health/ready']).toBeDefined();
     expect(doc.info.version).toBe('test');
     // Zod 自動生成スキーマ（Issue #49）: 必須フィールドがドキュメントに現れる。
     expect(doc.components.schemas['AssetSummary']).toBeDefined();
     expect(doc.components.schemas['GeocodeItem']).toBeDefined();
+    expect(doc.components.schemas['ReadinessResponse']).toBeDefined();
     expect(doc.components.schemas['AssetSummary']).toMatchObject({
       type: 'object',
       properties: expect.objectContaining({ id: expect.anything() }),

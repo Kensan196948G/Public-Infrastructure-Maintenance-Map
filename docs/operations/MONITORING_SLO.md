@@ -7,6 +7,7 @@
 | SLI | 定義 | 目標（SLO） | 測定方法 |
 | --- | --- | --- | --- |
 | 可用性 | `/api/v1/health` が 5xx を返さない割合 | 30日間 99.9% | 外部スモーク＋Workers Logs |
+| DB 可用性 | `/api/v1/health/ready` が 200 を返す割合 | 30日間 99.9% | 外部死活監視（推奨: 5 分間隔） |
 | 応答時間 | `/api/v1/health`・`/api/v1/assets` の p95 | 3秒以内（GSI 連携を除く） | Workers Logs の `duration_ms` |
 | エラー率 | 全 API リクエストに占める 5xx の割合 | 1% 未満 | Workers Logs |
 | データ鮮度 | 毎時 Cron 取込の成功率 | 週 95% 以上（外部ソース障害除く） | Cron 実行ログ |
@@ -35,6 +36,7 @@
 
 ### API
 - Workers Observability（`wrangler.toml` `[observability] enabled = true`）が有効
+- 死活・DB 監視は `/api/v1/health/ready` を 5 分間隔で監視（`database: unavailable` 時に 503 を返す）
 - 実時間ログ: `npx wrangler tail --env production`（`apps/api` で実行）
 - スモーク: `pnpm smoke:cloudflare`（本番 9 チェック）をデプロイ毎に実行
 

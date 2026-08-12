@@ -15,6 +15,7 @@ import {
   GeocodeItemSchema,
   HealthResponseSchema,
   ProblemDetailsSchema,
+  ReadinessResponseSchema,
   SourceInfoSchema,
   SuggestItemSchema,
 } from '@pimm/contracts';
@@ -36,6 +37,7 @@ const generatedSchemas: Record<string, object> = {
   SuggestItem: SuggestItemSchema.toJSONSchema(),
   GeocodeItem: GeocodeItemSchema.toJSONSchema(),
   HealthResponse: HealthResponseSchema.toJSONSchema(),
+  ReadinessResponse: ReadinessResponseSchema.toJSONSchema(),
 };
 
 export const openapiDocument = {
@@ -65,6 +67,29 @@ export const openapiDocument = {
                   },
                   required: ['status', 'version', 'time'],
                 },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/health/ready': {
+      get: {
+        summary: 'Readiness probe (storage availability) for external monitoring',
+        responses: {
+          '200': {
+            description: 'Service and storage are ready',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ReadinessResponse' },
+              },
+            },
+          },
+          '503': {
+            description: 'Storage unavailable',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ReadinessResponse' },
               },
             },
           },

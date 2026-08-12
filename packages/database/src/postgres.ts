@@ -242,6 +242,15 @@ export class PostgresAssetRepository implements AssetRepository {
     this.sql = sqlOverride ?? neon(databaseUrl);
   }
 
+  async ping(): Promise<boolean> {
+    try {
+      await this.sql`SELECT 1`;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private summarySelect(filters: AssetQueryFilters, cursor?: CursorPayload) {
     const where = buildConditions(this.sql, filters);
     return this.sql`
