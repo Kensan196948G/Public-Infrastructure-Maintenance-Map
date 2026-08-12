@@ -1,0 +1,31 @@
+name: Production Smoke Monitor
+
+on:
+  schedule:
+    # 15 分間隔の死活監視（外部監視の代替・第一層。通知は GitHub の
+    # Actions 失敗通知を利用し、必要に応じて Slack/Teams 連携へ拡張する）
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-smoke-monitor
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: 🔭 Production smoke (/health/ready)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .node-version
+
+      - name: 🔭 Run production smoke (monitor mode)
+        run: node scripts/tools/cloudflare-production-smoke.mjs --monitor

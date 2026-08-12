@@ -12,6 +12,7 @@
 | エラー率 | 全 API リクエストに占める 5xx の割合 | 1% 未満 | Workers Logs |
 | データ鮮度 | 毎時 Cron 取込の成功率 | 週 95% 以上（外部ソース障害除く） | Cron 実行ログ |
 | 定期取込 | 各ソースの `fetched_at` が 24 時間以内 | 95% 以上 | `/api/v1/sources` |
+| 死活監視 | `/api/v1/health`・`/health/ready`・`/assets/summary`・Web を 15 分間隔で確認 | 100%（監視成功時） | GitHub Actions `production-smoke.yml`（`--monitor`） |
 
 > ⚠️ 本番 URL を外部から監視する定期ジョブ（Uptime Robot / Cloudflare Health Checks 等）は **未設定**。設定はユーザー対応事項。
 
@@ -39,6 +40,11 @@
 - 死活・DB 監視は `/api/v1/health/ready` を 5 分間隔で監視（`database: unavailable` 時に 503 を返す）
 - 実時間ログ: `npx wrangler tail --env production`（`apps/api` で実行）
 - スモーク: `pnpm smoke:cloudflare`（本番 9 チェック）をデプロイ毎に実行
+
+### 定期監視（GitHub Actions）
+- `.github/workflows/production-smoke.yml` が 15 分間隔で本番 URL を検査
+- 失敗時は GitHub Actions の失敗通知で管理者へ伝達（通知先拡張はユーザー設定）
+- 手動実行: Actions → **Production Smoke Monitor** → Run workflow
 
 ### Cron 取込
 - 毎時 0 分に実行（`schedule: 0 * * * *`）
