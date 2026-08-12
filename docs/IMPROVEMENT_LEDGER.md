@@ -11,6 +11,7 @@
 | IMP-003 | アクセシビリティ | Modal フォーカストラップ・Escape・フォーカス復元 | ✅ 実装・テスト済み | Modal.test.tsx 3 件（web 122/122 PASS） | Web UI |
 | IMP-004 | 性能 | ダイアログ遅延読込・react/maplibre vendor chunk 分割 | ✅ 実装・ビルド確認 | `vite build` で main 401KB・ダイアログ別 chunk 生成 | Web 初回読み込み |
 | IMP-005 | 文書 | 評価書・改善台帳・AI 設計・ロードマップ作成、監視/W05/README/DECISION_LOG 更新 | ✅ 実装 | 本 PR の docs 差分 | 運用・監査・再開 |
+| IMP-006 | セキュリティ | `js-yaml` 4.3.1・`nanoid` 3.3.17 へ override 更新（GHSA-5p4m-2wfm-xmqj / GHSA-2v37-7h3g-55p8） | ✅ 実装 | pnpm-lock.yaml 更新・CI dependency scan | 依存ツールチェーン |
 
 ## ⏳ 未実装（優先順・Issue 連携）
 
