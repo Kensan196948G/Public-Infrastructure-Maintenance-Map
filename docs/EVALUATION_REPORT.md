@@ -244,6 +244,11 @@
 
 ## 📌 10. 残課題と判断
 
+### 2026-08-12 承認後フォローアップ（追記）
+
+- ✅ PR #75/#76 マージ・API 本番デプロイ（version `047bfd6a`）・スモーク 9/9→10 チェック・15 分間隔死活監視・main ブランチ保護を実施
+- ⏳ 残対応（Web Pages 再配信・GitHub Actions `DATABASE_URL`・Neon 復元試験・Access ブラウザ E2E・通知先設定）は [Issue #77](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/issues/77) で追跡
+
 ### 投資判断
 
 **「条件付き継続」** — 本番公開済みで基盤価値は実証済み。ただし「本番運用可能」の宣言には Phase 0（ユーザー対応 4 項目）と Phase 1 の一部（#48/#52/#54/#55）の完了が必要。

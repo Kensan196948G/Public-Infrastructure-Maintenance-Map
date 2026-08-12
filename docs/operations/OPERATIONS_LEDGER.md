@@ -9,14 +9,14 @@
 
 | 項目 | 手順 | 判定基準 | 担当 | 証跡 | 状態（2026-08-05） |
 | --- | --- | --- | --- | --- | --- |
-| API 稼働 | `pnpm smoke:cloudflare` または curl `/health` | 200 / ok | 管理者 | 本ファイル | ✅ 当日スモーク 9/9 成功 |
-| Cron 取込 | `wrangler tail` で毎時ログ確認（自動化推奨） | エラー 0 | 管理者 | 本ファイル | ⚠️ 自動化未設定・手動確認 |
+| API 稼働 | `pnpm smoke:cloudflare` または curl `/health`・`/health/ready` | 200 / ok / ready | 管理者 | GitHub Actions `production-smoke.yml` | ✅ 2026-08-12 スモーク 9/9＋10 チェック化・15 分間隔自動監視開始 |
+| Cron 取込 | `wrangler tail` で毎時ログ確認（自動化推奨） | エラー 0 | 管理者 | 本ファイル | 🟡 API 死活は自動監視。取込ログの自動集計は未設定・手動確認 |
 
 ### 週次
 
 | 項目 | 手順 | 判定基準 | 担当 | 証跡 | 状態 |
 | --- | --- | --- | --- | --- | --- |
-| W05 河川取込 | GitHub Actions `w05-scheduled-ingest.yml`（日曜 01:00 JST） | run success | 管理者 | GitHub Actions | ⚠️ `DATABASE_URL` Secret 未設定のため未実行 |
+| W05 河川取込 | GitHub Actions `w05-scheduled-ingest.yml`（日曜 01:00 JST） | run success | 管理者 | GitHub Actions | 🔴 `DATABASE_URL` Secret 未設定のため未実行（Issue #77・`check-secret` ガードで明確化済み） |
 | データ鮮度 | `/api/v1/sources` で `fetched_at` 確認 | 24h 以内 95% | 管理者 | 本ファイル | ⚠️ 初回集計未実施 |
 | エラー率・SLO | Workers Logs 集計 | 5xx < 1% | 管理者 | 本ファイル | ⚠️ 自動集計未設定 |
 
