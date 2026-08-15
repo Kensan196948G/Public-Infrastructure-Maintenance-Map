@@ -391,4 +391,92 @@ describe('ApiClient', () => {
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/api/v1/geocode?q=');
     expect(String(fetchImpl.mock.calls[0]?.[0])).toContain(encodeURIComponent('大阪市北区'));
   });
+
+  it('lists admin audit events with credentials', async () => {
+    const payload = {
+      items: [
+        {
+          id: '00000000-0000-4000-8000-000000000001',
+          occurredAt: '2026-07-19T00:00:00.000Z',
+          actor: 'admin@example.com',
+          action: 'source.created',
+          targetType: 'source',
+          targetId: 'sample-bridges',
+          summary: 'ソースを登録',
+          detail: {},
+          requestId: null,
+          prevHash: '0'.repeat(64),
+          eventHash: 'a'.repeat(64),
+        },
+      ],
+      valid: true,
+    };
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(payload),
+    );
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(client.listAdminAuditEvents(30)).resolves.toEqual(payload);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('/api/v1/admin/audit-events?limit=30');
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({ credentials: 'include' });
+  });
+
+  it('submits public feedback to the rate-limited endpoint', async () => {
+    const payload = {
+      id: '00000000-0000-4000-8000-000000000002',
+      status: 'received',
+      message: '受け付けました',
+    };
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse(payload),
+    );
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(
+      client.submitFeedback({ category: 'location', detail: '位置がずれています' }),
+    ).resolves.toEqual(payload);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('/api/v1/feedback');
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toEqual({
+      category: 'location',
+      detail: '位置がずれています',
+    });
+  });
+
+  it('lists and resolves feedback reports as admin', async () => {
+    const report = {
+      id: '00000000-0000-4000-8000-000000000003',
+      category: 'link',
+      detail: 'リンク切れ',
+      pageUrl: null,
+      status: 'open',
+      resolutionNote: null,
+      createdAt: '2026-07-19T00:00:00.000Z',
+      resolvedAt: null,
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [report] }))
+      .mockResolvedValueOnce(jsonResponse({ ...report, status: 'converted' }));
+    const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
+
+    await expect(client.listAdminFeedbackReports(50, 'open')).resolves.toEqual({
+      items: [report],
+    });
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      '/api/v1/admin/feedback-reports?limit=50&status=open',
+    );
+
+    await expect(
+      client.resolveAdminFeedback(report.id, { status: 'converted', reason: '品質issue化' }),
+    ).resolves.toMatchObject({ status: 'converted' });
+    expect(String(fetchImpl.mock.calls[1]?.[0])).toBe(
+      `/api/v1/admin/feedback-reports/${report.id}/resolve`,
+    );
+    expect(fetchImpl.mock.calls[1]?.[1]).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toEqual({
+      status: 'converted',
+      reason: '品質issue化',
+    });
+  });
 });

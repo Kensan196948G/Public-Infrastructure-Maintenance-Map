@@ -30,8 +30,9 @@ function db() {
 async function seedDatabase() {
   if (!sql) throw new Error('PIMM_TEST_DATABASE_URL is required');
 
-  await sql`TRUNCATE quality_issues, ingestion_runs, dataset_versions, asset_attributes,
-    infrastructure_assets, data_sources RESTART IDENTITY CASCADE`;
+  await sql`TRUNCATE feedback_reports, audit_events, quality_issues, ingestion_runs,
+    dataset_versions, asset_attributes, infrastructure_assets, data_sources
+    RESTART IDENTITY CASCADE`;
 
   await sql`
     INSERT INTO data_sources

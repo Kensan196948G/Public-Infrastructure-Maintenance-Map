@@ -25,6 +25,14 @@ import {
 } from '../src/index.js';
 import type { AdminSourceOperations } from '../src/index.js';
 
+import {
+  FeedbackSubmitSchema,
+  GENESIS_HASH,
+  hashAuditEvent,
+  verifyAuditChain,
+  verifyFullAuditChain,
+} from '../src/index.js';
+
 describe('enums', () => {
   it('accepts known asset types', () => {
     expect(AssetTypeSchema.parse('bridge')).toBe('bridge');
@@ -346,5 +354,153 @@ describe('municipalityCodeForAddress', () => {
     expect(municipalityCodeForAddress(null)).toBeNull();
     expect(municipalityCodeForAddress('  ')).toBeNull();
     expect(municipalityCodeForAddress('沖ノ鳥島')).toBeNull();
+  });
+});
+
+describe('audit hash chain (Issue #48)', () => {
+  async function makeEvent(
+    prevHash: string,
+    overrides: Partial<Parameters<typeof hashAuditEvent>[0]> = {},
+  ) {
+    const base = {
+      actor: 'admin@example.com',
+      action: 'source.created' as const,
+      targetType: 'source',
+      targetId: 'sample-bridges',
+      summary: 'ソースを登録: サンプル橋梁',
+      detail: { slug: 'sample-bridges' },
+      requestId: 'req-1',
+      prevHash,
+    };
+    const merged = { ...base, ...overrides };
+    const eventHash = await hashAuditEvent(merged);
+    return {
+      id: '11111111-1111-4111-8111-111111111111',
+      occurredAt: '2026-08-14T00:00:00.000Z',
+      actor: merged.actor,
+      action: merged.action,
+      targetType: merged.targetType,
+      targetId: merged.targetId,
+      summary: merged.summary,
+      detail: merged.detail,
+      requestId: merged.requestId,
+      prevHash: merged.prevHash,
+      eventHash,
+    };
+  }
+
+  it('chains two events and verifies them', async () => {
+    const first = await makeEvent(GENESIS_HASH);
+    const second = await makeEvent(first.eventHash, {
+      action: 'asset.suspended',
+      targetId: 'asset-1',
+      summary: '資産の公開を停止',
+    });
+    expect(await verifyAuditChain([first, second])).toBe(true);
+  });
+
+  it('detects a broken link when prevHash is tampered', async () => {
+    const first = await makeEvent(GENESIS_HASH);
+    const second = await makeEvent(first.eventHash, {
+      action: 'asset.suspended',
+      targetId: 'asset-1',
+      summary: '資産の公開を停止',
+    });
+    const tampered = { ...second, prevHash: '0'.repeat(64) };
+    expect(await verifyAuditChain([first, tampered])).toBe(false);
+  });
+
+  it('detects a modified payload that keeps its old hash', async () => {
+    const first = await makeEvent(GENESIS_HASH);
+    const second = await makeEvent(first.eventHash, {
+      action: 'asset.suspended',
+      targetId: 'asset-1',
+      summary: '資産の公開を停止',
+    });
+    // Attacker edits summary but leaves eventHash untouched.
+    const tampered = { ...second, summary: '改ざんされた内容' };
+    expect(await verifyAuditChain([first, tampered])).toBe(false);
+  });
+
+  it('rejects a full chain whose first event does not start from genesis', async () => {
+    const first = await makeEvent('a'.repeat(64));
+    // Window-internal verification accepts a bounded slice regardless of its
+    // first prevHash; full-chain verification requires genesis.
+    expect(await verifyAuditChain([first])).toBe(true);
+    expect(await verifyFullAuditChain([first])).toBe(false);
+    const genesisFirst = await makeEvent(GENESIS_HASH);
+    expect(await verifyFullAuditChain([genesisFirst])).toBe(true);
+  });
+
+  it('detects a deleted middle event (hole in the chain)', async () => {
+    const first = await makeEvent(GENESIS_HASH);
+    const second = await makeEvent(first.eventHash, {
+      action: 'asset.suspended',
+      targetId: 'asset-1',
+      summary: '資産の公開を停止',
+    });
+    const third = await makeEvent(second.eventHash, {
+      action: 'quality.resolved',
+      targetId: 'issue-1',
+      summary: '品質issueを解決',
+    });
+    // second deleted: third now points at first, whose hash differs from second's.
+    expect(await verifyAuditChain([first, third])).toBe(false);
+  });
+});
+
+describe('feedback schema (Issue #54)', () => {
+  it('accepts a valid submission', () => {
+    expect(
+      FeedbackSubmitSchema.parse({ category: 'location', detail: '位置がずれています' }),
+    ).toMatchObject({ category: 'location', detail: '位置がずれています' });
+  });
+
+  it('accepts an optional pageUrl', () => {
+    expect(
+      FeedbackSubmitSchema.parse({
+        category: 'link',
+        detail: 'リンク切れ',
+        pageUrl: 'https://pimm.example/',
+      }).pageUrl,
+    ).toBe('https://pimm.example/');
+    // ローカル開発・E2E のループバック URL も許容する（z.httpUrl は拒否するため）。
+    expect(
+      FeedbackSubmitSchema.parse({
+        category: 'link',
+        detail: 'リンク切れ',
+        pageUrl: 'http://127.0.0.1:5187/',
+      }).pageUrl,
+    ).toBe('http://127.0.0.1:5187/');
+  });
+
+  it('rejects non-HTTP(S) pageUrl values', () => {
+    expect(
+      FeedbackSubmitSchema.safeParse({
+        category: 'link',
+        detail: 'リンク切れ',
+        pageUrl: 'ftp://example.com/file',
+      }).success,
+    ).toBe(false);
+    expect(
+      FeedbackSubmitSchema.safeParse({
+        category: 'link',
+        detail: 'リンク切れ',
+        pageUrl: 'javascript:alert(1)',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects unknown categories', () => {
+    expect(FeedbackSubmitSchema.safeParse({ category: 'spam', detail: 'x' }).success).toBe(false);
+  });
+
+  it('rejects blank or oversized detail', () => {
+    expect(FeedbackSubmitSchema.safeParse({ category: 'other', detail: '   ' }).success).toBe(
+      false,
+    );
+    expect(
+      FeedbackSubmitSchema.safeParse({ category: 'other', detail: 'x'.repeat(1001) }).success,
+    ).toBe(false);
   });
 });

@@ -76,6 +76,12 @@ export const AdminQualityIssueListQuerySchema = z.object({
 });
 export type AdminQualityIssueListQuery = z.infer<typeof AdminQualityIssueListQuerySchema>;
 
+/** Audit-trail listing (Issue #48): newest `limit` events. */
+export const AdminAuditEventListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type AdminAuditEventListQuery = z.infer<typeof AdminAuditEventListQuerySchema>;
+
 export const AdminIngestionRunSchema = z.object({
   id: z.uuid(),
   sourceSlug: z.string(),
