@@ -18,13 +18,32 @@ export const FEEDBACK_STATUSES = ['open', 'converted', 'dismissed'] as const;
 export const FeedbackStatusSchema = z.enum(FEEDBACK_STATUSES);
 export type FeedbackStatus = z.infer<typeof FeedbackStatusSchema>;
 
+/**
+ * HTTP(S) URL のみを許可する検証。z.httpUrl() はループバック/プライベート IP
+ * （ローカル開発・E2E の http://127.0.0.1:PORT/）を拒否するため、スキームを
+ * 明示的に検査する。
+ */
+function httpOrHttpsUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 /** Public submission — intentionally small and anonymous. */
 export const FeedbackSubmitSchema = z.object({
   category: FeedbackCategorySchema,
   /** Free text; bounded so the public endpoint stays cheap. */
   detail: z.string().trim().min(1).max(1000),
-  /** Optional URL of the page the user was looking at. */
-  pageUrl: z.string().trim().max(500).optional(),
+  /** Optional URL of the page the user was looking at; HTTP(S) only. */
+  pageUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .refine(httpOrHttpsUrl, 'pageUrl must be an http(s) URL')
+    .optional(),
 });
 export type FeedbackSubmit = z.infer<typeof FeedbackSubmitSchema>;
 

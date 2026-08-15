@@ -9,8 +9,9 @@ CREATE TABLE feedback_reports (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   category        varchar(20) NOT NULL
                   CHECK (category IN ('location', 'link', 'quality', 'other')),
-  detail          text NOT NULL,
-  page_url        text,
+  -- 公開受付経路のため、スキーマ検証を通らない挿入経路へも DB 側の上限を防御層として設ける。
+  detail          text NOT NULL CHECK (char_length(detail) BETWEEN 1 AND 1000),
+  page_url        text CHECK (page_url IS NULL OR char_length(page_url) <= 500),
   status          varchar(20) NOT NULL DEFAULT 'open'
                   CHECK (status IN ('open', 'converted', 'dismissed')),
   resolution_note text,

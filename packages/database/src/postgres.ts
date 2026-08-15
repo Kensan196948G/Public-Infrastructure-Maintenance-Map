@@ -39,6 +39,7 @@ import type {
   SuggestItem,
 } from '@pimm/contracts';
 import {
+  GENESIS_HASH,
   GeometrySchema,
   OPERATIONS_RECENT_RUN_WINDOW,
   prefectureCodeForKeyword,
@@ -873,7 +874,7 @@ export class PostgresAssetRepository implements AssetRepository {
     if (prevHash === null) {
       const latest = (await this.sql`
         SELECT event_hash FROM audit_events ORDER BY seq DESC LIMIT 1`) as Row[];
-      prevHash = String(latest[0]?.['event_hash'] ?? '0'.repeat(64));
+      prevHash = String(latest[0]?.['event_hash'] ?? GENESIS_HASH);
     }
     const occurredAt = new Date().toISOString();
     const event = await recordAuditEvent(null, { ...input, prevHash }, occurredAt);
@@ -909,11 +910,17 @@ export class PostgresAssetRepository implements AssetRepository {
       eventHash: String(row['event_hash']),
     }));
     // rows are newest-first; the chain must be verified chronologically.
+    // valid は「取得した limit 件のウィンドウ内で連続性が保たれている」こと
+    // のみを示す（先頭要素の prevHash はウィンドウ外を指し得るため検査しない）。
+    // 全チェーン先頭からの検証は verifyFullAuditChain を利用する。
     const valid = await verifyAuditChain([...items].reverse());
     return { items, valid };
   }
 
-  async submitFeedback(input: FeedbackSubmit): Promise<FeedbackSubmitResponse> {
+  async submitFeedback(
+    input: FeedbackSubmit,
+    requestId: string | null,
+  ): Promise<FeedbackSubmitResponse> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await this.sql`
@@ -926,7 +933,7 @@ export class PostgresAssetRepository implements AssetRepository {
       targetId: id,
       summary: `フィードバックを受付: ${input.category}`,
       detail: { category: input.category },
-      requestId: null,
+      requestId,
     });
     return {
       id,
@@ -952,6 +959,7 @@ export class PostgresAssetRepository implements AssetRepository {
     id: string,
     input: { status: 'converted' | 'dismissed'; reason: string },
     actor: string,
+    requestId: string | null,
   ): Promise<AdminFeedbackList['items'][number] | null> {
     const rows = (await this.sql`
       UPDATE feedback_reports SET
@@ -970,7 +978,7 @@ export class PostgresAssetRepository implements AssetRepository {
       targetId: id,
       summary: `フィードバックを${input.status === 'converted' ? '品質issueへ変換' : '却下'}: ${report.category}`,
       detail: { status: input.status, reason: input.reason },
-      requestId: null,
+      requestId,
     });
     return report;
   }

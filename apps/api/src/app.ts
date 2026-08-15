@@ -385,7 +385,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
         errors: zodIssuesToErrors(parsed.error),
       });
     }
-    const result = await repo.submitFeedback(parsed.data);
+    const result = await repo.submitFeedback(parsed.data, c.get('requestId'));
     c.header('Cache-Control', 'no-store');
     return c.json(result, 202);
   });
@@ -446,6 +446,7 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
       id.toLowerCase(),
       { status: parsed.data.status, reason: parsed.data.reason },
       identity.email,
+      c.get('requestId'),
     );
     if (!report) return fail(c, 'NOT_FOUND', 'フィードバックが見つかりません');
     return c.json(report);

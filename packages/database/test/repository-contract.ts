@@ -241,11 +241,14 @@ export function registerAssetRepositoryContract(
     it('accepts public feedback and lists it for review', async () => {
       const { repo } = await setup();
 
-      const response = await repo.submitFeedback({
-        category: 'location',
-        detail: 'テスト用: 位置がずれているように見えます',
-        pageUrl: 'https://pimm.example/map',
-      });
+      const response = await repo.submitFeedback(
+        {
+          category: 'location',
+          detail: 'テスト用: 位置がずれているように見えます',
+          pageUrl: 'https://pimm.example/map',
+        },
+        'contract-test-request',
+      );
       expect(response.status).toBe('received');
       expect(response.id).toBeTruthy();
 
@@ -261,6 +264,7 @@ export function registerAssetRepositoryContract(
         response.id,
         { status: 'converted', reason: '品質issue化して対応' },
         'admin@example.com',
+        'contract-test-request-2',
       );
       expect(resolved).not.toBeNull();
       expect(resolved!.status).toBe('converted');

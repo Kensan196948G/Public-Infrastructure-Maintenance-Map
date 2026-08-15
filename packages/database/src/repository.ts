@@ -27,7 +27,7 @@ import type {
   SourceInfo,
   SuggestItem,
 } from '@pimm/contracts';
-import { hashAuditEvent } from '@pimm/contracts';
+import { GENESIS_HASH, hashAuditEvent } from '@pimm/contracts';
 
 /** Filters shared by search / summary / export. */
 export interface AssetQueryFilters {
@@ -122,9 +122,10 @@ export interface AssetRepository {
 
   /**
    * Public feedback intake (Issue #54). Anonymous, rate-limited at the API
-   * layer; returns the created report id.
+   * layer; returns the created report id. requestId is carried into the audit
+   * event so the report correlates with the originating request.
    */
-  submitFeedback(input: FeedbackSubmit): Promise<FeedbackSubmitResponse>;
+  submitFeedback(input: FeedbackSubmit, requestId: string | null): Promise<FeedbackSubmitResponse>;
 
   /** Admin review list for submitted feedback reports. */
   listFeedbackReports(query: {
@@ -137,6 +138,7 @@ export interface AssetRepository {
     id: string,
     input: { status: 'converted' | 'dismissed'; reason: string },
     actor: string,
+    requestId: string | null,
   ): Promise<AdminFeedbackList['items'][number] | null>;
 }
 
@@ -152,7 +154,7 @@ export async function recordAuditEvent(
   payload: NewAuditEvent,
   now: string,
 ): Promise<AuditEvent> {
-  const prevHash = prev ? prev.eventHash : (payload.prevHash ?? '0'.repeat(64));
+  const prevHash = prev ? prev.eventHash : (payload.prevHash ?? GENESIS_HASH);
   const eventHash = await hashAuditEvent({ ...payload, prevHash });
   return { ...payload, id: crypto.randomUUID(), occurredAt: now, prevHash, eventHash };
 }

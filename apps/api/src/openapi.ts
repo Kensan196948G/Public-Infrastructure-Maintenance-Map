@@ -7,12 +7,14 @@
  */
 import {
   AdminCreateSourceSchema,
+  AdminFeedbackListSchema,
   AdminOperationsSummarySchema,
   AdminUpdateSourceSchema,
   AssetCountSummarySchema,
   AssetDetailSchema,
   AssetSummarySchema,
   AuditEventListSchema,
+  FeedbackReportSchema,
   FeedbackSubmitResponseSchema,
   FeedbackSubmitSchema,
   GeocodeItemSchema,
@@ -43,6 +45,8 @@ const generatedSchemas: Record<string, object> = {
   ReadinessResponse: ReadinessResponseSchema.toJSONSchema(),
   FeedbackSubmit: FeedbackSubmitSchema.toJSONSchema(),
   FeedbackSubmitResponse: FeedbackSubmitResponseSchema.toJSONSchema(),
+  FeedbackReport: FeedbackReportSchema.toJSONSchema(),
+  AdminFeedbackList: AdminFeedbackListSchema.toJSONSchema(),
   AuditEventList: AuditEventListSchema.toJSONSchema(),
 };
 
@@ -291,7 +295,14 @@ export const openapiDocument = {
           },
         ],
         responses: {
-          '200': { description: 'Feedback reports' },
+          '200': {
+            description: 'Feedback reports',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AdminFeedbackList' },
+              },
+            },
+          },
           '401': { $ref: '#/components/responses/Problem' },
         },
       },
@@ -317,7 +328,14 @@ export const openapiDocument = {
           },
         },
         responses: {
-          '200': { description: 'Resolved report' },
+          '200': {
+            description: 'Resolved report',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/FeedbackReport' },
+              },
+            },
+          },
           '404': { $ref: '#/components/responses/Problem' },
         },
       },

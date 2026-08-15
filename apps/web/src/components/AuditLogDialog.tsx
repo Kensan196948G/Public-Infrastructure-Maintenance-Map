@@ -311,7 +311,11 @@ export function AuditLogDialog({
         <div className="admin-grid">
           <div>
             <h4 className="admin-subheading">🔐 監査イベント（append-only・ハッシュチェーン）</h4>
-            <p className="source-provider" role="note">
+            <p
+              className="source-provider"
+              role={auditValid === false ? 'alert' : 'note'}
+              aria-live={auditValid === false ? 'assertive' : 'off'}
+            >
               {auditValid === null
                 ? '監査イベントはまだ読み込まれていません。'
                 : auditValid

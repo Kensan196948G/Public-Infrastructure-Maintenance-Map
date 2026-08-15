@@ -17,6 +17,7 @@ import type {
   AssetSearchResponse,
   AssetType,
   AuditEventList,
+  FeedbackReport,
   FeedbackSubmit,
   FeedbackSubmitResponse,
   GeocodeResponse,
@@ -333,8 +334,8 @@ export class ApiClient {
   resolveAdminFeedback(
     id: string,
     input: { status: 'converted' | 'dismissed'; reason: string },
-  ): Promise<AdminFeedbackList['items'][number]> {
-    return postJson<AdminFeedbackList['items'][number]>(
+  ): Promise<FeedbackReport> {
+    return postJson<FeedbackReport>(
       `${this.base}/admin/feedback-reports/${encodeURIComponent(id)}/resolve`,
       this.fetchImpl,
       input,

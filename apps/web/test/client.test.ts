@@ -437,6 +437,10 @@ describe('ApiClient', () => {
     ).resolves.toEqual(payload);
     expect(String(fetchImpl.mock.calls[0]?.[0])).toBe('/api/v1/feedback');
     expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toEqual({
+      category: 'location',
+      detail: '位置がずれています',
+    });
   });
 
   it('lists and resolves feedback reports as admin', async () => {
@@ -451,9 +455,7 @@ describe('ApiClient', () => {
       resolvedAt: null,
     };
     const fetchImpl = vi
-      .fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        jsonResponse({ items: [report] }),
-      )
+      .fn()
       .mockResolvedValueOnce(jsonResponse({ items: [report] }))
       .mockResolvedValueOnce(jsonResponse({ ...report, status: 'converted' }));
     const client = new ApiClient({ baseUrl: '/api/v1', fetchImpl });
@@ -472,5 +474,9 @@ describe('ApiClient', () => {
       `/api/v1/admin/feedback-reports/${report.id}/resolve`,
     );
     expect(fetchImpl.mock.calls[1]?.[1]).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(String(fetchImpl.mock.calls[1]?.[1]?.body))).toEqual({
+      status: 'converted',
+      reason: '品質issue化',
+    });
   });
 });

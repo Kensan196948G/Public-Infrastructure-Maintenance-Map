@@ -145,23 +145,27 @@ export async function hashAuditEvent(event: {
  * hash all break at least one of these checks.
  */
 export async function verifyAuditChain(events: readonly AuditEvent[]): Promise<boolean> {
-  let prev: string | null = null;
-  for (const event of events) {
-    if (prev !== null && event.prevHash !== prev) return false;
-    const expected = await hashAuditEvent({
-      actor: event.actor,
-      action: event.action,
-      targetType: event.targetType,
-      targetId: event.targetId,
-      summary: event.summary,
-      detail: event.detail,
-      requestId: event.requestId,
-      prevHash: event.prevHash,
-    });
-    if (event.eventHash !== expected) return false;
-    prev = event.eventHash;
+  // Link continuity is a synchronous check; digest computation is independent
+  // per event (prevHash is stored on the event itself), so hashes run in
+  // parallel and short-circuit only after a link break is detected.
+  for (let i = 1; i < events.length; i += 1) {
+    if (events[i]!.prevHash !== events[i - 1]!.eventHash) return false;
   }
-  return true;
+  const digests = await Promise.all(
+    events.map((event) =>
+      hashAuditEvent({
+        actor: event.actor,
+        action: event.action,
+        targetType: event.targetType,
+        targetId: event.targetId,
+        summary: event.summary,
+        detail: event.detail,
+        requestId: event.requestId,
+        prevHash: event.prevHash,
+      }),
+    ),
+  );
+  return events.every((event, i) => event.eventHash === digests[i]);
 }
 
 /**

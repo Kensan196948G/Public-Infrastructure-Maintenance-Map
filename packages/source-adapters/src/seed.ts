@@ -5,7 +5,7 @@
  * the same code paths production ingestion will use.
  */
 import type { AssetDetail, AuditEvent, FeedbackReport, SourceInfo } from '@pimm/contracts';
-import { hashAuditEvent } from '@pimm/contracts';
+import { GENESIS_HASH, hashAuditEvent } from '@pimm/contracts';
 import type { ProcessedAsset, SourceAdapter, SourceDescriptor } from '@pimm/ingestion-core';
 import { recordKey, runPipeline } from '@pimm/ingestion-core';
 import { representativePoint } from '@pimm/database';
@@ -84,13 +84,13 @@ export interface SampleSeed {
  * (Issue #48). `start` is the newest-first offset used to keep UUIDs stable.
  */
 export async function buildSampleAuditEvents(): Promise<AuditEvent[]> {
-  const genesis = '0'.repeat(64);
   const base = (n: number) => ({
     id: `30000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
-    occurredAt: `2026-07-15T0${n % 10}:${String((n * 7) % 60).padStart(2, '0')}:00.000Z`,
+    // 各イベントは時系列で一意な発生時刻を持つ（chain の順序を固定）。
+    occurredAt: `2026-07-15T0${(n % 9) + 1}:${String((n * 7) % 60).padStart(2, '0')}:00.000Z`,
   });
   const drafts: Array<
-    { id: string; occurredAt: string; prevHash: string } & Omit<
+    { id: string; occurredAt: string } & Omit<
       AuditEvent,
       'id' | 'occurredAt' | 'eventHash' | 'prevHash'
     >
@@ -104,7 +104,6 @@ export async function buildSampleAuditEvents(): Promise<AuditEvent[]> {
       summary: 'ソースを登録: サンプル橋梁データセット',
       detail: { slug: 'sample-bridges', enabled: true },
       requestId: 'sample-seed-1',
-      prevHash: genesis,
     },
     {
       ...base(2),
@@ -115,7 +114,6 @@ export async function buildSampleAuditEvents(): Promise<AuditEvent[]> {
       summary: '取込を開始: sample-bridges',
       detail: { sourceSlug: 'sample-bridges' },
       requestId: 'sample-seed-2',
-      prevHash: '',
     },
     {
       ...base(3),
@@ -126,7 +124,6 @@ export async function buildSampleAuditEvents(): Promise<AuditEvent[]> {
       summary: '品質issueを解決: Q006 → accepted',
       detail: { ruleCode: 'Q006', resolutionStatus: 'accepted', reason: 'サンプル確認済み' },
       requestId: 'sample-seed-3',
-      prevHash: '',
     },
     {
       ...base(4),
@@ -137,12 +134,12 @@ export async function buildSampleAuditEvents(): Promise<AuditEvent[]> {
       summary: 'フィードバックを受付: location',
       detail: { category: 'location' },
       requestId: null,
-      prevHash: '',
     },
   ];
   const events: AuditEvent[] = [];
   for (const draft of drafts) {
-    const prevHash = events.length > 0 ? events[events.length - 1]!.eventHash : draft.prevHash;
+    // 先頭は GENESIS_HASH、以降は直前イベントの eventHash へ連結する。
+    const prevHash = events.length > 0 ? events[events.length - 1]!.eventHash : GENESIS_HASH;
     const eventHash = await hashAuditEvent({
       actor: draft.actor,
       action: draft.action,

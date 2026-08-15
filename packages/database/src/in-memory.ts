@@ -512,7 +512,10 @@ export class InMemoryAssetRepository implements AssetRepository {
     return { items: this.auditEvents.slice(0, limit), valid };
   }
 
-  async submitFeedback(input: FeedbackSubmit): Promise<FeedbackSubmitResponse> {
+  async submitFeedback(
+    input: FeedbackSubmit,
+    requestId: string | null,
+  ): Promise<FeedbackSubmitResponse> {
     const report: FeedbackReport = {
       id: crypto.randomUUID(),
       category: input.category,
@@ -531,7 +534,7 @@ export class InMemoryAssetRepository implements AssetRepository {
       targetId: report.id,
       summary: `フィードバックを受付: ${input.category}`,
       detail: { category: input.category },
-      requestId: null,
+      requestId,
     });
     return {
       id: report.id,
@@ -555,6 +558,7 @@ export class InMemoryAssetRepository implements AssetRepository {
     id: string,
     input: { status: 'converted' | 'dismissed'; reason: string },
     actor: string,
+    requestId: string | null,
   ): Promise<AdminFeedbackList['items'][number] | null> {
     const report = this.feedbackReports.find((r) => r.id === id);
     if (!report) return null;
@@ -568,7 +572,7 @@ export class InMemoryAssetRepository implements AssetRepository {
       targetId: id,
       summary: `フィードバックを${input.status === 'converted' ? '品質issueへ変換' : '却下'}: ${report.category}`,
       detail: { status: input.status, reason: input.reason },
-      requestId: null,
+      requestId,
     });
     return report;
   }

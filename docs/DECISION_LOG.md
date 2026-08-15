@@ -232,7 +232,7 @@ secret、credential、connection string、PII は記載しない。
 - 技術判断:
   1. ハッシュは Web Crypto `crypto.subtle`（Workers/ブラウザ/Node 19+ 共通）で計算し、`occurredAt`/`id` はハッシュ対象外（リポジトリが付与するため再現不能）。ペイロードは `stableStringify`（キーソート）で正規化し、PostgreSQL jsonb のキー順序非保持による書込/検証時のダイジェスト不一致を防いだ。
   2. チェーンは「ウィンドウ内整合性」（各イベントの eventHash が自身ペイロードのダイジェスト＋隣接リンク一致）で検証し、最新N件スライスでも判定可能にした（完全チェーン先頭 genesis 検証は `verifyFullAuditChain` として分離）。
-  3. Postgres の新規書込はインスタンスが保持する直前 event_hash へ連結し、同一ミリ秒タイムスタンプでもチェーンが壊れないようにした（`seq bigserial` を挿入順の正本として一覧・初期チェーン解決に使用）。複数インスタンス並行書込時の直列化は既知制約として記録。
+  3. Postgres の新規書込はインスタンスが保持する直前 event_hash へ連結し、同一ミリ秒タイムスタンプでもチェーンが壊れないようにした（`seq bigserial` を挿入順の正本として一覧・初期チェーン解決に使用）。複数インスタンス並行書込時の直列化は既知制約として [Issue #82](https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/issues/82) で追跡する。
   4. append-only は DB トリガー（UPDATE/DELETE を RAISE EXCEPTION）で強制し、監査ログの不変性を SQL 経由の事故からも保護した。
   5. フィードバックは匿名・小ペイロードに限定し、公開APIにスパム対策としてレート制限（既存）と Zod 検証・長さ上限を適用。Turnstile 等の外部依存は MVP では導入せず将来バックログとした。
 - 影響: DB に migration 0003（audit_events）・0004（feedback_reports）を追加。公開APIに `POST /feedback`、管理APIに `GET /admin/audit-events`・`GET /admin/feedback-reports`・`POST /admin/feedback-reports/:id/resolve` を追加。Web は監査ログダイアログに監査イベント＋フィードバック管理を追加し、FeedbackDialog は API 送信＋GitHub Issue 下書き導線を併存。

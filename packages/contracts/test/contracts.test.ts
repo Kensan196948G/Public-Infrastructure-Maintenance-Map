@@ -464,6 +464,31 @@ describe('feedback schema (Issue #54)', () => {
         pageUrl: 'https://pimm.example/',
       }).pageUrl,
     ).toBe('https://pimm.example/');
+    // ローカル開発・E2E のループバック URL も許容する（z.httpUrl は拒否するため）。
+    expect(
+      FeedbackSubmitSchema.parse({
+        category: 'link',
+        detail: 'リンク切れ',
+        pageUrl: 'http://127.0.0.1:5187/',
+      }).pageUrl,
+    ).toBe('http://127.0.0.1:5187/');
+  });
+
+  it('rejects non-HTTP(S) pageUrl values', () => {
+    expect(
+      FeedbackSubmitSchema.safeParse({
+        category: 'link',
+        detail: 'リンク切れ',
+        pageUrl: 'ftp://example.com/file',
+      }).success,
+    ).toBe(false);
+    expect(
+      FeedbackSubmitSchema.safeParse({
+        category: 'link',
+        detail: 'リンク切れ',
+        pageUrl: 'javascript:alert(1)',
+      }).success,
+    ).toBe(false);
   });
 
   it('rejects unknown categories', () => {

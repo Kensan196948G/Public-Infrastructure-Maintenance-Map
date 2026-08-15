@@ -8,7 +8,7 @@
 
 CREATE TABLE audit_events (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  seq          bigserial NOT NULL,
+  seq          bigserial NOT NULL UNIQUE,
   occurred_at  timestamptz NOT NULL DEFAULT now(),
   actor        text NOT NULL,
   action       varchar(40) NOT NULL,
@@ -42,3 +42,12 @@ CREATE TRIGGER trg_audit_events_append_only
   BEFORE UPDATE OR DELETE ON audit_events
   FOR EACH ROW
   EXECUTE FUNCTION prevent_audit_events_mutation();
+
+-- ─────────────────────────────────────────────
+-- ロールバック手順（migration は forward-only 運用のため通常不要）
+-- 監査表の削除は監査証跡の破壊を伴う。適用取り消しが必要な場合は
+-- 人間の承認を得た上で、適用済み順に以下を実行する:
+--   DROP TRIGGER trg_audit_events_append_only ON audit_events;
+--   DROP FUNCTION prevent_audit_events_mutation();
+--   DROP TABLE audit_events;
+-- ─────────────────────────────────────────────
