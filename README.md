@@ -303,6 +303,17 @@ flowchart LR
 - **Phase 3 — 活用**: 共有URL、CSV／GeoJSON、更新監視
 - **Phase 4 — 発展**: 時系列、PWA、モバイルビューア、他基盤連携
 
+## 🔗 関連プロジェクト
+
+| プロジェクト | URL | 連携イメージ |
+|---|---|---|
+| **Public Works Stakeholder Map（pwsm）** | https://pwsm.mirai-dx-platform.com | **公共工事ステークホルダー整理マップ。工事場所と工事条件から、事前協議の確認候補となる関係機関（発注者・道路/河川/港湾管理者・警察・自治体窓口）を公開情報ベースで整理する調査支援ツール。本システム（pimm）はインフラ資産（もの）を探し、pwsm は関係機関（組織）を整理する補完関係** |
+
+> 🔗 **関連プロジェクトとの役割分担**
+> - **pimm（本システム）**: インフラ**資産**（もの）を探す — 橋梁・道路・港湾・河川・公共施設の所在地・属性・出典
+> - **pwsm（Public Works Stakeholder Map）**: 工事の**関係機関**（組織）を整理する — 発注者・道路/河川/港湾管理者・警察・自治体窓口の候補
+> - どちらも `mirai-dx-platform.com` ドメイン配下で公開。pimm は一般公開、pwsm は本番を Cloudflare Access で関係者限定公開
+
 ## 📚 設計文書
 
 - `Public-Infrastructure-Maintenance-Map_要件定義書_20260716.md` — 何を、なぜ、どこまで実現するか
