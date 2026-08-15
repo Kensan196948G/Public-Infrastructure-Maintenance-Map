@@ -6,6 +6,7 @@ import type {
   AdminAssetPublication,
   AdminCreateSource,
   AdminIngestionDetail,
+  AdminIngestionDiff,
   AdminIngestionList,
   AdminIngestionRun,
   AdminOperationsSummary,
@@ -255,6 +256,15 @@ export class ApiClient {
   listAdminIngestions(limit = 20): Promise<AdminIngestionList> {
     return getJson<AdminIngestionList>(
       `${this.base}/admin/ingestions?limit=${encodeURIComponent(String(limit))}`,
+      this.fetchImpl,
+      { credentials: 'include' },
+    );
+  }
+
+  /** Ingestion diff (Issue #53): added / removed / changed per source. */
+  getAdminIngestionDiff(sourceSlug: string): Promise<AdminIngestionDiff> {
+    return getJson<AdminIngestionDiff>(
+      `${this.base}/admin/ingestions/diff?slug=${encodeURIComponent(sourceSlug)}`,
       this.fetchImpl,
       { credentials: 'include' },
     );

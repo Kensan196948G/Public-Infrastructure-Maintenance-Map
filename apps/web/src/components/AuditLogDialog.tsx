@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type {
   AdminIngestionDetail,
+  AdminIngestionDiff,
   AdminIngestionRun,
   AdminQualityIssueRecord,
   SourceInfo,
@@ -41,6 +42,26 @@ export function AuditLogDialog({
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
   const [resolutionChoices, setResolutionChoices] = useState<Record<string, ResolutionChoice>>({});
   const [pendingIssueId, setPendingIssueId] = useState<string | null>(null);
+  const [diffSlug, setDiffSlug] = useState<string>('');
+  const [diff, setDiff] = useState<AdminIngestionDiff | null>(null);
+  const [isLoadingDiff, setIsLoadingDiff] = useState(false);
+
+  const loadDiff = async (slug: string) => {
+    if (!slug.trim()) return;
+    setIsLoadingDiff(true);
+    setAdminError(null);
+    try {
+      setDiff(await client.getAdminIngestionDiff(slug.trim()));
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        setAdminError('取込差分の閲覧には管理APIへのアクセス権が必要です。');
+      } else {
+        setAdminError('取込差分を取得できませんでした。');
+      }
+    } finally {
+      setIsLoadingDiff(false);
+    }
+  };
 
   const startIngestion = async (source: SourceInfo) => {
     setPendingSlug(source.slug);
@@ -360,6 +381,103 @@ export function AuditLogDialog({
           ) : null}
         </section>
       ) : null}
+      <section className="admin-run-detail" aria-labelledby="admin-diff-heading">
+        <div className="admin-section-header">
+          <h3 id="admin-diff-heading" className="settings-heading">
+            🔁 取込差分（前回取込との比較・Issue #53）
+          </h3>
+        </div>
+        <form
+          className="admin-diff-form"
+          role="search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void loadDiff(diffSlug);
+          }}
+        >
+          <label className="admin-source-field">
+            データソース
+            <select value={diffSlug} onChange={(e) => setDiffSlug(e.target.value)}>
+              <option value="">選択してください</option>
+              {sources.map((s) => (
+                <option key={s.slug} value={s.slug}>
+                  {s.name}（{s.slug}）
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            className="admin-action-button"
+            disabled={isLoadingDiff || diffSlug.trim() === ''}
+          >
+            {isLoadingDiff ? '取得中…' : '差分を表示'}
+          </button>
+        </form>
+        {diff ? (
+          diff.comparable ? (
+            <div className="admin-diff-result">
+              <p className="source-provider" role="note">
+                比較: {formatDate(diff.baseFetchedAt)} → {formatDate(diff.targetFetchedAt)}
+              </p>
+              <div className="admin-grid">
+                <div>
+                  <h4 className="admin-subheading">追加（{diff.added.length}件）</h4>
+                  {diff.added.length === 0 ? (
+                    <p className="detail-empty">追加なし</p>
+                  ) : (
+                    <ul className="admin-issue-list">
+                      {diff.added.map((id) => (
+                        <li key={id} className="admin-issue-item mono">
+                          {id}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div>
+                  <h4 className="admin-subheading">削除・非公開（{diff.removed.length}件）</h4>
+                  {diff.removed.length === 0 ? (
+                    <p className="detail-empty">削除・非公開なし</p>
+                  ) : (
+                    <ul className="admin-issue-list">
+                      {diff.removed.map((id) => (
+                        <li key={id} className="admin-issue-item mono">
+                          {id}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+              <div>
+                <h4 className="admin-subheading">属性変更（{diff.changed.length}件）</h4>
+                {diff.changed.length === 0 ? (
+                  <p className="detail-empty">属性変更なし</p>
+                ) : (
+                  <ul className="admin-issue-list">
+                    {diff.changed.map((row) => (
+                      <li key={row.sourceRecordId} className="admin-issue-item">
+                        <div className="admin-issue-main">
+                          <span className="mono">{row.sourceRecordId}</span>
+                          <span>{row.name}</span>
+                        </div>
+                        <div className="source-provider">
+                          変更属性: {row.attributesChanged.join(', ') || '（なし）'}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="detail-state" role="status">
+              このソースにはまだ比較可能な取込バージョンがありません（2回以上の取込後に差分が表示されます）。
+            </p>
+          )
+        ) : null}
+      </section>
     </Modal>
   );
 }
