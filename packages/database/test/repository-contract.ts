@@ -214,5 +214,59 @@ export function registerAssetRepositoryContract(
       const after = await repo.searchAssets({ limit: 20 });
       expect(after.items).toHaveLength(0);
     });
+
+    it('records chained audit events for administrative mutations', async () => {
+      const { repo } = await setup();
+
+      // A seed backend may already hold events; capture the count first.
+      const before = await repo.listAuditEvents(200);
+      await repo.startIngestion('contract-source', 'admin@example.com', 'audit-corr');
+      await repo.suspendAssetsBySource(
+        'contract-source',
+        { reason: '監査イベント検証' },
+        'admin@example.com',
+      );
+
+      const after = await repo.listAuditEvents(200);
+      expect(after.items.length).toBeGreaterThan(before.items.length);
+      expect(after.valid).toBe(true);
+      // The newest event must be the suspension.
+      expect(after.items[0]!.action).toBe('source.assets.suspended');
+      // Chain links: each item's prevHash equals the next-older eventHash.
+      for (let i = 0; i < after.items.length - 1; i += 1) {
+        expect(after.items[i]!.prevHash).toBe(after.items[i + 1]!.eventHash);
+      }
+    });
+
+    it('accepts public feedback and lists it for review', async () => {
+      const { repo } = await setup();
+
+      const response = await repo.submitFeedback({
+        category: 'location',
+        detail: 'テスト用: 位置がずれているように見えます',
+        pageUrl: 'https://pimm.example/map',
+      });
+      expect(response.status).toBe('received');
+      expect(response.id).toBeTruthy();
+
+      const open = await repo.listFeedbackReports({ limit: 50 });
+      expect(open.items.some((r) => r.id === response.id)).toBe(true);
+      expect(open.items[0]).toMatchObject({
+        category: 'location',
+        status: 'open',
+        pageUrl: 'https://pimm.example/map',
+      });
+
+      const resolved = await repo.resolveFeedbackReport(
+        response.id,
+        { status: 'converted', reason: '品質issue化して対応' },
+        'admin@example.com',
+      );
+      expect(resolved).not.toBeNull();
+      expect(resolved!.status).toBe('converted');
+
+      const openAfter = await repo.listFeedbackReports({ limit: 50, status: 'open' });
+      expect(openAfter.items.some((r) => r.id === response.id)).toBe(false);
+    });
   });
 }

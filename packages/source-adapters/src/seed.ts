@@ -4,7 +4,8 @@
  * in-memory repository. The API's "DB なし動作モード" is therefore exercising
  * the same code paths production ingestion will use.
  */
-import type { AssetDetail, SourceInfo } from '@pimm/contracts';
+import type { AssetDetail, AuditEvent, FeedbackReport, SourceInfo } from '@pimm/contracts';
+import { hashAuditEvent } from '@pimm/contracts';
 import type { ProcessedAsset, SourceAdapter, SourceDescriptor } from '@pimm/ingestion-core';
 import { recordKey, runPipeline } from '@pimm/ingestion-core';
 import { representativePoint } from '@pimm/database';
@@ -72,6 +73,137 @@ async function toDetail(
 export interface SampleSeed {
   assets: AssetDetail[];
   sources: SourceInfo[];
+  /** Seeded audit events (chronological order); empty for tests that assert from-scratch state. */
+  auditEvents: AuditEvent[];
+  /** Seeded feedback reports (newest first); empty for tests that assert from-scratch state. */
+  feedbackReports: FeedbackReport[];
+}
+
+/**
+ * Builds fictional-but-valid seed audit events with a correct hash chain
+ * (Issue #48). `start` is the newest-first offset used to keep UUIDs stable.
+ */
+export async function buildSampleAuditEvents(): Promise<AuditEvent[]> {
+  const genesis = '0'.repeat(64);
+  const base = (n: number) => ({
+    id: `30000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+    occurredAt: `2026-07-15T0${n % 10}:${String((n * 7) % 60).padStart(2, '0')}:00.000Z`,
+  });
+  const drafts: Array<
+    { id: string; occurredAt: string; prevHash: string } & Omit<
+      AuditEvent,
+      'id' | 'occurredAt' | 'eventHash' | 'prevHash'
+    >
+  > = [
+    {
+      ...base(1),
+      actor: 'admin@example.com',
+      action: 'source.created',
+      targetType: 'source',
+      targetId: 'sample-bridges',
+      summary: 'ソースを登録: サンプル橋梁データセット',
+      detail: { slug: 'sample-bridges', enabled: true },
+      requestId: 'sample-seed-1',
+      prevHash: genesis,
+    },
+    {
+      ...base(2),
+      actor: 'admin@example.com',
+      action: 'ingestion.started',
+      targetType: 'ingestion',
+      targetId: '30000000-0000-4000-8000-000000000020',
+      summary: '取込を開始: sample-bridges',
+      detail: { sourceSlug: 'sample-bridges' },
+      requestId: 'sample-seed-2',
+      prevHash: '',
+    },
+    {
+      ...base(3),
+      actor: 'reviewer@example.com',
+      action: 'quality.resolved',
+      targetType: 'quality_issue',
+      targetId: '30000000-0000-4000-8000-000000000030',
+      summary: '品質issueを解決: Q006 → accepted',
+      detail: { ruleCode: 'Q006', resolutionStatus: 'accepted', reason: 'サンプル確認済み' },
+      requestId: 'sample-seed-3',
+      prevHash: '',
+    },
+    {
+      ...base(4),
+      actor: 'system',
+      action: 'feedback.received',
+      targetType: 'feedback',
+      targetId: '30000000-0000-4000-8000-000000000040',
+      summary: 'フィードバックを受付: location',
+      detail: { category: 'location' },
+      requestId: null,
+      prevHash: '',
+    },
+  ];
+  const events: AuditEvent[] = [];
+  for (const draft of drafts) {
+    const prevHash = events.length > 0 ? events[events.length - 1]!.eventHash : draft.prevHash;
+    const eventHash = await hashAuditEvent({
+      actor: draft.actor,
+      action: draft.action,
+      targetType: draft.targetType,
+      targetId: draft.targetId,
+      summary: draft.summary,
+      detail: draft.detail,
+      requestId: draft.requestId,
+      prevHash,
+    });
+    events.push({
+      id: draft.id,
+      occurredAt: draft.occurredAt,
+      actor: draft.actor,
+      action: draft.action,
+      targetType: draft.targetType,
+      targetId: draft.targetId,
+      summary: draft.summary,
+      detail: draft.detail,
+      requestId: draft.requestId,
+      prevHash,
+      eventHash,
+    });
+  }
+  return events;
+}
+
+/** Fictional feedback reports so the admin review surface is not empty in sample mode. */
+export async function buildSampleFeedbackReports(): Promise<FeedbackReport[]> {
+  return [
+    {
+      id: '30000000-0000-4000-8000-000000000051',
+      category: 'location',
+      detail: 'サンプル: あおぞら橋の表示位置が実際より少し南に見えます（確認用ダミー）',
+      pageUrl: 'https://pimm.example/map?types=bridge',
+      status: 'open',
+      resolutionNote: null,
+      createdAt: '2026-07-14T09:00:00.000Z',
+      resolvedAt: null,
+    },
+    {
+      id: '30000000-0000-4000-8000-000000000052',
+      category: 'link',
+      detail: 'サンプル: ふたご橋の原典リンクが切れているように見えます（確認用ダミー）',
+      pageUrl: null,
+      status: 'converted',
+      resolutionNote: '品質issue化して管理台帳へ反映済み（ダミー）',
+      createdAt: '2026-07-13T15:30:00.000Z',
+      resolvedAt: '2026-07-13T16:00:00.000Z',
+    },
+    {
+      id: '30000000-0000-4000-8000-000000000053',
+      category: 'other',
+      detail: 'サンプル: スマートフォンで一覧が読みづらい（確認用ダミー）',
+      pageUrl: 'https://pimm.example/map',
+      status: 'dismissed',
+      resolutionNote: '画面改善バックログへ移動（ダミー）',
+      createdAt: '2026-07-12T10:00:00.000Z',
+      resolvedAt: '2026-07-12T10:30:00.000Z',
+    },
+  ];
 }
 
 interface AdapterRun {
@@ -128,5 +260,10 @@ export async function buildSampleSeed(): Promise<SampleSeed> {
     });
   }
 
-  return { assets, sources };
+  return {
+    assets,
+    sources,
+    auditEvents: await buildSampleAuditEvents(),
+    feedbackReports: await buildSampleFeedbackReports(),
+  };
 }
