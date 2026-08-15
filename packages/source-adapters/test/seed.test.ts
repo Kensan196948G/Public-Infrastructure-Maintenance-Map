@@ -7,6 +7,7 @@ import {
   deterministicUuid,
 } from '../src/index.js';
 import { FIXED_NOTICES } from '../src/seed.js';
+import { verifyAuditChain } from '@pimm/contracts';
 import { getAdapterBySlug, listAdapters } from '../src/registry.js';
 import { runPipeline } from '@pimm/ingestion-core';
 
@@ -141,5 +142,28 @@ describe('registry', () => {
     expect(getAdapterBySlug('bridge-kumamoto')?.descriptor.crs).toBe('EPSG:6668');
     expect(getAdapterBySlug('road-n13')?.descriptor.redistribution).toBe('allowed');
     expect(getAdapterBySlug('nope')).toBeNull();
+  });
+});
+
+describe('sample audit + feedback seeds (Issue #48 / #54)', () => {
+  it('builds a valid hash chain of sample audit events', async () => {
+    const seed = await buildSampleSeed();
+    expect(seed.auditEvents.length).toBeGreaterThanOrEqual(4);
+    expect(await verifyAuditChain(seed.auditEvents)).toBe(true);
+    // First event chains from genesis.
+    expect(seed.auditEvents[0]!.prevHash).toBe('0'.repeat(64));
+    // Consecutive events link.
+    for (let i = 1; i < seed.auditEvents.length; i += 1) {
+      expect(seed.auditEvents[i]!.prevHash).toBe(seed.auditEvents[i - 1]!.eventHash);
+    }
+  });
+
+  it('seeds feedback reports across statuses', async () => {
+    const seed = await buildSampleSeed();
+    expect(seed.feedbackReports.length).toBeGreaterThanOrEqual(3);
+    const statuses = new Set(seed.feedbackReports.map((r) => r.status));
+    expect(statuses.has('open')).toBe(true);
+    expect(statuses.has('converted')).toBe(true);
+    expect(statuses.has('dismissed')).toBe(true);
   });
 });

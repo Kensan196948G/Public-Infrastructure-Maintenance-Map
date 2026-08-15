@@ -158,3 +158,33 @@ export const qualityIssues = pgTable(
     ),
   ],
 );
+
+/**
+ * Append-only audit trail (migrations/0003, Issue #48). Rows are inserted by
+ * repository code only; UPDATE/DELETE is blocked by a DB trigger.
+ */
+export const auditEvents = pgTable('audit_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  actor: text('actor').notNull(),
+  action: varchar('action', { length: 40 }).notNull(),
+  targetType: varchar('target_type', { length: 30 }).notNull(),
+  targetId: text('target_id').notNull(),
+  summary: text('summary').notNull(),
+  detailJson: jsonb('detail_json').notNull().default({}),
+  requestId: text('request_id'),
+  prevHash: char('prev_hash', { length: 64 }).notNull(),
+  eventHash: char('event_hash', { length: 64 }).notNull(),
+});
+
+/** Public feedback intake (migrations/0004, Issue #54). */
+export const feedbackReports = pgTable('feedback_reports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  category: varchar('category', { length: 20 }).notNull(),
+  detail: text('detail').notNull(),
+  pageUrl: text('page_url'),
+  status: varchar('status', { length: 20 }).notNull().default('open'),
+  resolutionNote: text('resolution_note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+});

@@ -552,6 +552,94 @@ describe('ingestion diff API (Issue #53)', () => {
   });
 });
 
+describe('audit trail API (Issue #48)', () => {
+  it('rejects unauthenticated access', async () => {
+    const res = await get('/api/v1/admin/audit-events');
+    expect(res.status).toBe(401);
+  });
+
+  it('lists audit events with a valid chain for admin', async () => {
+    const res = await get('/api/v1/admin/audit-events?limit=10', adminHeaders);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      items: { action: string; actor: string; eventHash: string }[];
+      valid: boolean;
+    };
+    expect(Array.isArray(body.items)).toBe(true);
+    expect(body.valid).toBe(true);
+    expect(body.items.every((e) => e.eventHash.length === 64)).toBe(true);
+  });
+
+  it('validates the limit parameter', async () => {
+    expect((await get('/api/v1/admin/audit-events?limit=0', reviewerHeaders)).status).toBe(400);
+    expect((await get('/api/v1/admin/audit-events?limit=201', reviewerHeaders)).status).toBe(400);
+  });
+});
+
+describe('feedback API (Issue #54)', () => {
+  it('accepts a public feedback submission (202)', async () => {
+    const res = await app.request('http://localhost/api/v1/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category: 'location',
+        detail: 'テスト用: 橋の位置がずれているようです',
+        pageUrl: 'https://pimm.example/map',
+      }),
+    });
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { id: string; status: string };
+    expect(body.status).toBe('received');
+    expect(body.id).toBeTruthy();
+  });
+
+  it('rejects invalid feedback payloads', async () => {
+    const missing = await app.request('http://localhost/api/v1/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category: 'spam', detail: 'x' }),
+    });
+    expect(missing.status).toBe(400);
+
+    const blank = await app.request('http://localhost/api/v1/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category: 'other', detail: '   ' }),
+    });
+    expect(blank.status).toBe(400);
+  });
+
+  it('lists and resolves feedback reports as admin', async () => {
+    const submitted = await app.request('http://localhost/api/v1/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category: 'link', detail: '原典リンクが切れています' }),
+    });
+    const { id } = (await submitted.json()) as { id: string };
+
+    const list = await get('/api/v1/admin/feedback-reports?limit=50', adminHeaders);
+    expect(list.status).toBe(200);
+    const listBody = (await list.json()) as { items: { id: string; status: string }[] };
+    expect(listBody.items.some((r) => r.id === id)).toBe(true);
+
+    const resolve = await app.request(
+      `http://localhost/api/v1/admin/feedback-reports/${id}/resolve`,
+      {
+        method: 'POST',
+        headers: { ...adminHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'converted', reason: '品質issue化して対応' }),
+      },
+    );
+    expect(resolve.status).toBe(200);
+    const resolved = (await resolve.json()) as { status: string };
+    expect(resolved.status).toBe('converted');
+  });
+
+  it('rejects unauthenticated feedback management', async () => {
+    expect((await get('/api/v1/admin/feedback-reports')).status).toBe(401);
+  });
+});
+
 describe('security', () => {
   it('sets security headers on every response', async () => {
     const res = await get('/api/v1/health');

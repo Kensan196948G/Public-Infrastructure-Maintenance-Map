@@ -85,6 +85,9 @@ type AuditClient = Pick<
   | 'listAdminQualityIssues'
   | 'resolveAdminQualityIssue'
   | 'getAdminIngestionDiff'
+  | 'listAdminAuditEvents'
+  | 'listAdminFeedbackReports'
+  | 'resolveAdminFeedback'
 >;
 
 const ingestionDiff = {
@@ -105,6 +108,31 @@ const ingestionDiff = {
   comparable: true,
 };
 
+const auditEvent = {
+  id: '00000000-0000-4000-8000-000000000501',
+  occurredAt: '2026-07-19T00:30:00.000Z',
+  actor: 'admin@example.com',
+  action: 'source.created',
+  targetType: 'source',
+  targetId: 'sample-bridges',
+  summary: 'ソースを登録: サンプル橋梁',
+  detail: { slug: 'sample-bridges' },
+  requestId: null,
+  prevHash: '0'.repeat(64),
+  eventHash: 'a'.repeat(64),
+} as const;
+
+const feedbackReport = {
+  id: '00000000-0000-4000-8000-000000000601',
+  category: 'location',
+  detail: 'テスト用: 位置がずれています',
+  pageUrl: 'https://pimm.example/map',
+  status: 'open',
+  resolutionNote: null,
+  createdAt: '2026-07-19T00:40:00.000Z',
+  resolvedAt: null,
+};
+
 function makeClient(overrides: Partial<AuditClient> = {}): ApiClient & AuditClient {
   return {
     startAdminIngestion: vi.fn(async () => run),
@@ -117,6 +145,16 @@ function makeClient(overrides: Partial<AuditClient> = {}): ApiClient & AuditClie
       resolvedAt: '2026-07-19T00:10:00.000Z',
     })),
     getAdminIngestionDiff: vi.fn(async () => ingestionDiff),
+    listAdminAuditEvents: vi.fn(async () => ({ items: [auditEvent], valid: true })),
+    listAdminFeedbackReports: vi.fn(async () => ({ items: [feedbackReport] })),
+    resolveAdminFeedback: vi.fn(
+      async (id: string, input: { status: 'converted'; reason: string }) => ({
+        ...feedbackReport,
+        status: input.status,
+        resolutionNote: input.reason,
+        resolvedAt: '2026-07-19T00:50:00.000Z',
+      }),
+    ),
     ...overrides,
   } as unknown as ApiClient & AuditClient;
 }
@@ -189,6 +227,37 @@ describe('AuditLogDialog', () => {
       expect(screen.getByText('公開停止中です')).toBeInTheDocument();
     });
     expect(client.listAdminQualityIssues).toHaveBeenCalledWith(50);
+  });
+
+  it('shows audit events and feedback reports after loading admin lists', async () => {
+    const user = userEvent.setup();
+    const client = makeClient();
+    setup({ client });
+
+    await user.click(screen.getByRole('button', { name: '一覧を更新' }));
+
+    await waitFor(() => {
+      expect(client.listAdminAuditEvents).toHaveBeenCalledWith(30);
+      expect(client.listAdminFeedbackReports).toHaveBeenCalledWith(30);
+      expect(screen.getByText('✅ チェーン整合性: 正常')).toBeInTheDocument();
+      expect(screen.getByText('ソースを登録: サンプル橋梁')).toBeInTheDocument();
+      expect(screen.getByText('テスト用: 位置がずれています')).toBeInTheDocument();
+    });
+  });
+
+  it('alerts when the audit chain is broken', async () => {
+    const user = userEvent.setup();
+    setup({
+      client: makeClient({
+        listAdminAuditEvents: vi.fn(async () => ({ items: [auditEvent], valid: false })),
+      }),
+    });
+
+    await user.click(screen.getByRole('button', { name: '一覧を更新' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/チェーン整合性: 異常/)).toBeInTheDocument();
+    });
   });
 
   it('shows an authorization message when the admin API rejects the user', async () => {

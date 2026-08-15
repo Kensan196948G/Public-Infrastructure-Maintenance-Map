@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import type {
+  AdminFeedbackList,
   AdminIngestionDetail,
   AdminIngestionDiff,
   AdminIngestionRun,
   AdminQualityIssueRecord,
+  AuditEvent,
   SourceInfo,
 } from '@pimm/contracts';
 import { ApiClient, ApiError } from '../api/client.js';
@@ -63,6 +65,14 @@ export function AuditLogDialog({
     }
   };
 
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [auditValid, setAuditValid] = useState<boolean | null>(null);
+  const [feedbackReports, setFeedbackReports] = useState<AdminFeedbackList['items']>([]);
+  const [feedbackResolutionInputs, setFeedbackResolutionInputs] = useState<Record<string, string>>(
+    {},
+  );
+  const [pendingFeedbackId, setPendingFeedbackId] = useState<string | null>(null);
+
   const startIngestion = async (source: SourceInfo) => {
     setPendingSlug(source.slug);
     setAdminError(null);
@@ -89,12 +99,17 @@ export function AuditLogDialog({
     setIsLoadingAdminLists(true);
     setAdminError(null);
     try {
-      const [runList, issueList] = await Promise.all([
+      const [runList, issueList, auditList, feedbackList] = await Promise.all([
         client.listAdminIngestions(20),
         client.listAdminQualityIssues(50),
+        client.listAdminAuditEvents(30),
+        client.listAdminFeedbackReports(30),
       ]);
       setRuns(runList.items);
       setOpenIssues(issueList.items);
+      setAuditEvents(auditList.items);
+      setAuditValid(auditList.valid);
+      setFeedbackReports(feedbackList.items);
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         setAdminError(
@@ -124,6 +139,29 @@ export function AuditLogDialog({
 
   const setIssueReason = (issueId: string, reason: string) => {
     setResolutionInputs((prev) => ({ ...prev, [issueId]: reason }));
+  };
+
+  const resolveFeedback = async (
+    report: AdminFeedbackList['items'][number],
+    status: 'converted' | 'dismissed',
+  ) => {
+    const reason = (feedbackResolutionInputs[report.id] ?? '').trim();
+    if (reason === '') return;
+    setPendingFeedbackId(report.id);
+    setAdminError(null);
+    try {
+      const resolved = await client.resolveAdminFeedback(report.id, { status, reason });
+      setFeedbackReports((prev) => prev.map((item) => (item.id === resolved.id ? resolved : item)));
+      setFeedbackResolutionInputs((prev) => ({ ...prev, [report.id]: '' }));
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        setAdminError('フィードバックの解決には管理APIへのアクセス権が必要です。');
+      } else {
+        setAdminError('フィードバックの解決を記録できませんでした。');
+      }
+    } finally {
+      setPendingFeedbackId(null);
+    }
   };
 
   const setIssueResolution = (issueId: string, resolutionStatus: ResolutionChoice) => {
@@ -286,6 +324,101 @@ export function AuditLogDialog({
                     <div className="source-provider">
                       {issue.severity} / {formatDate(issue.createdAt)}
                     </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        <div className="admin-grid">
+          <div>
+            <h4 className="admin-subheading">🔐 監査イベント（append-only・ハッシュチェーン）</h4>
+            <p
+              className="source-provider"
+              role={auditValid === false ? 'alert' : 'note'}
+              aria-live={auditValid === false ? 'assertive' : 'off'}
+            >
+              {auditValid === null
+                ? '監査イベントはまだ読み込まれていません。'
+                : auditValid
+                  ? '✅ チェーン整合性: 正常'
+                  : '🚨 チェーン整合性: 異常（改ざんの可能性）'}
+            </p>
+            {auditEvents.length === 0 ? (
+              <p className="detail-empty">監査イベントはまだ記録されていません。</p>
+            ) : (
+              <ul className="admin-issue-list">
+                {auditEvents.map((event) => (
+                  <li key={event.id} className="admin-issue-item">
+                    <div className="admin-issue-main">
+                      <span className="quality-badge admin-issue-code">{event.action}</span>
+                      <span>{event.summary}</span>
+                    </div>
+                    <div className="source-provider">
+                      {event.actor} / {formatDate(event.occurredAt)}
+                    </div>
+                    <div className="mono source-provider">
+                      {event.eventHash.slice(0, 16)}… / prev {event.prevHash.slice(0, 8)}…
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <h4 className="admin-subheading">📣 フィードバック（利用者報告）</h4>
+            {feedbackReports.length === 0 ? (
+              <p className="detail-empty">フィードバックはまだ届いていません。</p>
+            ) : (
+              <ul className="admin-issue-list">
+                {feedbackReports.map((report) => (
+                  <li key={report.id} className="admin-issue-item">
+                    <div className="admin-issue-main">
+                      <span className="quality-badge admin-issue-code">{report.category}</span>
+                      <span>{report.detail}</span>
+                    </div>
+                    <div className="source-provider">
+                      {report.status} / {formatDate(report.createdAt)}
+                      {report.pageUrl ? ` / ${report.pageUrl}` : ''}
+                    </div>
+                    {report.status === 'open' ? (
+                      <div className="admin-issue-resolution">
+                        <label className="admin-issue-reason-label">
+                          対応メモ
+                          <input
+                            className="admin-issue-reason"
+                            value={feedbackResolutionInputs[report.id] ?? ''}
+                            onChange={(event) =>
+                              setFeedbackResolutionInputs((prev) => ({
+                                ...prev,
+                                [report.id]: event.currentTarget.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="admin-action-button"
+                          disabled={
+                            pendingFeedbackId !== null ||
+                            (feedbackResolutionInputs[report.id] ?? '').trim() === ''
+                          }
+                          onClick={() => void resolveFeedback(report, 'converted')}
+                        >
+                          {pendingFeedbackId === report.id ? '記録中…' : '品質issue化'}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-action-button"
+                          disabled={pendingFeedbackId !== null}
+                          onClick={() => void resolveFeedback(report, 'dismissed')}
+                        >
+                          却下
+                        </button>
+                      </div>
+                    ) : report.resolutionNote ? (
+                      <div className="source-provider">対応: {report.resolutionNote}</div>
+                    ) : null}
                   </li>
                 ))}
               </ul>

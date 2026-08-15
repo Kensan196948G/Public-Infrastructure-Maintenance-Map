@@ -10,6 +10,7 @@ import { neon } from '@neondatabase/serverless';
 import type {
   AdminAssetPublication,
   AdminCreateSource,
+  AdminFeedbackList,
   AdminIngestionDetail,
   AdminIngestionDiff,
   AdminIngestionList,
@@ -29,15 +30,22 @@ import type {
   AssetSearchResponse,
   AssetSummary,
   AssetType,
+  AuditEvent,
+  AuditEventList,
+  FeedbackReport,
+  FeedbackSubmit,
+  FeedbackSubmitResponse,
   Geometry,
   SourceInfo,
   SuggestItem,
 } from '@pimm/contracts';
 import {
+  GENESIS_HASH,
   GeometrySchema,
   OPERATIONS_RECENT_RUN_WINDOW,
   prefectureCodeForKeyword,
   summarizeOperations,
+  verifyAuditChain,
 } from '@pimm/contracts';
 import { decodeCursor, encodeCursor, type CursorPayload } from './cursor.js';
 import { representativePoint } from './geo.js';
@@ -54,7 +62,7 @@ import type {
   AssetRepository,
   AssetSearchInput,
 } from './repository.js';
-import { InvalidCursorError } from './repository.js';
+import { InvalidCursorError, recordAuditEvent } from './repository.js';
 
 type Row = Record<string, unknown>;
 type Sql = ReturnType<typeof neon>;
@@ -194,6 +202,36 @@ function rowToAdminIssue(row: Row): AdminQualityIssueRecord {
   };
 }
 
+function rowToFeedbackReport(row: Row): FeedbackReport {
+  return {
+    id: String(row['id']),
+    category: row['category'] as FeedbackReport['category'],
+    detail: String(row['detail']),
+    pageUrl: (row['page_url'] as string | null) ?? null,
+    status: row['status'] as FeedbackReport['status'],
+    resolutionNote: (row['resolution_note'] as string | null) ?? null,
+    createdAt: toIso(row['created_at']) ?? new Date(0).toISOString(),
+    resolvedAt: toIso(row['resolved_at']),
+  };
+}
+
+/**
+ * Normalizes a detail_json cell to an object. postgres.js may surface jsonb as
+ * a parsed object or, depending on the transport, as an escaped JSON string;
+ * both are normalized so hashing reads the same logical value that was written.
+ */
+function detailObject(value: unknown): Record<string, unknown> {
+  if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  return (value ?? {}) as Record<string, unknown>;
+}
+
 /** Builds the shared WHERE fragment. Every value is a bound parameter. */
 function buildConditions(sql: Sql, filters: AssetQueryFilters) {
   const conditions = [sql`a.publication_status = 'published'`, sql`a.quality_status <> 'hidden'`];
@@ -238,6 +276,12 @@ function buildConditions(sql: Sql, filters: AssetQueryFilters) {
 
 export class PostgresAssetRepository implements AssetRepository {
   private readonly sql: TransactionalSql;
+  /**
+   * event_hash of the most recent audit row written by this instance. Chaining
+   * against this (instead of re-querying ORDER BY occurred_at, id) keeps the
+   * chain exact even when two events share the same millisecond timestamp.
+   */
+  private lastAuditEventHash: string | null = null;
 
   constructor(databaseUrl: string, sqlOverride?: TransactionalSql) {
     this.sql = sqlOverride ?? neon(databaseUrl);
@@ -442,6 +486,7 @@ export class PostgresAssetRepository implements AssetRepository {
   }
 
   async createSource(input: AdminCreateSource): Promise<AdminSourceResponse> {
+    const exists = await this.getAdminSourceBySlug(input.slug);
     await this.sql`
       INSERT INTO data_sources
         (slug, name, provider_name, source_url, access_type, format, license_name,
@@ -465,6 +510,15 @@ export class PostgresAssetRepository implements AssetRepository {
         updated_at = now()`;
     const source = await this.getAdminSourceBySlug(input.slug);
     if (!source) throw new Error('source upsert did not return a readable row');
+    await this.recordAudit({
+      actor: 'admin',
+      action: exists ? 'source.updated' : 'source.created',
+      targetType: 'source',
+      targetId: source.slug,
+      summary: `${exists ? 'ソースを更新' : 'ソースを登録'}: ${source.name}`,
+      detail: { slug: source.slug, enabled: source.enabled },
+      requestId: null,
+    });
     return source;
   }
 
@@ -491,7 +545,17 @@ export class PostgresAssetRepository implements AssetRepository {
         enabled = ${input.enabled ?? current.enabled},
         updated_at = now()
       WHERE slug = ${slug}`;
-    return this.getAdminSourceBySlug(slug);
+    const updated = await this.getAdminSourceBySlug(slug);
+    await this.recordAudit({
+      actor: 'admin',
+      action: 'source.updated',
+      targetType: 'source',
+      targetId: slug,
+      summary: `ソースを更新: ${updated?.name ?? current.name}`,
+      detail: { slug, enabled: updated?.enabled },
+      requestId: null,
+    });
+    return updated;
   }
 
   async startIngestion(
@@ -512,7 +576,17 @@ export class PostgresAssetRepository implements AssetRepository {
       RETURNING id, started_at, finished_at, status, fetched_count, accepted_count,
                 rejected_count, warning_count, error_code, error_summary,
                 triggered_by, correlation_id, ${sourceSlug} AS source_slug`) as Row[];
-    return rowToAdminRun(rows[0]!);
+    const run = rowToAdminRun(rows[0]!);
+    await this.recordAudit({
+      actor,
+      action: 'ingestion.started',
+      targetType: 'ingestion',
+      targetId: run.id,
+      summary: `取込を開始: ${sourceSlug}`,
+      detail: { sourceSlug, status: run.status },
+      requestId: correlationId,
+    });
+    return run;
   }
 
   async listIngestions(limit: number): Promise<AdminIngestionList> {
@@ -745,7 +819,22 @@ export class PostgresAssetRepository implements AssetRepository {
       RETURNING id, asset_id, run_id, rule_code, severity, field_name, observed_value,
                 message, resolution_status, created_at, resolved_at`) as Row[];
     const row = rows[0];
-    return row ? rowToAdminIssue(row) : null;
+    if (!row) return null;
+    const issue = rowToAdminIssue(row);
+    await this.recordAudit({
+      actor,
+      action: 'quality.resolved',
+      targetType: 'quality_issue',
+      targetId: id,
+      summary: `品質issueを解決: ${issue.ruleCode} → ${input.resolutionStatus}`,
+      detail: {
+        ruleCode: issue.ruleCode,
+        resolutionStatus: input.resolutionStatus,
+        reason: input.reason,
+      },
+      requestId: null,
+    });
+    return issue;
   }
 
   async suspendAsset(
@@ -780,6 +869,15 @@ export class PostgresAssetRepository implements AssetRepository {
     }
     const row = rows[0];
     if (!row) return null;
+    await this.recordAudit({
+      actor,
+      action: 'asset.suspended',
+      targetType: 'asset',
+      targetId: id,
+      summary: '資産の公開を停止',
+      detail: { reason: input.reason },
+      requestId: null,
+    });
     return {
       id: String(row['id']),
       publicationStatus: row['publication_status'] as AdminAssetPublication['publicationStatus'],
@@ -823,12 +921,150 @@ export class PostgresAssetRepository implements AssetRepository {
        GROUP BY s.slug`) as Row[];
     const row = rows[0];
     if (!row) return null;
+    await this.recordAudit({
+      actor,
+      action: 'source.assets.suspended',
+      targetType: 'source',
+      targetId: sourceSlug,
+      summary: `ソース単位で公開を停止: ${sourceSlug}`,
+      detail: { suspendedCount: Number(row['suspended_count'] ?? 0), reason: input.reason },
+      requestId: null,
+    });
     return {
       sourceSlug: String(row['source_slug']),
       publicationStatus: 'suspended',
       suspendedCount: Number(row['suspended_count'] ?? 0),
       reason: input.reason,
     };
+  }
+
+  /**
+   * Appends an audit event. Chains to the last hash this instance wrote (or,
+   * on first write, the latest row in the table). The chain is exact per
+   * instance; concurrent multi-instance writers would need a serialized
+   * sequence — documented as a known limitation for the single-instance
+   * in-isolate scheduler and CLI ingestion paths this project uses.
+   */
+  private async recordAudit(input: {
+    actor: string;
+    action: AuditEvent['action'];
+    targetType: string;
+    targetId: string;
+    summary: string;
+    detail: Record<string, unknown>;
+    requestId: string | null;
+  }): Promise<void> {
+    let prevHash = this.lastAuditEventHash;
+    if (prevHash === null) {
+      const latest = (await this.sql`
+        SELECT event_hash FROM audit_events ORDER BY seq DESC LIMIT 1`) as Row[];
+      prevHash = String(latest[0]?.['event_hash'] ?? GENESIS_HASH);
+    }
+    const occurredAt = new Date().toISOString();
+    const event = await recordAuditEvent(null, { ...input, prevHash }, occurredAt);
+    await this.sql`
+      INSERT INTO audit_events
+        (id, occurred_at, actor, action, target_type, target_id, summary,
+         detail_json, request_id, prev_hash, event_hash)
+      VALUES
+        (${event.id}, ${event.occurredAt}, ${event.actor}, ${event.action}, ${event.targetType},
+         ${event.targetId}, ${event.summary}, ${JSON.stringify(event.detail)}, ${event.requestId},
+         ${event.prevHash}, ${event.eventHash})`;
+    this.lastAuditEventHash = event.eventHash;
+  }
+
+  async listAuditEvents(limit: number): Promise<AuditEventList> {
+    const rows = (await this.sql`
+      SELECT id, occurred_at, actor, action, target_type, target_id, summary,
+             detail_json, request_id, prev_hash, event_hash
+        FROM audit_events
+       ORDER BY seq DESC
+       LIMIT ${limit}`) as Row[];
+    const items: AuditEvent[] = rows.map((row) => ({
+      id: String(row['id']),
+      occurredAt: new Date(String(row['occurred_at'])).toISOString(),
+      actor: String(row['actor']),
+      action: row['action'] as AuditEvent['action'],
+      targetType: String(row['target_type']),
+      targetId: String(row['target_id']),
+      summary: String(row['summary']),
+      detail: detailObject(row['detail_json']),
+      requestId: row['request_id'] === null ? null : String(row['request_id']),
+      prevHash: String(row['prev_hash']),
+      eventHash: String(row['event_hash']),
+    }));
+    // rows are newest-first; the chain must be verified chronologically.
+    // valid は「取得した limit 件のウィンドウ内で連続性が保たれている」こと
+    // のみを示す（先頭要素の prevHash はウィンドウ外を指し得るため検査しない）。
+    // 全チェーン先頭からの検証は verifyFullAuditChain を利用する。
+    const valid = await verifyAuditChain([...items].reverse());
+    return { items, valid };
+  }
+
+  async submitFeedback(
+    input: FeedbackSubmit,
+    requestId: string | null,
+  ): Promise<FeedbackSubmitResponse> {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await this.sql`
+      INSERT INTO feedback_reports (id, category, detail, page_url, status, created_at)
+      VALUES (${id}, ${input.category}, ${input.detail}, ${input.pageUrl ?? null}, 'open', ${now})`;
+    await this.recordAudit({
+      actor: 'system',
+      action: 'feedback.received',
+      targetType: 'feedback',
+      targetId: id,
+      summary: `フィードバックを受付: ${input.category}`,
+      detail: { category: input.category },
+      requestId,
+    });
+    return {
+      id,
+      status: 'received',
+      message: 'フィードバックを受け付けました。ご協力ありがとうございます。',
+    };
+  }
+
+  async listFeedbackReports(query: {
+    limit: number;
+    status?: 'open' | 'converted' | 'dismissed' | undefined;
+  }): Promise<AdminFeedbackList> {
+    const rows = (await this.sql`
+      SELECT id, category, detail, page_url, status, resolution_note, created_at, resolved_at
+        FROM feedback_reports
+       WHERE ${query.status === undefined ? true : this.sql`status = ${query.status}`}
+       ORDER BY created_at DESC
+       LIMIT ${query.limit}`) as Row[];
+    return { items: rows.map(rowToFeedbackReport) };
+  }
+
+  async resolveFeedbackReport(
+    id: string,
+    input: { status: 'converted' | 'dismissed'; reason: string },
+    actor: string,
+    requestId: string | null,
+  ): Promise<AdminFeedbackList['items'][number] | null> {
+    const rows = (await this.sql`
+      UPDATE feedback_reports SET
+        status = ${input.status},
+        resolution_note = ${input.reason},
+        resolved_at = now()
+      WHERE id = ${id}
+      RETURNING id, category, detail, page_url, status, resolution_note, created_at, resolved_at`) as Row[];
+    const row = rows[0];
+    if (!row) return null;
+    const report = rowToFeedbackReport(row);
+    await this.recordAudit({
+      actor,
+      action: 'quality.resolved',
+      targetType: 'feedback',
+      targetId: id,
+      summary: `フィードバックを${input.status === 'converted' ? '品質issueへ変換' : '却下'}: ${report.category}`,
+      detail: { status: input.status, reason: input.reason },
+      requestId,
+    });
+    return report;
   }
 }
 

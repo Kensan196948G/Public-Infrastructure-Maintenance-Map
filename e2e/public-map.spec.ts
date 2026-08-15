@@ -73,3 +73,44 @@ test('shows admin entry points and settings when Access-authenticated', async ({
   await expect(dialog).toContainText('データソース登録 / 編集');
   await expect(dialog.getByRole('heading', { name: /運用ダッシュボード/ })).toBeVisible();
 });
+
+test('submits public feedback through the dialog (Issue #54)', async ({ page }) => {
+  await page.goto('/');
+  await waitForPublicResults(page);
+
+  await page.getByRole('button', { name: /誤りを報告/ }).click();
+  const dialog = page.getByRole('dialog', { name: '📣 誤りを報告' });
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByLabel('カテゴリ').selectOption('location');
+  await dialog.getByLabel(/詳細/).fill('E2E テスト用: 位置がずれているように見えます');
+  await dialog.getByRole('button', { name: '📤 送信' }).click();
+
+  await expect(dialog.getByText(/受け付けました/)).toBeVisible();
+});
+
+test('shows audit events and feedback in the audit log when authenticated', async ({ page }) => {
+  await page.route('**/api/v1/admin/**', async (route) => {
+    const headers = await route.request().allHeaders();
+    await route.continue({
+      headers: {
+        ...headers,
+        'cf-access-authenticated-user-email': 'admin@example.com',
+      },
+    });
+  });
+
+  await page.goto('/');
+  await waitForPublicResults(page);
+
+  await page.getByRole('button', { name: /監査ログ/ }).click();
+  const dialog = page.getByRole('dialog', { name: '監査ログ（取込状況）' });
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByRole('button', { name: '一覧を更新' }).click();
+  await expect(dialog.getByRole('heading', { name: /監査イベント/ })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: /フィードバック/ })).toBeVisible();
+  // 管理API応答のチェーン整合性表示が現れる（fixture は valid である前提でなく、
+  // 表示自体が存在することのみを検証する）。
+  await expect(dialog.getByText(/チェーン整合性/).first()).toBeVisible();
+});
