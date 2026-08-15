@@ -1,0 +1,117 @@
+{
+  "project": {
+    "name": "Public-Infrastructure-Maintenance-Map",
+    "start_date": "2026-07-16",
+    "release_deadline": "2027-01-16",
+    "phase_mode": "development"
+  },
+  "session": {
+    "started_at": "2026-07-16",
+    "max_duration_minutes": 300
+  },
+  "goal": "CTO全権委任によりRelease Ready/Production Ready状態へ到達。要件定義書・詳細設計仕様書の受入基準を満たすMVP実装。",
+  "phase": "Development",
+  "kpi": {
+    "success_rate_target": 0.9,
+    "ci_success_rate": 1,
+    "test_pass_rate": 1,
+    "security_critical": 0,
+    "blocker_count": 0,
+    "data_sources_registered": 4,
+    "data_sources_target": 3,
+    "infrastructure_types_covered": 3,
+    "infrastructure_types_target": 2,
+    "test_count": 208
+  },
+  "execution": {
+    "max_duration_minutes": 300,
+    "repair_count": 2,
+    "max_repair": 3,
+    "same_error_limit": 2,
+    "current_session_start_at": "2026-07-18T02:11:04.699Z",
+    "last_trigger": "manual",
+    "last_stop_at": "2026-07-18T02:23:32.721Z"
+  },
+  "automation": {
+    "auto_issue_generation": true,
+    "self_evolution": true
+  },
+  "completed_issues": [
+    2,
+    6,
+    7
+  ],
+  "blocked_issues": [],
+  "learning": {
+    "failure_patterns": [
+      "CI失敗はexit codeだけでなくログ全文(特にosv-scannerの検出テーブル)まで読まないと、ワークフロー統合方法の問題と依存脆弱性そのものを取り違える"
+    ],
+    "success_patterns": [
+      "osv-scanner High脆弱性(drizzle-orm 0.44.7→0.45.2, GHSA-gpj5-g38j-94v9)は影響箇所を grep で1ファイルに限定確認した上でpackage.jsonのバージョンレンジ更新+pnpm installのみの最小差分で解決。lint/typecheck/test/build全通過後にpushしCIグリーン化した",
+      "esbuildの--bundleはimportしたモジュールのトップレベルを静的に解決するため、named importが1つでもパッケージのentry point全体がバンドルグラフに入る。node:https等Node専用コードを混在させないためには、package.jsonのexportsフィールドでsubpath分割し、Workers安全な軽量面とNode専用のフル機能面を物理的に分離するのが恒久対応になる(対症療法の--external指定はwrangler.tomlにnodejs_compatが無い場合ランタイムで壊れるリスクがあるため不採用とした)"
+    ],
+    "usage_history": {
+      "agents": {
+        "general-purpose": {
+          "call_count": 1,
+          "last_used": "2026-07-18T02:20:19.871Z",
+          "last_description": "TOCTOU修正の対抗レビュー"
+        },
+        "_total_agent_calls": 2,
+        "_last_agent_call_at": "2026-07-18T02:20:34.156Z",
+        "feature-dev_code-reviewer": {
+          "call_count": 1,
+          "last_used": "2026-07-18T02:20:34.156Z",
+          "last_description": "修正のデグレ・挙動レビュー"
+        }
+      }
+    }
+  },
+  "deploy": {
+    "ready": false
+  },
+  "maintenance": {
+    "phase_mode": "development"
+  },
+  "notes": {
+    "repo_state_discovery": "feature/mvp-foundationブランチに要件定義書のPhase1相当(モノレポ基盤/DB層/取込パイプライン/公開API/WebUI/CI)が実装済みだったことをセッション中に発見。README記載の「MVP実装⏳未着手」は実態と乖離しておりTask#4-7は新規実装ではなく既存実装のレビュー・ギャップ分析へ再定義中",
+    "issues_prs_state": "PR #1 (Draft) をfeature/mvp-foundation→mainで作成済み。GitHub Issueは引き続き0件、要件定義書からの遡及Issue起票が必要(Task#8、ギャップ分析結果待ち)",
+    "diff_composition": "main-feature diff 617ファイルの内訳: .claude/ 461(ClaudeOS運用設定、非プロダクトコード) / packages/ 78 / apps/ 55 / その他(migrations,.github,scripts,root config) 約23。CodeRabbitの300ファイル上限に抵触したためpackages/apps/migrationsに分割してレビュー完了",
+    "reviews_in_progress": "Codex review --base origin/main (全体) をバックグラウンド実行中。CodeRabbit(packages/apps/migrations)は完了、指摘統合済み",
+    "gap_analysis_result": "要件定義書・詳細設計書と実装の突合完了(agent a9efcb2e6ede5dde4)。受入基準9項目中: 満たす5/満たさない2/判断不能1/部分1。最重要: 受入基準1『3つ以上の公開データソース』が未達—現状3アダプター全て架空サンプル(実データソース0件)。詳細設計書§16ステップ6(管理画面・取込監査・公開制御)が丸ごと未着手、管理API 0/6、UI-05/06/07 0/3実装。FR-13(取込監査)/FR-14(公開停止制御)はDBスキーマのみで書込み経路皆無",
+    "critical_code_findings": "【訂正2026-07-16】in-memory.ts の getAssetById に可視性フィルタが欠落しているという当初判断は誤りだった。コンストラクタ(L54-59)で this.assets 自体が published+not hidden でフィルタ済みの配列として構築されるため、getAssetById が find するだけでも契約は満たされる(クラスコメントL45-48にも明記)。postgres.ts が都度クエリでWHERE句フィルタするのは全データを保持するDBだからで、in-memory.tsのコンストラクタ事前フィルタとは異なるメカニズムによる正当な設計差であり実装バグではない。Issue #3はこれを踏まえてP1→P2に格下げし、論点をDATABASE_URL未設定時の無言フォールバック(本番相当環境での設定ミス検知不能)とin-memory.test.tsにhidden/draft資産IDを直接getAssetByIdに渡すテストが無い点(契約自体は構造的に安全だが直接テストで固定化されていない)に絞って訂正済み",
+    "codex_review_result": "codex review --base origin/main 完了(42502行ログ、大半は探索過程)。最終指摘は新規2件のみ: [P2] apps/web/src/api/client.ts が VITE_API_BASE_URL を読むのに .env.example/README は PUBLIC_API_BASE_URL を記載(Issue #14) / [P3] apps/api/src/node.ts が RATE_LIMIT_PER_MINUTE を転送していない(Issue #7に統合)。CodeRabbit・ギャップ分析との重複なし",
+    "issues_filed": "ギャップ分析(gap_analysis_result)・CodeRabbit(packages/apps/migrations)・Codex Review(codex_review_result)の全指摘を重複排除・テーマ単位で統合し、GitHub Issue #2〜#15(起票時点でP1 6件/P2 7件/P3 1件)を起票。全件をProject#45(PVT_kwHOClgkIc4BdjlA)に紐づけ済み。【2026-07-16訂正】#3はcritical_code_findings記載の通り誤検知と判明しP1→P2へ格下げ、現在はP1 5件/P2 8件/P3 1件。P1: #2実データソース0件(Mission根幹) #4 管理API/画面未実装 #5 Publish経路皆無 #6 契約層バリデーション不足 #7 Worker初期化/レート制限不備。P2: #3 DATABASE_URL無言フォールバック+契約テスト直接性不足(訂正済み) #8 Postgres統合テスト皆無 #9 exportAssets cursor無視 #10 DBスキーマCHECK制約欠如 #11 取込パイプライン入力堅牢性 #12 E2E未導入 #13 apps/web UX不整合5件 #14 env key不一致。P3: #15 README不整合。Task#4/5/6/8はこれらのレビュー結果をもって完了とした",
+    "pr1_ci_fix_and_merge": "PR #1のCI「Build」ステップが失敗(apps/api esbuildビルドでnode:https解決エラー)。原因はapps/api/src/repo.tsがbuildSampleSeedのみをimportしているのに、@pimm/source-adaptersのindex.tsがexport *で大阪市アダプター(node:https使用のhttp.ts経由)とregistry.tsまで束ねていたため、esbuildの静的バンドル解析がWorkers向けビルドに引き込んでいたこと。package.jsonのexportsフィールドで'./registry'サブパスを新設し、index.ts(Workers安全・sample系のみ)とregistry.ts(Node CLI専用・大阪市アダプター含む全部)を物理分離して解決。ingest-cli.ts/seed.test.tsのimport元を更新し、build/typecheck(6パッケージ)/test(190件)/format全て成功を確認後にpush、CI再実行で全項目SUCCESS(Lint/Type/Test/Build、Secret scan、Dependency vulnerability scan)を確認。その後ユーザー本人がGitHub上で手動マージ(gh pr merge等Claude操作は一度も未実行、autoMergeRequest/auto_merge共にnull、mergedBy=Kensan196948Gを確認済み)。マージ後ユーザーから「以降、自動マージお願いします」と明示承認があり、以後は~/.claude/CLAUDE.mdの条件(STABLE判定・Trust Level2以上・Codex/CodeRabbitのCritical/High指摘0・認証/認可/DBスキーマ/本番デプロイを含まない通常PR)を満たすPRに限りCTOがgh pr merge --auto --squashを設定してよい運用を開始。CodeRabbitがファイル数上限超過でレビュー未実施の場合は'指摘0件'と同一視しない",
+    "issue5_verification_2026_07_16": "内部タスク管理では取込→Publish経路の実装(Issue #5)を完了扱いにしていたが、GitHub Issue #5自体は未クローズのままだった不整合を発見。publisher.test.tsを精読した結果、decideRunStatus/dedupeBySourceRecordIdという純粋関数の単体テストのみで、実Neon DB接続によるE2E統合テスト(Completion Criteria 2「取込→Publish→公開APIから参照可能の一気通貫フローが実データで動作する」)は存在しないと判明。実装(publisher.ts本体、ingest-cli.tsの--publishフロー)自体はコードレベルで完成しているが、Issue #8(実DB統合テスト基盤が未整備)が解決するまでE2E検証ができないため、Issue #5はクローズせずOpenのまま維持し、現状を正直に記載したコメントを issuecomment-4992015045 として追加した",
+    "issue2_adapters_2026_07_16": "Issue #2 Completion Criteria進捗: 1(3件以上のデータソース選定+ライセンス確認)は完了済み。2(アダプター実装)は今回bridge-kumamoto.ts(熊本県橋梁管理一覧表, data.bodik.jp, CC BY 4.0, CRS=EPSG:6668は一次資料に明記なく推定)とroad-n13.ts(国土数値情報道路N13, 国交省, CC BY 4.0, CRS=EPSG:6668は実GeoJSONのcrs要素で確認済み)を追加実装し、registry.tsに登録(7アダプター体制)。既存のfacility-osaka-park/toiletと合わせ実データソース4件・インフラ種別3種(public_facility/bridge/road)をカバー。contract test追加(bridge-kumamoto 4件・road-n13 3件、計20件)、モノレポ全体test(197件)/typecheck(6パッケージ)/lint/build全て成功。3(実データdry-run実行によるKPI達成確認)は本日 pnpm ingest --source <slug> (--publishなし、DB書込みなしの安全な確認)を4件全てで実行し完了: bridge-kumamoto(fetched=3618 accepted=3589 quarantined=29、全て『R6登録予定』等の座標未確定プレースホルダー行でテスト想定通り)/road-n13(fetched=800 accepted=800 quarantined=0 warnings=800、道路区間データの性質上『名称』属性が存在しないためQ001警告が全件に付くのは仕様通り)/facility-osaka-park・facility-osaka-toilet(既存実装、Q006『更新日不明』警告のみで正常終了)。4件とも❌aborted無し・プロセス正常終了を確認。4(サンプル/実データの区別)は次のアクション: SourceDescriptor型に明示的なsample/realフラグが無いため、区別方法(slugプレフィックス規約か、専用フィールド追加か)の設計要否を要件定義書・詳細設計書と突き合わせて確認する必要あり"
+  },
+  "pr": {
+    "number": 1,
+    "url": "https://github.com/Kensan196948G/Public-Infrastructure-Maintenance-Map/pull/1",
+    "base": "main",
+    "head": "feature/mvp-foundation",
+    "state": "merged",
+    "mergedAt": "2026-07-16T12:36:51Z",
+    "mergedBy": "Kensan196948G",
+    "mergeCommit": "3a0b1fae2f2eaf4261dd69f031baa2aa6b777df3"
+  },
+  "auto_merge_policy": {
+    "enabled": true,
+    "approved_by_user_at": "2026-07-16",
+    "conditions": [
+      "STABLE判定成立(test/lint/build/CI全てsuccess、error 0、security critical 0)",
+      "Trust Level 2以上(trust.score >= 0.85)",
+      "Codex review・CodeRabbitのCritical/High指摘が0",
+      "認証・認可・DBスキーマ・本番デプロイを含まない通常PR"
+    ],
+    "excluded": "上記を外れるPR、main直push、本番公開は引き続き人間の最終判断"
+  },
+  "dreaming": {
+    "patterns": [],
+    "curated_memories": [],
+    "recurring_mistakes": [],
+    "last_dreaming_run": null,
+    "dreaming_enabled": false
+  }
+}
