@@ -1,0 +1,134 @@
+# SOURCE: /home/kensan/Projects/Mirai-DX-Project/Public-Infrastructure-Maintenance-Map/.coderabbit.yaml
+# FROM: /home/kensan/.claude/projects/-home-kensan-Projects-Mirai-DX-Project-Public-Infrastructure-Maintenance-Map/82b08ae8-da1b-4537-974d-17b9ce0d9ab5.jsonl
+
+1	# CodeRabbit プロジェクト設定 (ClaudeOS v8.2.5+)
+2	# 配置先: 各登録プロジェクトの .coderabbit.yaml (リポジトリルート直下)
+3	# ドキュメント: https://docs.coderabbit.ai/reference/configuration
+4	
+5	# レビュー対象言語（自動検出に加えて明示）
+6	language: "ja-JP"
+7	early_access: false
+8	
+9	reviews:
+10	  profile: "chill"  # nitpicky に近いが過剰指摘を抑える
+11	  request_changes_workflow: false
+12	
+13	  # 重大度別の対応規則を ClaudeOS §8.5 と揃える
+14	  high_level_summary: true
+15	  poem: false
+16	  review_status: true
+17	  collapse_walkthrough: false
+18	
+19	  # 自動レビュー範囲
+20	  auto_review:
+21	    enabled: true
+22	    drafts: false  # Draft PR はスキップ
+23	    base_branches:
+24	      - main
+25	      - master
+26	      - develop
+27	    # ベースブランチへの自動 trigger
+28	    auto_incremental_review: true
+29	
+30	  # path-based フィルタリング
+31	  path_filters:
+32	    # 自動生成ファイル・大規模成果物をレビュー対象外に
+33	    - "!**/*.lock"
+34	    - "!**/package-lock.json"
+35	    - "!**/yarn.lock"
+36	    - "!**/poetry.lock"
+37	    - "!**/go.sum"
+38	    - "!**/Cargo.lock"
+39	    - "!**/dist/**"
+40	    - "!**/build/**"
+41	    - "!**/node_modules/**"
+42	    - "!**/vendor/**"
+43	    - "!**/.next/**"
+44	    - "!**/__pycache__/**"
+45	    - "!**/coverage/**"
+46	    - "!**/reports/**"
+47	    - "!**/.playwright-mcp/**"
+48	    - "!**/test-results/**"
+49	    - "!**/*.min.js"
+50	    - "!**/*.min.css"
+51	    # 自動生成ドキュメントのみレビュー対象外（生成物。手書き .md / CLAUDE.md / SKILL.md は通常どおりレビューする）
+52	    - "!**/CHANGELOG.md"
+53	    - "!**/RELEASE_NOTES.md"
+54	
+55	  path_instructions:
+56	    - path: "**/*.{ts,tsx,js,jsx}"
+57	      instructions: |
+58	        TypeScript / JavaScript レビュー観点:
+59	        - 型安全 (any の濫用回避)
+60	        - async/await の例外処理
+61	        - Promise.all 化可能な逐次 await を指摘
+62	        - hot path の JSON.parse/stringify を指摘
+63	    - path: "**/*.py"
+64	      instructions: |
+65	        Python レビュー観点:
+66	        - 型ヒント整合性
+67	        - N+1 query / ループ内 I/O
+68	        - context manager の漏れ
+69	    - path: "**/*.go"
+70	      instructions: |
+71	        Go レビュー観点:
+72	        - error wrap の徹底
+73	        - goroutine leak と context cancellation
+74	        - mutex の使い分け
+75	    - path: ".claude/claudeos/scripts/hooks/**/*.js"
+76	      instructions: |
+77	        ClaudeOS hook レビュー観点:
+78	        - fail-soft 設計の維持 (hook 失敗が本処理をブロックしない)
+79	        - state.json への並列書き込み race 対策 (atomic write)
+80	        - stdin から hookData JSON を読む際の壊れ JSON 耐性
+81	    - path: "scripts/release/**/*.js"
+82	      instructions: |
+83	        release script レビュー観点:
+84	        - git log / git tag の境界条件 (タグ無し / 履歴 0 件 / バイナリ差分)
+85	        - 出力ファイルの上書きリスク (CHANGELOG.md は append のみ)
+86	    - path: "**/SKILL.md"
+87	      instructions: |
+88	        Skill 文書レビュー観点:
+89	        - 「使う場面」「想定入力」「期待する出力」が具体的か
+90	        - 標準手順がチェックリストとして機能するか
+91	    - path: "CLAUDE.md"
+92	      instructions: |
+93	        ClaudeOS ガバナンス文書レビュー観点:
+94	        - §6 Agent ログフォーマットとアイコン規約の整合
+95	        - §7 Issue Factory 生成条件の重複/曖昧排除
+96	        - template ↔ root のドリフトを指摘
+97	
+98	  # tool-level チェック
+99	  tools:
+100	    actionlint:
+101	      enabled: true
+102	    biome:
+103	      enabled: true
+104	    eslint:
+105	      enabled: true
+106	    gitleaks:
+107	      enabled: true
+108	    hadolint:
+109	      enabled: true
+110	    languagetool:
+111	      enabled: false  # 日本語誤検知が多いため停止
+112	    markdownlint:
+113	      enabled: true
+114	    ruff:
+115	      enabled: true
+116	    semgrep:
+117	      enabled: true
+118	    shellcheck:
+119	      enabled: true
+120	
+121	chat:
+122	  auto_reply: true
+123	
+124	knowledge_base:
+125	  opt_out: false
+126	  # ClaudeOS の用語集
+127	  learnings:
+128	    scope: "auto"
+129	  pull_requests:
+130	    scope: "auto"
+131	
