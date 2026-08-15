@@ -84,7 +84,54 @@ type AuditClient = Pick<
   | 'listAdminIngestions'
   | 'listAdminQualityIssues'
   | 'resolveAdminQualityIssue'
+  | 'getAdminIngestionDiff'
+  | 'listAdminAuditEvents'
+  | 'listAdminFeedbackReports'
+  | 'resolveAdminFeedback'
 >;
+
+const ingestionDiff = {
+  sourceSlug: 'sample-bridges',
+  baseVersionId: null,
+  targetVersionId: null,
+  baseFetchedAt: '2026-07-18T00:00:00.000Z',
+  targetFetchedAt: '2026-07-19T00:00:00.000Z',
+  added: ['new-bridge-1', 'new-bridge-2'],
+  removed: ['old-bridge-1'],
+  changed: [
+    {
+      sourceRecordId: 'bridge-3',
+      name: 'ふたご橋',
+      attributesChanged: ['length', 'year'],
+    },
+  ],
+  comparable: true,
+};
+
+const auditEvent = {
+  id: '00000000-0000-4000-8000-000000000501',
+  occurredAt: '2026-07-19T00:30:00.000Z',
+  actor: 'admin@example.com',
+  action: 'source.created',
+  targetType: 'source',
+  targetId: 'sample-bridges',
+  summary: 'ソースを登録: サンプル橋梁',
+  detail: { slug: 'sample-bridges' },
+  requestId: null,
+  prevHash: '0'.repeat(64),
+  eventHash: 'a'.repeat(64),
+} as const;
+
+const feedbackReport = {
+  id: '00000000-0000-4000-8000-000000000601',
+  category: 'location',
+  detail: 'テスト用: 位置がずれています',
+  pageUrl: 'https://pimm.example/map',
+  status: 'open',
+  resolutionNote: null,
+  createdAt: '2026-07-19T00:40:00.000Z',
+  resolvedAt: null,
+};
 
 function makeClient(overrides: Partial<AuditClient> = {}): ApiClient & AuditClient {
   return {
@@ -97,6 +144,17 @@ function makeClient(overrides: Partial<AuditClient> = {}): ApiClient & AuditClie
       resolutionStatus: 'accepted',
       resolvedAt: '2026-07-19T00:10:00.000Z',
     })),
+    getAdminIngestionDiff: vi.fn(async () => ingestionDiff),
+    listAdminAuditEvents: vi.fn(async () => ({ items: [auditEvent], valid: true })),
+    listAdminFeedbackReports: vi.fn(async () => ({ items: [feedbackReport] })),
+    resolveAdminFeedback: vi.fn(
+      async (id: string, input: { status: 'converted'; reason: string }) => ({
+        ...feedbackReport,
+        status: input.status,
+        resolutionNote: input.reason,
+        resolvedAt: '2026-07-19T00:50:00.000Z',
+      }),
+    ),
     ...overrides,
   } as unknown as ApiClient & AuditClient;
 }
@@ -171,6 +229,37 @@ describe('AuditLogDialog', () => {
     expect(client.listAdminQualityIssues).toHaveBeenCalledWith(50);
   });
 
+  it('shows audit events and feedback reports after loading admin lists', async () => {
+    const user = userEvent.setup();
+    const client = makeClient();
+    setup({ client });
+
+    await user.click(screen.getByRole('button', { name: '一覧を更新' }));
+
+    await waitFor(() => {
+      expect(client.listAdminAuditEvents).toHaveBeenCalledWith(30);
+      expect(client.listAdminFeedbackReports).toHaveBeenCalledWith(30);
+      expect(screen.getByText('✅ チェーン整合性: 正常')).toBeInTheDocument();
+      expect(screen.getByText('ソースを登録: サンプル橋梁')).toBeInTheDocument();
+      expect(screen.getByText('テスト用: 位置がずれています')).toBeInTheDocument();
+    });
+  });
+
+  it('alerts when the audit chain is broken', async () => {
+    const user = userEvent.setup();
+    setup({
+      client: makeClient({
+        listAdminAuditEvents: vi.fn(async () => ({ items: [auditEvent], valid: false })),
+      }),
+    });
+
+    await user.click(screen.getByRole('button', { name: '一覧を更新' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/チェーン整合性: 異常/)).toBeInTheDocument();
+    });
+  });
+
   it('shows an authorization message when the admin API rejects the user', async () => {
     const user = userEvent.setup();
     setup({
@@ -230,6 +319,51 @@ describe('AuditLogDialog', () => {
       expect(screen.getByRole('alert')).toHaveTextContent(
         /品質issueの解決には管理APIへのアクセス権/,
       );
+    });
+  });
+
+  it('shows an ingestion diff for a selected source (Issue #53)', async () => {
+    const user = userEvent.setup();
+    const client = makeClient();
+    setup({ client });
+
+    await user.selectOptions(screen.getByLabelText('データソース'), 'sample-bridges');
+    await user.click(screen.getByRole('button', { name: '差分を表示' }));
+
+    await waitFor(() => {
+      expect(client.getAdminIngestionDiff).toHaveBeenCalledWith('sample-bridges');
+    });
+    expect(screen.getByText('追加（2件）')).toBeInTheDocument();
+    expect(screen.getByText('new-bridge-1')).toBeInTheDocument();
+    expect(screen.getByText('削除・非公開（1件）')).toBeInTheDocument();
+    expect(screen.getByText('old-bridge-1')).toBeInTheDocument();
+    expect(screen.getByText('属性変更（1件）')).toBeInTheDocument();
+    expect(screen.getByText('ふたご橋')).toBeInTheDocument();
+  });
+
+  it('shows a non-comparable message when no previous version exists', async () => {
+    const user = userEvent.setup();
+    setup({
+      client: makeClient({
+        getAdminIngestionDiff: vi.fn(async () => ({
+          sourceSlug: 'sample-bridges',
+          baseVersionId: null,
+          targetVersionId: null,
+          baseFetchedAt: null,
+          targetFetchedAt: null,
+          added: [],
+          removed: [],
+          changed: [],
+          comparable: false,
+        })),
+      }),
+    });
+
+    await user.selectOptions(screen.getByLabelText('データソース'), 'sample-bridges');
+    await user.click(screen.getByRole('button', { name: '差分を表示' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/まだ比較可能な取込バージョンがありません/)).toBeInTheDocument();
     });
   });
 });

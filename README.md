@@ -34,13 +34,16 @@ flowchart LR
 | 🧹 | 品質管理 | 欠損、重複、不正座標、古い情報を検査・表示 |
 | 📤 | データ出力 | 許諾された範囲を画面からCSV／GeoJSONで出力（ライセンス制御付き） |
 | 🔗 | 共有URL | 現在の地図表示・絞り込み条件をURLに保存して共有 |
-| 📣 | フィードバック | 位置誤り・リンク切れ等をGitHub Issue下書きとして報告 |
+| 📣 | フィードバック | 位置誤り・リンク切れ等を報告。API 送信で管理側のフィードバック受付へ蓄積し、品質issue化・却下を管理画面で処理（GitHub Issue 下書き導線も併存） |
+| 🔐 | 監査イベント | 管理操作（ソース登録/更新・取込開始・品質解決・公開停止・フィードバック受付）を append-only 監査ログへ記録。SHA-256 ハッシュチェーンで改ざん検知（Issue #48） |
 | 📄 | ページング | 200件を超える結果は「さらに表示」で続きを読み込み（keyset方式） |
 | 📖 | APIリファレンス | `/api/v1/openapi.json` で OpenAPI 3.1 仕様を公開（Zod から自動生成） |
 | 🩺 | 死活監視 | `/api/v1/health/ready` が DB 接続を含む readiness を返却（503 フェイル） |
 | 🔭 | 定期監視 | GitHub Actions `production-smoke.yml` が 15 分間隔で本番 URL を検査 |
 | ⏰ | 自動取込 | Cloudflare Cron Trigger（軽量5ソース）＋ GitHub Actions 週次（W05 河川47県） |
 | 📊 | 運用監視 | データ取得、エラー、鮮度、品質を管理者が確認 |
+| 🔐 | 監査イベント | 管理操作を append-only 監査ログへ記録し、SHA-256 ハッシュチェーンで改ざん検知（Issue #48） |
+| 📣 | フィードバック | 一般利用者の報告を API 受付し、管理側で品質issue化・却下を処理（Issue #54） |
 
 ## 👥 想定利用者
 
@@ -254,6 +257,8 @@ flowchart LR
 | 公開データソース選定・アダプター実装 | ✅ 実データ4ソース・3種別（公共施設／橋梁／道路） |
 | 実データ取込→公開DB反映（Phase 2） | ✅ 取込→Publish経路を実装（`ingest --publish`）。CI の disposable PostGIS で publish→公開Repository参照を検証 |
 | 管理API・管理画面（UI-05/06/07・FR-13/14） | ✅ 管理APIゲート・基本操作・取込履歴一覧・未解決品質issue一覧・監査ログ画面からの取込記録/詳細確認/品質issue解決・詳細画面からの個別資産公開停止・システム設定からのソース登録/編集とソース単位の公開一括停止を実装済（Issue #4 完了） |
+| 監査イベント基盤（Issue #48） | ✅ append-only 監査イベントテーブル（`audit_events`・UPDATE/DELETE 禁止トリガー）と SHA-256 ハッシュチェーンを実装。管理操作（ソース登録/更新・取込開始・品質解決・公開停止・フィードバック受付）を自動記録し、`GET /api/v1/admin/audit-events` がウィンドウ内チェーン整合性を返す。監査ログ画面に一覧・整合性表示を追加 |
+| フィードバック受付（Issue #54） | ✅ 一般利用者の報告を `POST /api/v1/feedback`（レート制限・長さ上限付き）で受付し、管理側のフィードバック受付（`/admin/feedback-reports`）で品質issue化・却下を処理できるように実装。FeedbackDialog は API 送信＋GitHub Issue 下書き導線を併存 |
 | UAT・本番公開判定 | ✅ 2026-07-23 に v0.1.0 を本番公開（PR #46 承認範囲）。2026-08-05 に機能統合 3 PR（#68/#70/#71）と geocode 修正 2 PR（#72/#73）を main へ統合し、API を本番再デプロイ・フルスモーク 9/9 成功。2026-08-12 に PR #75/#76 をマージし、API を本番再デプロイ（version `047bfd6a`）・スモーク 9/9 PASS・15 分間隔の定期死活監視を追加 |
 
 ### 🚦 Release Gate（2026-08-05）
@@ -312,6 +317,8 @@ flowchart LR
 - `docs/IMPROVEMENT_LEDGER.md` — 改善台帳・テスト証跡
 - `docs/AI_DESIGN.md` — AI 活用設計（Phase 3 実装予定）
 - `docs/ROADMAP.md` — Phase 0〜4 ロードマップ
+- `docs/ADAPTER_GUIDE.md` — アダプター追加ガイド（新規データソースの定型オンボーディング手順、Issue #55）
+- `docs/ADAPTER_LICENSE_CHECKLIST.md` — ライセンス確認チェックリスト（L-01〜L-12・再配布判定）
 - `docs/operations/` — 運用ハンドブック（監視/SLO、バックアップ/復旧、インシデント対応、運用台帳、保守、権限棚卸し、予算）
 
 ## ⚖️ 利用上の注意

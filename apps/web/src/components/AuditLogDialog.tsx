@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import type {
+  AdminFeedbackList,
   AdminIngestionDetail,
+  AdminIngestionDiff,
   AdminIngestionRun,
   AdminQualityIssueRecord,
+  AuditEvent,
   SourceInfo,
 } from '@pimm/contracts';
 import { ApiClient, ApiError } from '../api/client.js';
@@ -41,6 +44,34 @@ export function AuditLogDialog({
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
   const [resolutionChoices, setResolutionChoices] = useState<Record<string, ResolutionChoice>>({});
   const [pendingIssueId, setPendingIssueId] = useState<string | null>(null);
+  const [diffSlug, setDiffSlug] = useState<string>('');
+  const [diff, setDiff] = useState<AdminIngestionDiff | null>(null);
+  const [isLoadingDiff, setIsLoadingDiff] = useState(false);
+
+  const loadDiff = async (slug: string) => {
+    if (!slug.trim()) return;
+    setIsLoadingDiff(true);
+    setAdminError(null);
+    try {
+      setDiff(await client.getAdminIngestionDiff(slug.trim()));
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        setAdminError('取込差分の閲覧には管理APIへのアクセス権が必要です。');
+      } else {
+        setAdminError('取込差分を取得できませんでした。');
+      }
+    } finally {
+      setIsLoadingDiff(false);
+    }
+  };
+
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [auditValid, setAuditValid] = useState<boolean | null>(null);
+  const [feedbackReports, setFeedbackReports] = useState<AdminFeedbackList['items']>([]);
+  const [feedbackResolutionInputs, setFeedbackResolutionInputs] = useState<Record<string, string>>(
+    {},
+  );
+  const [pendingFeedbackId, setPendingFeedbackId] = useState<string | null>(null);
 
   const startIngestion = async (source: SourceInfo) => {
     setPendingSlug(source.slug);
@@ -68,12 +99,17 @@ export function AuditLogDialog({
     setIsLoadingAdminLists(true);
     setAdminError(null);
     try {
-      const [runList, issueList] = await Promise.all([
+      const [runList, issueList, auditList, feedbackList] = await Promise.all([
         client.listAdminIngestions(20),
         client.listAdminQualityIssues(50),
+        client.listAdminAuditEvents(30),
+        client.listAdminFeedbackReports(30),
       ]);
       setRuns(runList.items);
       setOpenIssues(issueList.items);
+      setAuditEvents(auditList.items);
+      setAuditValid(auditList.valid);
+      setFeedbackReports(feedbackList.items);
     } catch (error) {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         setAdminError(
@@ -103,6 +139,29 @@ export function AuditLogDialog({
 
   const setIssueReason = (issueId: string, reason: string) => {
     setResolutionInputs((prev) => ({ ...prev, [issueId]: reason }));
+  };
+
+  const resolveFeedback = async (
+    report: AdminFeedbackList['items'][number],
+    status: 'converted' | 'dismissed',
+  ) => {
+    const reason = (feedbackResolutionInputs[report.id] ?? '').trim();
+    if (reason === '') return;
+    setPendingFeedbackId(report.id);
+    setAdminError(null);
+    try {
+      const resolved = await client.resolveAdminFeedback(report.id, { status, reason });
+      setFeedbackReports((prev) => prev.map((item) => (item.id === resolved.id ? resolved : item)));
+      setFeedbackResolutionInputs((prev) => ({ ...prev, [report.id]: '' }));
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        setAdminError('フィードバックの解決には管理APIへのアクセス権が必要です。');
+      } else {
+        setAdminError('フィードバックの解決を記録できませんでした。');
+      }
+    } finally {
+      setPendingFeedbackId(null);
+    }
   };
 
   const setIssueResolution = (issueId: string, resolutionStatus: ResolutionChoice) => {
@@ -271,6 +330,101 @@ export function AuditLogDialog({
             )}
           </div>
         </div>
+        <div className="admin-grid">
+          <div>
+            <h4 className="admin-subheading">🔐 監査イベント（append-only・ハッシュチェーン）</h4>
+            <p
+              className="source-provider"
+              role={auditValid === false ? 'alert' : 'note'}
+              aria-live={auditValid === false ? 'assertive' : 'off'}
+            >
+              {auditValid === null
+                ? '監査イベントはまだ読み込まれていません。'
+                : auditValid
+                  ? '✅ チェーン整合性: 正常'
+                  : '🚨 チェーン整合性: 異常（改ざんの可能性）'}
+            </p>
+            {auditEvents.length === 0 ? (
+              <p className="detail-empty">監査イベントはまだ記録されていません。</p>
+            ) : (
+              <ul className="admin-issue-list">
+                {auditEvents.map((event) => (
+                  <li key={event.id} className="admin-issue-item">
+                    <div className="admin-issue-main">
+                      <span className="quality-badge admin-issue-code">{event.action}</span>
+                      <span>{event.summary}</span>
+                    </div>
+                    <div className="source-provider">
+                      {event.actor} / {formatDate(event.occurredAt)}
+                    </div>
+                    <div className="mono source-provider">
+                      {event.eventHash.slice(0, 16)}… / prev {event.prevHash.slice(0, 8)}…
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div>
+            <h4 className="admin-subheading">📣 フィードバック（利用者報告）</h4>
+            {feedbackReports.length === 0 ? (
+              <p className="detail-empty">フィードバックはまだ届いていません。</p>
+            ) : (
+              <ul className="admin-issue-list">
+                {feedbackReports.map((report) => (
+                  <li key={report.id} className="admin-issue-item">
+                    <div className="admin-issue-main">
+                      <span className="quality-badge admin-issue-code">{report.category}</span>
+                      <span>{report.detail}</span>
+                    </div>
+                    <div className="source-provider">
+                      {report.status} / {formatDate(report.createdAt)}
+                      {report.pageUrl ? ` / ${report.pageUrl}` : ''}
+                    </div>
+                    {report.status === 'open' ? (
+                      <div className="admin-issue-resolution">
+                        <label className="admin-issue-reason-label">
+                          対応メモ
+                          <input
+                            className="admin-issue-reason"
+                            value={feedbackResolutionInputs[report.id] ?? ''}
+                            onChange={(event) =>
+                              setFeedbackResolutionInputs((prev) => ({
+                                ...prev,
+                                [report.id]: event.currentTarget.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="admin-action-button"
+                          disabled={
+                            pendingFeedbackId !== null ||
+                            (feedbackResolutionInputs[report.id] ?? '').trim() === ''
+                          }
+                          onClick={() => void resolveFeedback(report, 'converted')}
+                        >
+                          {pendingFeedbackId === report.id ? '記録中…' : '品質issue化'}
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-action-button"
+                          disabled={pendingFeedbackId !== null}
+                          onClick={() => void resolveFeedback(report, 'dismissed')}
+                        >
+                          却下
+                        </button>
+                      </div>
+                    ) : report.resolutionNote ? (
+                      <div className="source-provider">対応: {report.resolutionNote}</div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       </section>
       {latestRun ? (
         <section className="admin-run-detail" aria-labelledby="admin-run-heading">
@@ -360,6 +514,103 @@ export function AuditLogDialog({
           ) : null}
         </section>
       ) : null}
+      <section className="admin-run-detail" aria-labelledby="admin-diff-heading">
+        <div className="admin-section-header">
+          <h3 id="admin-diff-heading" className="settings-heading">
+            🔁 取込差分（前回取込との比較・Issue #53）
+          </h3>
+        </div>
+        <form
+          className="admin-diff-form"
+          role="search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void loadDiff(diffSlug);
+          }}
+        >
+          <label className="admin-source-field">
+            データソース
+            <select value={diffSlug} onChange={(e) => setDiffSlug(e.target.value)}>
+              <option value="">選択してください</option>
+              {sources.map((s) => (
+                <option key={s.slug} value={s.slug}>
+                  {s.name}（{s.slug}）
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="submit"
+            className="admin-action-button"
+            disabled={isLoadingDiff || diffSlug.trim() === ''}
+          >
+            {isLoadingDiff ? '取得中…' : '差分を表示'}
+          </button>
+        </form>
+        {diff ? (
+          diff.comparable ? (
+            <div className="admin-diff-result">
+              <p className="source-provider" role="note">
+                比較: {formatDate(diff.baseFetchedAt)} → {formatDate(diff.targetFetchedAt)}
+              </p>
+              <div className="admin-grid">
+                <div>
+                  <h4 className="admin-subheading">追加（{diff.added.length}件）</h4>
+                  {diff.added.length === 0 ? (
+                    <p className="detail-empty">追加なし</p>
+                  ) : (
+                    <ul className="admin-issue-list">
+                      {diff.added.map((id) => (
+                        <li key={id} className="admin-issue-item mono">
+                          {id}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div>
+                  <h4 className="admin-subheading">削除・非公開（{diff.removed.length}件）</h4>
+                  {diff.removed.length === 0 ? (
+                    <p className="detail-empty">削除・非公開なし</p>
+                  ) : (
+                    <ul className="admin-issue-list">
+                      {diff.removed.map((id) => (
+                        <li key={id} className="admin-issue-item mono">
+                          {id}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+              <div>
+                <h4 className="admin-subheading">属性変更（{diff.changed.length}件）</h4>
+                {diff.changed.length === 0 ? (
+                  <p className="detail-empty">属性変更なし</p>
+                ) : (
+                  <ul className="admin-issue-list">
+                    {diff.changed.map((row) => (
+                      <li key={row.sourceRecordId} className="admin-issue-item">
+                        <div className="admin-issue-main">
+                          <span className="mono">{row.sourceRecordId}</span>
+                          <span>{row.name}</span>
+                        </div>
+                        <div className="source-provider">
+                          変更属性: {row.attributesChanged.join(', ') || '（なし）'}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="detail-state" role="status">
+              このソースにはまだ比較可能な取込バージョンがありません（2回以上の取込後に差分が表示されます）。
+            </p>
+          )
+        ) : null}
+      </section>
     </Modal>
   );
 }

@@ -3,12 +3,16 @@ import react from '@vitejs/plugin-react';
 
 // Dev-only proxy so the browser can call the API on the same origin.
 // Production serves the SPA and API behind a shared gateway; see README.
+// VITE_DEV_API_TARGET overrides the proxy target for local setups where the
+// API runs on a non-default port (e.g. Playwright E2E with E2E_API_PORT).
+const apiTarget = process.env.VITE_DEV_API_TARGET ?? 'http://localhost:8787';
+
 export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8787',
+        target: apiTarget,
         changeOrigin: true,
       },
     },

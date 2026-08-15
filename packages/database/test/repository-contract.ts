@@ -214,5 +214,105 @@ export function registerAssetRepositoryContract(
       const after = await repo.searchAssets({ limit: 20 });
       expect(after.items).toHaveLength(0);
     });
+
+    it('returns an ingestion diff envelope (Issue #53)', async () => {
+      const { repo } = await setup();
+
+      // Before any ingestion, the diff is a valid envelope. comparable depends
+      // on the backend: in-memory has no dataset_versions yet (false), while
+      // Postgres seeds one (true with a null base) — only the shape is fixed.
+      const empty = await repo.getIngestionDiff('contract-source');
+      expect(empty).toMatchObject({ sourceSlug: 'contract-source' });
+      expect(typeof empty.comparable).toBe('boolean');
+      expect(Array.isArray(empty.added)).toBe(true);
+      expect(Array.isArray(empty.removed)).toBe(true);
+      expect(Array.isArray(empty.changed)).toBe(true);
+
+      // Two ingestion runs make the diff comparable on both backends. The
+      // in-memory fixture records identical asset snapshots (no data changed
+      // between runs), while Postgres compares against the full asset set —
+      // the contract only requires a well-formed, comparable envelope.
+      await repo.startIngestion('contract-source', 'admin@example.com', 'diff-1');
+      await repo.startIngestion('contract-source', 'admin@example.com', 'diff-2');
+      const diff = await repo.getIngestionDiff('contract-source');
+      expect(diff.comparable).toBe(true);
+      expect(diff.sourceSlug).toBe('contract-source');
+      expect(Array.isArray(diff.added)).toBe(true);
+      expect(Array.isArray(diff.removed)).toBe(true);
+      expect(Array.isArray(diff.changed)).toBe(true);
+      // Every changed row is a well-formed entry.
+      for (const row of diff.changed) {
+        expect(typeof row.sourceRecordId).toBe('string');
+        expect(typeof row.name).toBe('string');
+        expect(Array.isArray(row.attributesChanged)).toBe(true);
+      }
+    });
+
+    it('returns a non-comparable diff for an unknown source', async () => {
+      const { repo } = await setup();
+      const diff = await repo.getIngestionDiff('no-such-source');
+      expect(diff).toMatchObject({
+        sourceSlug: 'no-such-source',
+        comparable: false,
+      });
+    });
+
+    it('records chained audit events for administrative mutations', async () => {
+      const { repo } = await setup();
+
+      // A seed backend may already hold events; capture the count first.
+      const before = await repo.listAuditEvents(200);
+      await repo.startIngestion('contract-source', 'admin@example.com', 'audit-corr');
+      await repo.suspendAssetsBySource(
+        'contract-source',
+        { reason: '監査イベント検証' },
+        'admin@example.com',
+      );
+
+      const after = await repo.listAuditEvents(200);
+      expect(after.items.length).toBeGreaterThan(before.items.length);
+      expect(after.valid).toBe(true);
+      // The newest event must be the suspension.
+      expect(after.items[0]!.action).toBe('source.assets.suspended');
+      // Chain links: each item's prevHash equals the next-older eventHash.
+      for (let i = 0; i < after.items.length - 1; i += 1) {
+        expect(after.items[i]!.prevHash).toBe(after.items[i + 1]!.eventHash);
+      }
+    });
+
+    it('accepts public feedback and lists it for review', async () => {
+      const { repo } = await setup();
+
+      const response = await repo.submitFeedback(
+        {
+          category: 'location',
+          detail: 'テスト用: 位置がずれているように見えます',
+          pageUrl: 'https://pimm.example/map',
+        },
+        'contract-test-request',
+      );
+      expect(response.status).toBe('received');
+      expect(response.id).toBeTruthy();
+
+      const open = await repo.listFeedbackReports({ limit: 50 });
+      expect(open.items.some((r) => r.id === response.id)).toBe(true);
+      expect(open.items[0]).toMatchObject({
+        category: 'location',
+        status: 'open',
+        pageUrl: 'https://pimm.example/map',
+      });
+
+      const resolved = await repo.resolveFeedbackReport(
+        response.id,
+        { status: 'converted', reason: '品質issue化して対応' },
+        'admin@example.com',
+        'contract-test-request-2',
+      );
+      expect(resolved).not.toBeNull();
+      expect(resolved!.status).toBe('converted');
+
+      const openAfter = await repo.listFeedbackReports({ limit: 50, status: 'open' });
+      expect(openAfter.items.some((r) => r.id === response.id)).toBe(false);
+    });
   });
 }

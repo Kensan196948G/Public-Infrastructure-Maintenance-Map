@@ -6,9 +6,13 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { ErrorCode, ProblemDetails } from '@pimm/contracts';
 import {
+  AdminAuditEventListQuerySchema,
   AdminCreateSourceSchema,
+  AdminIngestionDiffListQuerySchema,
+  AdminFeedbackListQuerySchema,
   AdminIngestionListQuerySchema,
   AdminQualityIssueListQuerySchema,
+  AdminResolveFeedbackSchema,
   AdminResolveQualityIssueSchema,
   AdminSuspendAssetSchema,
   AdminSuspendSourceAssetsSchema,
@@ -16,6 +20,7 @@ import {
   AssetSearchQuerySchema,
   AssetSummaryQuerySchema,
   ExportQuerySchema,
+  FeedbackSubmitSchema,
   GeocodeQuerySchema,
   municipalityCodeForAddress,
   SuggestQuerySchema,
@@ -371,6 +376,21 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
     return c.body(assetsToGeoJson(exportable, attributions, excludedSources));
   });
 
+  // Public feedback intake (Issue #54). Rate-limited by the shared middleware;
+  // no cache, small bounded payload. The report is stored for admin review —
+  // it is NOT a GitHub issue and never a blocking write.
+  v1.post('/feedback', async (c) => {
+    const parsed = FeedbackSubmitSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'フィードバックの内容が不正です', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    const result = await repo.submitFeedback(parsed.data, c.get('requestId'));
+    c.header('Cache-Control', 'no-store');
+    return c.json(result, 202);
+  });
+
   admin.use('*', async (c, next) => {
     c.header('Cache-Control', 'no-store');
     const outcome = await resolveAdminIdentity(c, config);
@@ -389,6 +409,49 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
 
   // Read-only rollup for the ops console (Issue #52); reviewer roles may view.
   admin.get('/operations', async (c) => c.json(await repo.getOperationsSummary()));
+
+  // Append-only audit trail (Issue #48). Both admin and reviewer may view;
+  // integrity is computed per request over the returned window.
+  admin.get('/audit-events', async (c) => {
+    const parsed = AdminAuditEventListQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'limit は 1〜200 の整数で指定してください', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    return c.json(await repo.listAuditEvents(parsed.data.limit));
+  });
+
+  // Feedback review surface (Issue #54): list and resolve reports.
+  admin.get('/feedback-reports', async (c) => {
+    const parsed = AdminFeedbackListQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'limit は 1〜200 の整数で指定してください', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    return c.json(await repo.listFeedbackReports(parsed.data));
+  });
+
+  admin.post('/feedback-reports/:id/resolve', async (c) => {
+    const identity = c.get('adminIdentity');
+    const id = c.req.param('id');
+    if (!UUID_RE.test(id)) return fail(c, 'VALIDATION_ERROR', 'id の形式が不正です');
+    const parsed = AdminResolveFeedbackSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'フィードバックの解決内容が不正です', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    const report = await repo.resolveFeedbackReport(
+      id.toLowerCase(),
+      { status: parsed.data.status, reason: parsed.data.reason },
+      identity.email,
+      c.get('requestId'),
+    );
+    if (!report) return fail(c, 'NOT_FOUND', 'フィードバックが見つかりません');
+    return c.json(report);
+  });
 
   admin.post('/sources', async (c) => {
     const identity = c.get('adminIdentity');
@@ -433,6 +496,19 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
       });
     }
     return c.json(await repo.listIngestions(parsed.data.limit));
+  });
+
+  // Ingestion diff (Issue #53): compare the two most recent dataset versions
+  // of a source by natural key. Reviewer may view (read-only). Must be
+  // registered before /ingestions/:id so 'diff' is not captured by :id.
+  admin.get('/ingestions/diff', async (c) => {
+    const parsed = AdminIngestionDiffListQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'slug を指定してください', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    return c.json(await repo.getIngestionDiff(parsed.data.slug));
   });
 
   admin.get('/ingestions/:id', async (c) => {

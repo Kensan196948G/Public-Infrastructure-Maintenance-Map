@@ -7,11 +7,17 @@
  */
 import {
   AdminCreateSourceSchema,
+  AdminIngestionDiffSchema,
+  AdminFeedbackListSchema,
   AdminOperationsSummarySchema,
   AdminUpdateSourceSchema,
   AssetCountSummarySchema,
   AssetDetailSchema,
   AssetSummarySchema,
+  AuditEventListSchema,
+  FeedbackReportSchema,
+  FeedbackSubmitResponseSchema,
+  FeedbackSubmitSchema,
   GeocodeItemSchema,
   HealthResponseSchema,
   ProblemDetailsSchema,
@@ -34,10 +40,16 @@ const generatedSchemas: Record<string, object> = {
   AdminCreateSource: AdminCreateSourceSchema.toJSONSchema(),
   AdminUpdateSource: AdminUpdateSourceSchema.toJSONSchema(),
   AdminOperationsSummary: AdminOperationsSummarySchema.toJSONSchema(),
+  AdminIngestionDiff: AdminIngestionDiffSchema.toJSONSchema(),
   SuggestItem: SuggestItemSchema.toJSONSchema(),
   GeocodeItem: GeocodeItemSchema.toJSONSchema(),
   HealthResponse: HealthResponseSchema.toJSONSchema(),
   ReadinessResponse: ReadinessResponseSchema.toJSONSchema(),
+  FeedbackSubmit: FeedbackSubmitSchema.toJSONSchema(),
+  FeedbackSubmitResponse: FeedbackSubmitResponseSchema.toJSONSchema(),
+  FeedbackReport: FeedbackReportSchema.toJSONSchema(),
+  AdminFeedbackList: AdminFeedbackListSchema.toJSONSchema(),
+  AuditEventList: AuditEventListSchema.toJSONSchema(),
 };
 
 export const openapiDocument = {
@@ -252,6 +264,109 @@ export const openapiDocument = {
         },
       },
     },
+    '/admin/audit-events': {
+      get: {
+        summary: 'Append-only audit trail with hash-chain integrity (admin / reviewer)',
+        security: [{ accessJwt: [] }],
+        parameters: [
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 200 } },
+        ],
+        responses: {
+          '200': {
+            description: 'Newest audit events + chain-integrity verdict',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AuditEventList' },
+              },
+            },
+          },
+          '401': { $ref: '#/components/responses/Problem' },
+        },
+      },
+    },
+    '/admin/feedback-reports': {
+      get: {
+        summary: 'List user feedback reports for review (admin / reviewer)',
+        security: [{ accessJwt: [] }],
+        parameters: [
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 200 } },
+          {
+            name: 'status',
+            in: 'query',
+            schema: { type: 'string', enum: ['open', 'converted', 'dismissed'] },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Feedback reports',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AdminFeedbackList' },
+              },
+            },
+          },
+          '401': { $ref: '#/components/responses/Problem' },
+        },
+      },
+    },
+    '/admin/feedback-reports/{id}/resolve': {
+      post: {
+        summary: 'Convert to a quality issue or dismiss a feedback report',
+        security: [{ accessJwt: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  status: { type: 'string', enum: ['converted', 'dismissed'] },
+                  reason: { type: 'string', minLength: 1, maxLength: 500 },
+                },
+                required: ['status', 'reason'],
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Resolved report',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/FeedbackReport' },
+              },
+            },
+          },
+          '404': { $ref: '#/components/responses/Problem' },
+        },
+      },
+    },
+    '/feedback': {
+      post: {
+        summary: 'Public feedback intake (rate-limited, anonymous)',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/FeedbackSubmit' },
+            },
+          },
+        },
+        responses: {
+          '202': {
+            description: 'Accepted',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/FeedbackSubmitResponse' },
+              },
+            },
+          },
+          '400': { $ref: '#/components/responses/Problem' },
+          '429': { $ref: '#/components/responses/RateLimited' },
+        },
+      },
+    },
     '/admin/sources': {
       post: {
         summary: 'Register a data source (admin)',
@@ -313,6 +428,27 @@ export const openapiDocument = {
         security: [{ accessJwt: [] }],
         responses: {
           '200': { description: 'Runs' },
+          '401': { $ref: '#/components/responses/Problem' },
+        },
+      },
+    },
+    '/admin/ingestions/diff': {
+      get: {
+        summary: 'Compare the two most recent dataset versions of a source (Issue #53)',
+        security: [{ accessJwt: [] }],
+        parameters: [
+          { name: 'slug', in: 'query', required: true, schema: { type: 'string', maxLength: 100 } },
+        ],
+        responses: {
+          '200': {
+            description: 'Added / removed / changed records between versions',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AdminIngestionDiff' },
+              },
+            },
+          },
+          '400': { $ref: '#/components/responses/Problem' },
           '401': { $ref: '#/components/responses/Problem' },
         },
       },

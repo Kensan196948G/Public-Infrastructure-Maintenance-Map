@@ -1,7 +1,9 @@
 import type {
   AdminAssetPublication,
   AdminCreateSource,
+  AdminFeedbackList,
   AdminIngestionDetail,
+  AdminIngestionDiff,
   AdminIngestionList,
   AdminIngestionRun,
   AdminOperationsSummary,
@@ -16,11 +18,17 @@ import type {
   AssetDetail,
   AssetSearchResponse,
   AssetType,
+  AuditEvent,
+  AuditEventList,
   BBox,
+  FeedbackSubmit,
+  FeedbackSubmitResponse,
+  NewAuditEvent,
   QualityStatus,
   SourceInfo,
   SuggestItem,
 } from '@pimm/contracts';
+import { GENESIS_HASH, hashAuditEvent } from '@pimm/contracts';
 
 /** Filters shared by search / summary / export. */
 export interface AssetQueryFilters {
@@ -87,6 +95,11 @@ export interface AssetRepository {
   ): Promise<AdminIngestionRun | null>;
   listIngestions(limit: number): Promise<AdminIngestionList>;
   getIngestionDetail(id: string): Promise<AdminIngestionDetail | null>;
+  /**
+   * Ingestion diff (Issue #53): compares the two most recent dataset versions
+   * of a source by natural key and reports added/removed/changed records.
+   */
+  getIngestionDiff(sourceSlug: string): Promise<AdminIngestionDiff>;
   listQualityIssues(limit: number): Promise<AdminQualityIssueList>;
   /** Ops-console dashboard (Issue #52): per-source publication / run / quality rollup. */
   getOperationsSummary(): Promise<AdminOperationsSummary>;
@@ -105,4 +118,49 @@ export interface AssetRepository {
     input: AdminSuspendSourceAssets,
     actor: string,
   ): Promise<AdminSourcePublication | null>;
+
+  /**
+   * Append-only audit trail (Issue #48). Implementations record one event per
+   * administrative mutation and return the newest `limit` events together with
+   * a chain-integrity verdict for the returned window.
+   */
+  listAuditEvents(limit: number): Promise<AuditEventList>;
+
+  /**
+   * Public feedback intake (Issue #54). Anonymous, rate-limited at the API
+   * layer; returns the created report id. requestId is carried into the audit
+   * event so the report correlates with the originating request.
+   */
+  submitFeedback(input: FeedbackSubmit, requestId: string | null): Promise<FeedbackSubmitResponse>;
+
+  /** Admin review list for submitted feedback reports. */
+  listFeedbackReports(query: {
+    limit: number;
+    status?: 'open' | 'converted' | 'dismissed' | undefined;
+  }): Promise<AdminFeedbackList>;
+
+  /** Marks a feedback report converted/dismissed with a resolution note. */
+  resolveFeedbackReport(
+    id: string,
+    input: { status: 'converted' | 'dismissed'; reason: string },
+    actor: string,
+    requestId: string | null,
+  ): Promise<AdminFeedbackList['items'][number] | null>;
+}
+
+/** Shared implementation of hash-chain recording used by both repositories. */
+/**
+ * Builds a chained audit event. `prev` is the newest known event (used by the
+ * in-memory backend); callers that already resolved the previous hash — e.g.
+ * Postgres reading the latest row — may pass it via `payload.prevHash`
+ * (NewAuditEvent includes prevHash) with `prev` null.
+ */
+export async function recordAuditEvent(
+  prev: AuditEvent | null,
+  payload: NewAuditEvent,
+  now: string,
+): Promise<AuditEvent> {
+  const prevHash = prev ? prev.eventHash : (payload.prevHash ?? GENESIS_HASH);
+  const eventHash = await hashAuditEvent({ ...payload, prevHash });
+  return { ...payload, id: crypto.randomUUID(), occurredAt: now, prevHash, eventHash };
 }

@@ -76,6 +76,12 @@ export const AdminQualityIssueListQuerySchema = z.object({
 });
 export type AdminQualityIssueListQuery = z.infer<typeof AdminQualityIssueListQuerySchema>;
 
+/** Audit-trail listing (Issue #48): newest `limit` events. */
+export const AdminAuditEventListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+export type AdminAuditEventListQuery = z.infer<typeof AdminAuditEventListQuerySchema>;
+
 export const AdminIngestionRunSchema = z.object({
   id: z.uuid(),
   sourceSlug: z.string(),
@@ -224,3 +230,38 @@ export function summarizeOperations(sources: AdminSourceOperations[]): AdminOper
     sources,
   };
 }
+
+/**
+ * Ingestion diff (Issue #53) — compares the two most recent dataset versions
+ * of a source and reports what changed between them. The comparison is by
+ * natural key (source_record_id): records present only in the newer version
+ * are 'added', only in the older are 'removed', and present in both with a
+ * different attribute fingerprint are 'changed'.
+ */
+export const AdminIngestionDiffSchema = z.object({
+  sourceSlug: z.string(),
+  /** Dataset version of the comparison base (older). */
+  baseVersionId: z.uuid().nullable(),
+  /** Dataset version of the comparison target (newer). */
+  targetVersionId: z.uuid().nullable(),
+  baseFetchedAt: z.iso.datetime().nullable(),
+  targetFetchedAt: z.iso.datetime().nullable(),
+  added: z.array(z.string()),
+  removed: z.array(z.string()),
+  changed: z.array(
+    z.object({
+      sourceRecordId: z.string(),
+      name: z.string(),
+      attributesChanged: z.array(z.string()),
+    }),
+  ),
+  /** True when both versions exist and the comparison is meaningful. */
+  comparable: z.boolean(),
+});
+export type AdminIngestionDiff = z.infer<typeof AdminIngestionDiffSchema>;
+
+export const AdminIngestionDiffListQuerySchema = z.object({
+  /** Source slug to diff (required). */
+  slug: z.string().min(1).max(100),
+});
+export type AdminIngestionDiffListQuery = z.infer<typeof AdminIngestionDiffListQuerySchema>;

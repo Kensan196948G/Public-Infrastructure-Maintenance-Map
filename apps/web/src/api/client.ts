@@ -1,11 +1,9 @@
 import type {
-  AssetCountSummary,
-  AssetDetail,
-  AssetSearchResponse,
-  AssetType,
   AdminAssetPublication,
   AdminCreateSource,
+  AdminFeedbackList,
   AdminIngestionDetail,
+  AdminIngestionDiff,
   AdminIngestionList,
   AdminIngestionRun,
   AdminOperationsSummary,
@@ -15,6 +13,14 @@ import type {
   AdminSourceResponse,
   AdminSourcePublication,
   AdminUpdateSource,
+  AssetCountSummary,
+  AssetDetail,
+  AssetSearchResponse,
+  AssetType,
+  AuditEventList,
+  FeedbackReport,
+  FeedbackSubmit,
+  FeedbackSubmitResponse,
   GeocodeResponse,
   HealthResponse,
   QualityStatus,
@@ -260,6 +266,15 @@ export class ApiClient {
     );
   }
 
+  /** Ingestion diff (Issue #53): added / removed / changed per source. */
+  getAdminIngestionDiff(sourceSlug: string): Promise<AdminIngestionDiff> {
+    return getJson<AdminIngestionDiff>(
+      `${this.base}/admin/ingestions/diff?slug=${encodeURIComponent(sourceSlug)}`,
+      this.fetchImpl,
+      { credentials: 'include' },
+    );
+  }
+
   /** Ops-console dashboard rollup (Issue #52); requires admin/reviewer identity. */
   getAdminOperations(): Promise<AdminOperationsSummary> {
     return getJson<AdminOperationsSummary>(`${this.base}/admin/operations`, this.fetchImpl);
@@ -295,6 +310,43 @@ export class ApiClient {
   ): Promise<AdminQualityIssueRecord> {
     return postJson<AdminQualityIssueRecord>(
       `${this.base}/admin/quality-issues/${encodeURIComponent(id)}/resolve`,
+      this.fetchImpl,
+      input,
+    );
+  }
+
+  /** Append-only audit trail (Issue #48); requires admin/reviewer identity. */
+  listAdminAuditEvents(limit = 50): Promise<AuditEventList> {
+    return getJson<AuditEventList>(
+      `${this.base}/admin/audit-events?limit=${encodeURIComponent(String(limit))}`,
+      this.fetchImpl,
+      { credentials: 'include' },
+    );
+  }
+
+  /** Public feedback intake (Issue #54) — anonymous, rate-limited. */
+  submitFeedback(input: FeedbackSubmit): Promise<FeedbackSubmitResponse> {
+    return postJson<FeedbackSubmitResponse>(`${this.base}/feedback`, this.fetchImpl, input);
+  }
+
+  /** Admin review list of feedback reports (Issue #54). */
+  listAdminFeedbackReports(
+    limit = 50,
+    status?: 'open' | 'converted' | 'dismissed',
+  ): Promise<AdminFeedbackList> {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (status) qs.set('status', status);
+    return getJson<AdminFeedbackList>(`${this.base}/admin/feedback-reports?${qs}`, this.fetchImpl, {
+      credentials: 'include',
+    });
+  }
+
+  resolveAdminFeedback(
+    id: string,
+    input: { status: 'converted' | 'dismissed'; reason: string },
+  ): Promise<FeedbackReport> {
+    return postJson<FeedbackReport>(
+      `${this.base}/admin/feedback-reports/${encodeURIComponent(id)}/resolve`,
       this.fetchImpl,
       input,
     );
