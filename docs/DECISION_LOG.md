@@ -225,3 +225,11 @@ secret、credential、connection string、PII は記載しない。
   4. Cloudflare Access 実認証のブラウザ E2E は SSO 対話操作が必要。Access アプリ `pimm-admin-api`（ポリシー `pimm-admins`）の存在は API で確認済み・未認証拒否 302 はスモークで確認済み
 - 検証: 本番スモーク 9/9 PASS・API デプロイ成功・Access アプリ構成確認。
 - Rollback: API は `wrangler rollback --env production`。監視ワークフローは無効化または PR revert。
+
+### DL-030: 2026-08-15 アダプター拡張基盤（Issue #55）
+
+- 判断: 30〜100 ソース規模への拡張を安全に行えるよう、アダプター追加の定型手順を文書化し、登録済みアダプター全体の descriptor 整合性を自動検証するテストを追加した。`docs/ADAPTER_GUIDE.md`（6ステップのオンボーディング手順・契約・座標変換・dry-run・登録）と `docs/ADAPTER_LICENSE_CHECKLIST.md`（L-01〜L-12・再配布判定ルール）を作成し、`packages/source-adapters/test/adapter-extension.test.ts`（8件）で slug 一意性・ライセンス必須・CRS 宣言・restricted の attribution 必須・https URL・expectedSchemaKeys を全アダプターに対して検証する。
+- 理由: 新規ソース追加時にライセンス未確認・CRS 推測・スキーマ乖離を見逃すと、Q007/Q008 による隔離・取込中断が頻発し、拡張が停滞するため。文書＋自動テストの両輪でオンボーディングの品質ゲートを定型化する。
+- 影響: docs 2 ファイル追加・テスト 1 ファイル追加・README 設計文書一覧へ追記。既存コード・DB スキーマは不変。registry に新規アダプターを追加すると、このテストが自動的に全 descriptor を再検証する。
+- 検証: `pnpm --filter @pimm/source-adapters test` 50/50（新規8件含む）・typecheck・lint 0 件。CI の quality ジョブで同等検証。
+- Rollback: 該当 PR を revert（docs・テストのみ）。
