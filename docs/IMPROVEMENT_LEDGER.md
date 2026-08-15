@@ -1,8 +1,18 @@
 # 📒 改善台帳（Improvement Ledger）
 
 > ラウンド: 2026-08-12 総合評価・改善（評価日基準: origin/main `45686dc`）
+> 追記: 2026-08-15 監査イベント基盤＋フィードバック受付＋アダプター拡張基盤＋取込差分（PR #80/#84）
 
-## ✅ 実装済み（本ラウンド）
+## ✅ 実装済み（2026-08-15 ラウンド）
+
+| ID | 分類 | 改善 | 状態 | 検証証跡 | 影響範囲 |
+| --- | --- | --- | --- | --- | --- |
+| IMP-023 | 監査 | append-only 監査イベントテーブル（`audit_events`・UPDATE/DELETE 禁止トリガー）＋SHA-256 ハッシュチェーン（Issue #48） | ✅ 実装・テスト済み | migration 0003・PostGIS 75/75・api 93/93・E2E 7/7 | DB・管理API・監査ログ画面 |
+| IMP-024 | フィードバック | `POST /api/v1/feedback`＋`feedback_reports` 管理（品質issue化/却下）（Issue #54） | ✅ 実装・テスト済み | migration 0004・api 93/93・web 130/130・E2E | 公開API・FeedbackDialog |
+| IMP-025 | 拡張基盤 | アダプター追加ガイド・ライセンスチェックリスト・fleet不変条件テスト（Issue #55） | ✅ 実装・テスト済み | source-adapters 50/50・CI | docs・registry 検証 |
+| IMP-026 | 取込差分 | `GET /admin/ingestions/diff`＋監査ログ画面の差分UI（Issue #53） | ✅ 実装・テスト済み | api 89/89・web 124/124・PostGIS 75/75・E2E 5/5 | API・管理UI |
+
+## ✅ 実装済み（2026-08-12 ラウンド）
 
 | ID | 分類 | 改善 | 状態 | 検証証跡 | 影響範囲 |
 | --- | --- | --- | --- | --- | --- |
