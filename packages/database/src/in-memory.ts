@@ -3,6 +3,7 @@ import type {
   AdminCreateSource,
   AdminFeedbackList,
   AdminIngestionDetail,
+  AdminIngestionDiff,
   AdminIngestionList,
   AdminIngestionRun,
   AdminOperationsSummary,
@@ -103,6 +104,14 @@ export class InMemoryAssetRepository implements AssetRepository {
   private readonly sources: SourceInfo[];
   private readonly ingestionRuns: AdminIngestionRun[] = [];
   private readonly qualityIssues: AdminQualityIssueRecord[] = [];
+  /**
+   * Per-source asset snapshots taken at each startIngestion call (Issue #53).
+   * The diff endpoint compares the two most recent snapshots by natural key.
+   */
+  private readonly ingestionSnapshots: Map<
+    string,
+    { fetchedAt: string; records: Map<string, { name: string; attributes: string[] }> }[]
+  > = new Map();
   private readonly auditEvents: AuditEvent[] = [];
   private readonly feedbackReports: FeedbackReport[] = [];
 
@@ -309,6 +318,21 @@ export class InMemoryAssetRepository implements AssetRepository {
       correlationId,
     };
     this.ingestionRuns.unshift(run);
+    // Record a per-source asset snapshot so the diff endpoint (Issue #53) can
+    // compare the two most recent ingestions by natural key.
+    const snapshot = new Map<string, { name: string; attributes: string[] }>();
+    for (const asset of this.assets) {
+      if (asset.source.slug !== sourceSlug) continue;
+      if (!asset.source.sourceRecordId) continue;
+      snapshot.set(asset.source.sourceRecordId, {
+        name: asset.name,
+        attributes: Object.keys(asset.attributes ?? {}).sort(),
+      });
+    }
+    const history = this.ingestionSnapshots.get(sourceSlug) ?? [];
+    history.push({ fetchedAt: now, records: snapshot });
+    if (history.length > 2) history.shift();
+    this.ingestionSnapshots.set(sourceSlug, history);
     await this.pushAuditEvent({
       actor,
       action: 'ingestion.started',
@@ -319,6 +343,62 @@ export class InMemoryAssetRepository implements AssetRepository {
       requestId: correlationId,
     });
     return run;
+  }
+
+  async getIngestionDiff(sourceSlug: string): Promise<AdminIngestionDiff> {
+    const history = this.ingestionSnapshots.get(sourceSlug) ?? [];
+    if (history.length < 2) {
+      return {
+        sourceSlug,
+        baseVersionId: null,
+        targetVersionId: null,
+        baseFetchedAt: history[0]?.fetchedAt ?? null,
+        targetFetchedAt: null,
+        added: [],
+        removed: [],
+        changed: [],
+        comparable: false,
+      };
+    }
+    const [base, target] = history.slice(-2);
+    const added: string[] = [];
+    const removed: string[] = [];
+    const changed: Array<{
+      sourceRecordId: string;
+      name: string;
+      attributesChanged: string[];
+    }> = [];
+    for (const [recordId, rec] of target!.records) {
+      if (!base!.records.has(recordId)) {
+        added.push(recordId);
+      } else {
+        const prev = base!.records.get(recordId)!;
+        const attrChanged = [...new Set([...prev.attributes, ...rec.attributes])].filter(
+          (k) => !(prev.attributes.includes(k) && rec.attributes.includes(k)),
+        );
+        if (prev.name !== rec.name || attrChanged.length > 0) {
+          changed.push({
+            sourceRecordId: recordId,
+            name: rec.name,
+            attributesChanged: attrChanged,
+          });
+        }
+      }
+    }
+    for (const recordId of base!.records.keys()) {
+      if (!target!.records.has(recordId)) removed.push(recordId);
+    }
+    return {
+      sourceSlug,
+      baseVersionId: null,
+      targetVersionId: null,
+      baseFetchedAt: base!.fetchedAt,
+      targetFetchedAt: target!.fetchedAt,
+      added,
+      removed,
+      changed,
+      comparable: true,
+    };
   }
 
   listIngestions(limit: number): Promise<AdminIngestionList> {

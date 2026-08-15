@@ -244,3 +244,23 @@ secret、credential、connection string、PII は記載しない。
 - 判断: Playwright E2E の dev server は API 8787・Web 5173 を固定していたが、本開発機では別プロジェクト（Open BIM 情報基盤等）が同ポートを使用しており E2E が誤サーバへ接続して失敗した。`playwright.config.ts` を `E2E_API_PORT` / `E2E_WEB_PORT` で上書き可能にし、Vite dev proxy のターゲットも `VITE_DEV_API_TARGET` で指定できるようにした（node.ts の `PORT` 対応・DL-025 と整合）。あわせて、検証用 `apps/web/.env.local`（`VITE_API_BASE_URL` が LAN URL の残骸）が dev バンドルへ混入する事故（DL-014 の再発パターン）を確認し、E2E 実行時は当該ファイルを一時退避して検証した。当該ファイルはユーザー状態として保護し、削除・コミットはしない。
 - 影響: 設定ファイルのみ。CI（GitHub Actions）は既定ポートを使用するため影響なし。
 - Rollback: 該当コミット revert（E2E ポート変数と vite proxy の既定値は従来どおり）。
+
+### DL-030: 2026-08-15 アダプター拡張基盤（Issue #55）
+
+- 判断: 30〜100 ソース規模への拡張を安全に行えるよう、アダプター追加の定型手順を文書化し、登録済みアダプター全体の descriptor 整合性を自動検証するテストを追加した。`docs/ADAPTER_GUIDE.md`（6ステップのオンボーディング手順・契約・座標変換・dry-run・登録）と `docs/ADAPTER_LICENSE_CHECKLIST.md`（L-01〜L-12・再配布判定ルール）を作成し、`packages/source-adapters/test/adapter-extension.test.ts`（8件）で slug 一意性・ライセンス必須・CRS 宣言・restricted の attribution 必須・https URL・expectedSchemaKeys を全アダプターに対して検証する。
+- 理由: 新規ソース追加時にライセンス未確認・CRS 推測・スキーマ乖離を見逃すと、Q007/Q008 による隔離・取込中断が頻発し、拡張が停滞するため。文書＋自動テストの両輪でオンボーディングの品質ゲートを定型化する。
+- 影響: docs 2 ファイル追加・テスト 1 ファイル追加・README 設計文書一覧へ追記。既存コード・DB スキーマは不変。registry に新規アダプターを追加すると、このテストが自動的に全 descriptor を再検証する。
+- 検証: `pnpm --filter @pimm/source-adapters test` 50/50（新規8件含む）・typecheck・lint 0 件。CI の quality ジョブで同等検証。
+- Rollback: 該当 PR を revert（docs・テストのみ）。
+
+### DL-031: 2026-08-15 取込差分・時系列表示（Issue #53）
+
+- 判断: 前回取込との差分（追加/削除/属性変更）を管理者が確認できるよう、`GET /api/v1/admin/ingestions/diff?slug=<source>` を追加した。dataset_versions は既存の publisher が作成済みだが、資産行は upsert され version スタンプを持たないため、**完全なバージョン間属性差分は現行スキーマでは不可能**と判断し、MVP では「公開資産（published・非hidden）と全資産セットの比較」で差分を近似した。
+- 技術判断:
+  1. Postgres: 公開可視性ルール（published AND quality<>hidden）を満たす資産を target とし、全資産セットに存在するが公開されていないキー（draft/suspended/hidden）を removed として報告。changed は公開資産の現在の属性キーを返す。
+  2. InMemory: startIngestion 時にソース別資産スナップショットを記録し、最新2回を比較。added/removed/changed を自然キー（source_record_id）で判定。
+  3. ルーティング: `/ingestions/diff` は `/ingestions/:id` より**前に**登録する（Hono の順序解決。後方登録だと 'diff' が :id に捕捉され 400 になる）。
+  4. 契約: `AdminIngestionDiffSchema` を contracts に追加し、InMemory/Postgres 両実装が同一の envelope を返すことを repository contract で検証。
+- 影響: 管理APIに読み取り専用エンドポイント1本追加（admin/reviewer）。DB スキーマ変更なし。OpenAPI に diff エンドポイントとスキーマを追加。
+- 検証: typecheck 全 PASS・database 51/51＋PostGIS 75/75・api 89/89（新規3件）・E2E 7/7・lint 0・build 成功。
+- Rollback: 該当 PR を revert（API・contracts・テストのみ・migration なし）。

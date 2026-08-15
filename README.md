@@ -317,6 +317,8 @@ flowchart LR
 - `docs/IMPROVEMENT_LEDGER.md` — 改善台帳・テスト証跡
 - `docs/AI_DESIGN.md` — AI 活用設計（Phase 3 実装予定）
 - `docs/ROADMAP.md` — Phase 0〜4 ロードマップ
+- `docs/ADAPTER_GUIDE.md` — アダプター追加ガイド（新規データソースの定型オンボーディング手順、Issue #55）
+- `docs/ADAPTER_LICENSE_CHECKLIST.md` — ライセンス確認チェックリスト（L-01〜L-12・再配布判定）
 - `docs/operations/` — 運用ハンドブック（監視/SLO、バックアップ/復旧、インシデント対応、運用台帳、保守、権限棚卸し、予算）
 
 ## ⚖️ 利用上の注意

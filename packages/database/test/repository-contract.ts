@@ -215,6 +215,48 @@ export function registerAssetRepositoryContract(
       expect(after.items).toHaveLength(0);
     });
 
+    it('returns an ingestion diff envelope (Issue #53)', async () => {
+      const { repo } = await setup();
+
+      // Before any ingestion, the diff is a valid envelope. comparable depends
+      // on the backend: in-memory has no dataset_versions yet (false), while
+      // Postgres seeds one (true with a null base) — only the shape is fixed.
+      const empty = await repo.getIngestionDiff('contract-source');
+      expect(empty).toMatchObject({ sourceSlug: 'contract-source' });
+      expect(typeof empty.comparable).toBe('boolean');
+      expect(Array.isArray(empty.added)).toBe(true);
+      expect(Array.isArray(empty.removed)).toBe(true);
+      expect(Array.isArray(empty.changed)).toBe(true);
+
+      // Two ingestion runs make the diff comparable on both backends. The
+      // in-memory fixture records identical asset snapshots (no data changed
+      // between runs), while Postgres compares against the full asset set —
+      // the contract only requires a well-formed, comparable envelope.
+      await repo.startIngestion('contract-source', 'admin@example.com', 'diff-1');
+      await repo.startIngestion('contract-source', 'admin@example.com', 'diff-2');
+      const diff = await repo.getIngestionDiff('contract-source');
+      expect(diff.comparable).toBe(true);
+      expect(diff.sourceSlug).toBe('contract-source');
+      expect(Array.isArray(diff.added)).toBe(true);
+      expect(Array.isArray(diff.removed)).toBe(true);
+      expect(Array.isArray(diff.changed)).toBe(true);
+      // Every changed row is a well-formed entry.
+      for (const row of diff.changed) {
+        expect(typeof row.sourceRecordId).toBe('string');
+        expect(typeof row.name).toBe('string');
+        expect(Array.isArray(row.attributesChanged)).toBe(true);
+      }
+    });
+
+    it('returns a non-comparable diff for an unknown source', async () => {
+      const { repo } = await setup();
+      const diff = await repo.getIngestionDiff('no-such-source');
+      expect(diff).toMatchObject({
+        sourceSlug: 'no-such-source',
+        comparable: false,
+      });
+    });
+
     it('records chained audit events for administrative mutations', async () => {
       const { repo } = await setup();
 

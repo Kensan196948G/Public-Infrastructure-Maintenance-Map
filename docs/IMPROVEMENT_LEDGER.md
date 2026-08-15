@@ -1,7 +1,7 @@
 # 📒 改善台帳（Improvement Ledger）
 
 > ラウンド: 2026-08-12 総合評価・改善（評価日基準: origin/main `45686dc`）
-> 追記: 2026-08-15 監査イベント基盤＋フィードバック受付（Issue #48/#54、作業ブランチ `feature/audit-feedback-mvp`）
+> 追記: 2026-08-15 監査イベント基盤＋フィードバック受付＋アダプター拡張基盤＋取込差分（PR #80/#84）
 
 ## ✅ 実装済み（2026-08-15 ラウンド）
 
@@ -14,6 +14,8 @@
 | IMP-027 | フィードバック | `feedback_reports` テーブル＋`/admin/feedback-reports`（一覧・品質issue化/却下） | ✅ 実装・テスト済み | migration 0004、repository contract、api 93/93、監査ログ画面のフィードバック管理 | DB・管理API・Web UI |
 | IMP-028 | ダミーデータ | サンプルモードへ監査イベント（正しいハッシュチェーン）とフィードバック報告（open/converted/dismissed）をシード | ✅ 実装・テスト済み | seed 44/44（チェーン整合・3ステータス検証） | source-adapters seed |
 | IMP-029 | CI/E2E | Playwright dev server のポートを `E2E_API_PORT`/`E2E_WEB_PORT` で上書き可能にし、Vite proxy ターゲットを `VITE_DEV_API_TARGET` で指定可能に | ✅ 実装・E2E 7/7 PASS | ローカル E2E（別ポート）で全 PASS。CI は既定ポートのため影響なし | playwright.config・vite.config |
+| IMP-030 | 拡張基盤 | アダプター追加ガイド・ライセンスチェックリスト・fleet不変条件テスト（Issue #55） | ✅ 実装・テスト済み | source-adapters 50/50・CI | docs・registry 検証 |
+| IMP-031 | 取込差分 | `GET /admin/ingestions/diff`＋監査ログ画面の差分UI（Issue #53） | ✅ 実装・テスト済み | api 89/89・web 124/124・PostGIS 75/75・E2E 5/5 | API・管理UI |
 
 ## ✅ 実装済み（2026-08-12 ラウンド）
 
@@ -39,13 +41,11 @@
 | IMP-013 | 監視 | 外部死活監視＋通知（`/health/ready` 利用） | 通知先・アカウント | 3 か月以内 |
 | IMP-014 | 可用性 | Neon PITR 復元試験 | Neon API 権限 | 3 か月以内 |
 | IMP-015 | 検証 | Cloudflare Access 実認証管理 E2E | Issue #38 | 3 か月以内 |
-| IMP-017 | 機能 | 取込差分・時系列（Issue #53） | dataset_versions 活用 | 6〜12 か月 |
-| IMP-019 | 拡張 | アダプター追加基盤（Issue #55） | ガイド・レビュー定型化 | 6〜12 か月 |
 | IMP-020 | 機能 | W05 残 44 県投入 | Secret 設定後 | 3 か月以内 |
 | IMP-021 | 機能 | PWA/オフライン・PDF/Excel | 設計 | 6〜12 か月 |
 | IMP-022 | AI | AI_DESIGN.md の実装 | Phase 3 | 将来 |
 
-> 📌 IMP-016（監査ハッシュチェーン）と IMP-018（フィードバック→品質issue）は 2026-08-15 ラウンドで基盤実装済みのため、未実装表から削除した（実装詳細は IMP-023〜IMP-027 を参照）。残作業（監査の保持期間・エクスポート、フィードバックの Turnstile 等スパム対策）は Issue #48 / #54 のコメントで追跡する。
+> 📌 IMP-016（監査ハッシュチェーン）・IMP-017（取込差分）・IMP-018（フィードバック→品質issue）・IMP-019（アダプター追加基盤）は 2026-08-15 ラウンドで実装済みのため、未実装表から削除した（実装詳細は IMP-023〜IMP-031 を参照）。残作業（監査の保持期間・エクスポート、フィードバックの Turnstile 等スパム対策）は Issue #48 / #54 のコメントで追跡する。
 
 ## 🔬 テスト証跡（2026-08-15 ラウンド）
 

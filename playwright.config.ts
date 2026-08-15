@@ -46,6 +46,7 @@ export default defineConfig({
       url: `http://127.0.0.1:${webPort}`,
       env: {
         ...process.env,
+        // Point the dev proxy at the E2E API port (vite.config reads this).
         VITE_DEV_API_TARGET: `http://127.0.0.1:${apiPort}`,
       },
       reuseExistingServer: !process.env.CI,
