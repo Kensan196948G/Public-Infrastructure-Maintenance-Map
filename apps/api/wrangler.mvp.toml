@@ -1,0 +1,27 @@
+# pimm-mvp: ダミーデータ入り MVP 用 API Worker 設定
+# - サンプルモード（DATABASE_URL 無し → 組み込みダミーデータ seed）
+# - 管理APIはデモ用ヘッダー認証（ADMIN_EMAILS allowlist）
+# - 本番 DB には一切接続しない（ダミーデータのみ）
+name = "pimm-api-mvp"
+main = "src/worker.ts"
+compatibility_date = "2026-07-01"
+workers_dev = false
+
+[vars]
+# Web は pimm-mvp.mirai-dx-platform.com からアクセスする
+ALLOWED_ORIGIN = "https://pimm-mvp.mirai-dx-platform.com"
+# デモ用: ヘッダー注入テストユーザーの allowlist
+ADMIN_EMAILS = "admin@example.com"
+REVIEWER_EMAILS = "reviewer@example.com"
+RATE_LIMIT_PER_MINUTE = "120"
+# 注意: DATABASE_URL / REQUIRE_DATABASE_URL / REQUIRE_ACCESS_JWT は意図的に未設定
+# - DATABASE_URL なし → サンプルモード（ダミーデータ）
+# - REQUIRE_ACCESS_JWT なし → デモ用ヘッダー認証（本番 Access JWT は不要）
+# - DEMO_ADMIN_ENABLED=true → X-Demo-Admin-Email ヘッダーで管理API認証
+#   （Cloudflare はクライアント設定の CF-Access-* ヘッダーをエッジで剥がすため、
+#     デモ専用ヘッダーを使用。スプーフィング可能なためダミーデータ環境限定）
+DEMO_ADMIN_ENABLED = "true"
+
+[[routes]]
+pattern = "pimm-mvp-api.mirai-dx-platform.com"
+custom_domain = true

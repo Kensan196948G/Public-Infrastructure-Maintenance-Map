@@ -17,6 +17,7 @@ const FORWARDED_KEYS = [
   'CLOUDFLARE_ACCESS_AUD',
   'CLOUDFLARE_ACCESS_TEAM_DOMAIN',
   'REQUIRE_ACCESS_JWT',
+  'DEMO_ADMIN_ENABLED',
 ] as const satisfies readonly (keyof EnvBindings)[];
 
 // Fails to compile if EnvBindings gains a key that FORWARDED_KEYS omits.

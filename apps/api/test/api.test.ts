@@ -640,6 +640,39 @@ describe('feedback API (Issue #54)', () => {
   });
 });
 
+describe('demo admin mode (pimm-mvp, env-gated)', () => {
+  it('accepts the X-Demo-Admin-Email header when demo mode is enabled', async () => {
+    const seed = await buildSampleSeed();
+    const demoApp = createApp(new InMemoryAssetRepository(seed), {
+      ...CONFIG,
+      demoAdminEnabled: true,
+    }) as unknown as Hono<never>;
+    const res = await demoApp.request('http://localhost/api/v1/admin/operations', {
+      headers: { 'X-Demo-Admin-Email': 'admin@example.com' },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('requires the demo header in demo mode', async () => {
+    const seed = await buildSampleSeed();
+    const demoApp = createApp(new InMemoryAssetRepository(seed), {
+      ...CONFIG,
+      demoAdminEnabled: true,
+    }) as unknown as Hono<never>;
+    const res = await demoApp.request('http://localhost/api/v1/admin/operations');
+    expect(res.status).toBe(401);
+  });
+
+  it('ignores the demo header when demo mode is disabled', async () => {
+    const seed = await buildSampleSeed();
+    const normalApp = createApp(new InMemoryAssetRepository(seed), CONFIG) as unknown as Hono<never>;
+    const res = await normalApp.request('http://localhost/api/v1/admin/operations', {
+      headers: { 'X-Demo-Admin-Email': 'admin@example.com' },
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('security', () => {
   it('sets security headers on every response', async () => {
     const res = await get('/api/v1/health');

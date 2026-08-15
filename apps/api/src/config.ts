@@ -36,6 +36,15 @@ export interface ApiConfig {
    * trusting the spoofable CF-Access-Authenticated-User-Email header.
    */
   requireAccessJwt: boolean;
+  /**
+   * Demo/MVP mode (env-gated). When true, admin identity is taken from the
+   * X-Demo-Admin-Email header instead of Cloudflare Access. The header is
+   * spoofable, so this must ONLY be enabled for sandbox / dummy-data
+   * deployments (e.g. the pimm-mvp sample-mode demo), never for anything
+   * holding real data. Cloudflare strips client-set CF-Access-* headers at
+   * the edge, so the demo needs its own header name.
+   */
+  demoAdminEnabled?: boolean;
 }
 
 export interface EnvBindings {
@@ -48,6 +57,7 @@ export interface EnvBindings {
   CLOUDFLARE_ACCESS_AUD?: string;
   CLOUDFLARE_ACCESS_TEAM_DOMAIN?: string;
   REQUIRE_ACCESS_JWT?: string;
+  DEMO_ADMIN_ENABLED?: string;
 }
 
 /** Truthy env-string parse: 'true'/'1' (case-insensitive) enable the flag. */
@@ -77,6 +87,7 @@ export function configFromEnv(env: EnvBindings): ApiConfig {
       envFlag(env.REQUIRE_ACCESS_JWT) ||
       Boolean(env.CLOUDFLARE_ACCESS_AUD) ||
       Boolean(env.CLOUDFLARE_ACCESS_TEAM_DOMAIN),
+    demoAdminEnabled: envFlag(env.DEMO_ADMIN_ENABLED),
   };
   if (env.DATABASE_URL) config.databaseUrl = env.DATABASE_URL;
   if (env.CLOUDFLARE_ACCESS_AUD) config.accessAud = env.CLOUDFLARE_ACCESS_AUD;

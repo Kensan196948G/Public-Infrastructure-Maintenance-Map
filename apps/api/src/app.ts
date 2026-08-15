@@ -98,6 +98,17 @@ async function resolveAdminIdentity(
     return { status: 'ok', identity: rolesFor(verified.identity.email, config) };
   }
 
+  // Demo/MVP mode (env-gated): sandbox deployments without Cloudflare Access
+  // accept a documented demo header. Cloudflare strips client-set
+  // CF-Access-* headers at the edge, so the demo cannot reuse
+  // CF-Access-Authenticated-User-Email. The header is spoofable — only enable
+  // for dummy-data deployments (config.demoAdminEnabled).
+  if (config.demoAdminEnabled) {
+    const demoEmail = c.req.header('X-Demo-Admin-Email');
+    if (!demoEmail) return { status: 'unauthorized' };
+    return { status: 'ok', identity: rolesFor(demoEmail.trim().toLowerCase(), config) };
+  }
+
   const email = c.req.header('CF-Access-Authenticated-User-Email');
   if (!email) return { status: 'unauthorized' };
   return { status: 'ok', identity: rolesFor(email.trim().toLowerCase(), config) };
