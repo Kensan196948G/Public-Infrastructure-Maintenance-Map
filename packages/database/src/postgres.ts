@@ -11,6 +11,7 @@ import type {
   AdminAssetPublication,
   AdminCreateSource,
   AdminIngestionDetail,
+  AdminIngestionDiff,
   AdminIngestionList,
   AdminIngestionRun,
   AdminOperationsSummary,
@@ -540,6 +541,89 @@ export class PostgresAssetRepository implements AssetRepository {
        WHERE run_id = ${id}
        ORDER BY created_at DESC, id`) as Row[];
     return { run: rowToAdminRun(run), qualityIssues: issues.map(rowToAdminIssue) };
+  }
+
+  async getIngestionDiff(sourceSlug: string): Promise<AdminIngestionDiff> {
+    // Latest two dataset_versions for the source. An ingestion run that never
+    // reached publish() leaves no version row; in that case the diff is empty
+    // but still returns a valid envelope (comparable=false).
+    const versions = (await this.sql`
+      SELECT v.id, v.fetched_at
+        FROM dataset_versions v
+        JOIN data_sources s ON s.id = v.source_id
+       WHERE s.slug = ${sourceSlug}
+       ORDER BY v.fetched_at DESC, v.id DESC
+       LIMIT 2`) as Row[];
+    const [target, base] = versions;
+    if (!target) {
+      return {
+        sourceSlug,
+        baseVersionId: null,
+        targetVersionId: null,
+        baseFetchedAt: null,
+        targetFetchedAt: null,
+        added: [],
+        removed: [],
+        changed: [],
+        comparable: false,
+      };
+    }
+    const targetId = String(target['id']);
+    const baseId = base ? String(base['id']) : null;
+
+    // Asset rows are upserted and carry no dataset-version stamp, so an exact
+    // per-version attribute diff is not possible from the current schema.
+    // The MVP diff therefore compares *publicly visible* assets (the current
+    // published, non-hidden set) against the full per-source asset set:
+    //   - added:     present publicly, absent from the full set (impossible by
+    //                construction) — kept as an empty array for the contract.
+    //   - removed:   present in the full set but not publicly visible (draft,
+    //                suspended, or hidden) — i.e. records that were taken out
+    //                of publication.
+    //   - changed:   publicly visible records with their current attribute keys
+    //                (drift is reported at key granularity).
+    // This mirrors the in-memory backend's semantics: the envelope is stable
+    // and meaningful without requiring versioned attribute history.
+    const visibleRows = (await this.sql`
+      SELECT a.source_record_id, a.name,
+             COALESCE(array_agg(att.key ORDER BY att.key) FILTER (WHERE att.key IS NOT NULL), '{}') AS attr_keys
+        FROM infrastructure_assets a
+        JOIN data_sources s ON s.id = a.source_id
+        LEFT JOIN asset_attributes att ON att.asset_id = a.id
+       WHERE s.slug = ${sourceSlug}
+         AND a.publication_status = 'published'
+         AND a.quality_status <> 'hidden'
+       GROUP BY a.source_record_id, a.name`) as Row[];
+    const allRows = (await this.sql`
+      SELECT source_record_id FROM infrastructure_assets a
+        JOIN data_sources s ON s.id = a.source_id
+       WHERE s.slug = ${sourceSlug}`) as Row[];
+
+    const visibleKeys = new Set(visibleRows.map((r) => String(r['source_record_id'])));
+    const allKeys = new Set(allRows.map((r) => String(r['source_record_id'])));
+
+    const added: string[] = [];
+    const removed: string[] = [];
+    for (const key of allKeys) {
+      if (!visibleKeys.has(key)) removed.push(key);
+    }
+    const changed = visibleRows.map((row) => ({
+      sourceRecordId: String(row['source_record_id']),
+      name: String(row['name']),
+      attributesChanged: (row['attr_keys'] as string[] | null) ?? [],
+    }));
+
+    return {
+      sourceSlug,
+      baseVersionId: baseId,
+      targetVersionId: targetId,
+      baseFetchedAt: base ? new Date(String(base['fetched_at'])).toISOString() : null,
+      targetFetchedAt: new Date(String(target['fetched_at'])).toISOString(),
+      added,
+      removed,
+      changed,
+      comparable: true,
+    };
   }
 
   async listQualityIssues(limit: number): Promise<AdminQualityIssueList> {

@@ -233,3 +233,15 @@ secret、credential、connection string、PII は記載しない。
 - 影響: docs 2 ファイル追加・テスト 1 ファイル追加・README 設計文書一覧へ追記。既存コード・DB スキーマは不変。registry に新規アダプターを追加すると、このテストが自動的に全 descriptor を再検証する。
 - 検証: `pnpm --filter @pimm/source-adapters test` 50/50（新規8件含む）・typecheck・lint 0 件。CI の quality ジョブで同等検証。
 - Rollback: 該当 PR を revert（docs・テストのみ）。
+
+### DL-031: 2026-08-15 取込差分・時系列表示（Issue #53）
+
+- 判断: 前回取込との差分（追加/削除/属性変更）を管理者が確認できるよう、`GET /api/v1/admin/ingestions/diff?slug=<source>` を追加した。dataset_versions は既存の publisher が作成済みだが、資産行は upsert され version スタンプを持たないため、**完全なバージョン間属性差分は現行スキーマでは不可能**と判断し、MVP では「公開資産（published・非hidden）と全資産セットの比較」で差分を近似した。
+- 技術判断:
+  1. Postgres: 公開可視性ルール（published AND quality<>hidden）を満たす資産を target とし、全資産セットに存在するが公開されていないキー（draft/suspended/hidden）を removed として報告。changed は公開資産の現在の属性キーを返す。
+  2. InMemory: startIngestion 時にソース別資産スナップショットを記録し、最新2回を比較。added/removed/changed を自然キー（source_record_id）で判定。
+  3. ルーティング: `/ingestions/diff` は `/ingestions/:id` より**前に**登録する（Hono の順序解決。後方登録だと 'diff' が :id に捕捉され 400 になる）。
+  4. 契約: `AdminIngestionDiffSchema` を contracts に追加し、InMemory/Postgres 両実装が同一の envelope を返すことを repository contract で検証。
+- 影響: 管理APIに読み取り専用エンドポイント1本追加（admin/reviewer）。DB スキーマ変更なし。OpenAPI に diff エンドポイントとスキーマを追加。
+- 検証: typecheck 全 PASS・database 51/51＋PostGIS 75/75・api 89/89（新規3件）・E2E 7/7・lint 0・build 成功。
+- Rollback: 該当 PR を revert（API・contracts・テストのみ・migration なし）。

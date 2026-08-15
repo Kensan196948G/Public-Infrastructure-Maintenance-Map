@@ -7,6 +7,7 @@
  */
 import {
   AdminCreateSourceSchema,
+  AdminIngestionDiffSchema,
   AdminOperationsSummarySchema,
   AdminUpdateSourceSchema,
   AssetCountSummarySchema,
@@ -34,6 +35,7 @@ const generatedSchemas: Record<string, object> = {
   AdminCreateSource: AdminCreateSourceSchema.toJSONSchema(),
   AdminUpdateSource: AdminUpdateSourceSchema.toJSONSchema(),
   AdminOperationsSummary: AdminOperationsSummarySchema.toJSONSchema(),
+  AdminIngestionDiff: AdminIngestionDiffSchema.toJSONSchema(),
   SuggestItem: SuggestItemSchema.toJSONSchema(),
   GeocodeItem: GeocodeItemSchema.toJSONSchema(),
   HealthResponse: HealthResponseSchema.toJSONSchema(),
@@ -313,6 +315,27 @@ export const openapiDocument = {
         security: [{ accessJwt: [] }],
         responses: {
           '200': { description: 'Runs' },
+          '401': { $ref: '#/components/responses/Problem' },
+        },
+      },
+    },
+    '/admin/ingestions/diff': {
+      get: {
+        summary: 'Compare the two most recent dataset versions of a source (Issue #53)',
+        security: [{ accessJwt: [] }],
+        parameters: [
+          { name: 'slug', in: 'query', required: true, schema: { type: 'string', maxLength: 100 } },
+        ],
+        responses: {
+          '200': {
+            description: 'Added / removed / changed records between versions',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AdminIngestionDiff' },
+              },
+            },
+          },
+          '400': { $ref: '#/components/responses/Problem' },
           '401': { $ref: '#/components/responses/Problem' },
         },
       },

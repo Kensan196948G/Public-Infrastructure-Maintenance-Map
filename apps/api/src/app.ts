@@ -7,6 +7,7 @@ import { cors } from 'hono/cors';
 import type { ErrorCode, ProblemDetails } from '@pimm/contracts';
 import {
   AdminCreateSourceSchema,
+  AdminIngestionDiffListQuerySchema,
   AdminIngestionListQuerySchema,
   AdminQualityIssueListQuerySchema,
   AdminResolveQualityIssueSchema,
@@ -433,6 +434,19 @@ export function createApp(repo: AssetRepository, config: ApiConfig): Hono<AppCon
       });
     }
     return c.json(await repo.listIngestions(parsed.data.limit));
+  });
+
+  // Ingestion diff (Issue #53): compare the two most recent dataset versions
+  // of a source by natural key. Reviewer may view (read-only). Must be
+  // registered before /ingestions/:id so 'diff' is not captured by :id.
+  admin.get('/ingestions/diff', async (c) => {
+    const parsed = AdminIngestionDiffListQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return fail(c, 'VALIDATION_ERROR', 'slug を指定してください', {
+        errors: zodIssuesToErrors(parsed.error),
+      });
+    }
+    return c.json(await repo.getIngestionDiff(parsed.data.slug));
   });
 
   admin.get('/ingestions/:id', async (c) => {

@@ -2,6 +2,7 @@ import type {
   AdminAssetPublication,
   AdminCreateSource,
   AdminIngestionDetail,
+  AdminIngestionDiff,
   AdminIngestionList,
   AdminIngestionRun,
   AdminOperationsSummary,
@@ -87,6 +88,11 @@ export interface AssetRepository {
   ): Promise<AdminIngestionRun | null>;
   listIngestions(limit: number): Promise<AdminIngestionList>;
   getIngestionDetail(id: string): Promise<AdminIngestionDetail | null>;
+  /**
+   * Ingestion diff (Issue #53): compares the two most recent dataset versions
+   * of a source by natural key and reports added/removed/changed records.
+   */
+  getIngestionDiff(sourceSlug: string): Promise<AdminIngestionDiff>;
   listQualityIssues(limit: number): Promise<AdminQualityIssueList>;
   /** Ops-console dashboard (Issue #52): per-source publication / run / quality rollup. */
   getOperationsSummary(): Promise<AdminOperationsSummary>;

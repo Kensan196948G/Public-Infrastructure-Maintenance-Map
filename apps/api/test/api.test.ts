@@ -523,6 +523,35 @@ describe('admin API (Issue #4 / FR-13 / FR-14)', () => {
   });
 });
 
+describe('ingestion diff API (Issue #53)', () => {
+  it('rejects unauthenticated access', async () => {
+    const res = await get('/api/v1/admin/ingestions/diff?slug=sample-bridges');
+    expect(res.status).toBe(401);
+  });
+
+  it('returns a diff envelope for a source (admin)', async () => {
+    const res = await get('/api/v1/admin/ingestions/diff?slug=sample-bridges', adminHeaders);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      sourceSlug: string;
+      comparable: boolean;
+      added: string[];
+      removed: string[];
+      changed: { sourceRecordId: string; name: string; attributesChanged: string[] }[];
+    };
+    expect(body.sourceSlug).toBe('sample-bridges');
+    expect(typeof body.comparable).toBe('boolean');
+    expect(Array.isArray(body.added)).toBe(true);
+    expect(Array.isArray(body.removed)).toBe(true);
+    expect(Array.isArray(body.changed)).toBe(true);
+  });
+
+  it('validates the slug parameter', async () => {
+    const res = await get('/api/v1/admin/ingestions/diff', adminHeaders);
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('security', () => {
   it('sets security headers on every response', async () => {
     const res = await get('/api/v1/health');
