@@ -225,3 +225,22 @@ secret、credential、connection string、PII は記載しない。
   4. Cloudflare Access 実認証のブラウザ E2E は SSO 対話操作が必要。Access アプリ `pimm-admin-api`（ポリシー `pimm-admins`）の存在は API で確認済み・未認証拒否 302 はスモークで確認済み
 - 検証: 本番スモーク 9/9 PASS・API デプロイ成功・Access アプリ構成確認。
 - Rollback: API は `wrangler rollback --env production`。監視ワークフローは無効化または PR revert。
+
+### DL-027: 2026-08-15 監査イベント基盤＋フィードバック受付（Issue #48/#54）
+
+- 判断: 監査証跡を「取込履歴・品質issue」に依存する現在形から、専用の append-only 監査イベントテーブル（`audit_events`）と SHA-256 ハッシュチェーンへ昇格した。管理操作（ソース登録/更新・取込開始・品質解決・個別/ソース一括公開停止・フィードバック受付・フィードバック解決）を自動記録し、`GET /api/v1/admin/audit-events` は最新N件＋ウィンドウ内チェーン整合性を返す。あわせて一般利用者からのフィードバックを `POST /api/v1/feedback`（レート制限・1000字上限）で受付し、管理側で品質issue化・却下を処理できる `feedback_reports` テーブルと `/admin/feedback-reports` API を追加した。
+- 技術判断:
+  1. ハッシュは Web Crypto `crypto.subtle`（Workers/ブラウザ/Node 19+ 共通）で計算し、`occurredAt`/`id` はハッシュ対象外（リポジトリが付与するため再現不能）。ペイロードは `stableStringify`（キーソート）で正規化し、PostgreSQL jsonb のキー順序非保持による書込/検証時のダイジェスト不一致を防いだ。
+  2. チェーンは「ウィンドウ内整合性」（各イベントの eventHash が自身ペイロードのダイジェスト＋隣接リンク一致）で検証し、最新N件スライスでも判定可能にした（完全チェーン先頭 genesis 検証は `verifyFullAuditChain` として分離）。
+  3. Postgres の新規書込はインスタンスが保持する直前 event_hash へ連結し、同一ミリ秒タイムスタンプでもチェーンが壊れないようにした（`seq bigserial` を挿入順の正本として一覧・初期チェーン解決に使用）。複数インスタンス並行書込時の直列化は既知制約として記録。
+  4. append-only は DB トリガー（UPDATE/DELETE を RAISE EXCEPTION）で強制し、監査ログの不変性を SQL 経由の事故からも保護した。
+  5. フィードバックは匿名・小ペイロードに限定し、公開APIにスパム対策としてレート制限（既存）と Zod 検証・長さ上限を適用。Turnstile 等の外部依存は MVP では導入せず将来バックログとした。
+- 影響: DB に migration 0003（audit_events）・0004（feedback_reports）を追加。公開APIに `POST /feedback`、管理APIに `GET /admin/audit-events`・`GET /admin/feedback-reports`・`POST /admin/feedback-reports/:id/resolve` を追加。Web は監査ログダイアログに監査イベント＋フィードバック管理を追加し、FeedbackDialog は API 送信＋GitHub Issue 下書き導線を併存。
+- 検証: typecheck 全 PASS・contracts 46/46・database 51/51＋PostGIS integration 21/21（監査・フィードバック契約含む）・web 130/130・source-adapters 44/44・api 93/93・E2E 7/7（フィードバック送信・監査イベント表示含む）・lint 0・build 成功。CI の PostGIS integration / publish integration / E2E で同等検証。
+- Rollback: 該当 PR を revert（migration 0003/0004 は forward-only のため、適用済み環境ではダウングレード不可。削除する場合は新 migration で対応）。
+
+### DL-028: E2E 実行環境のポート競合回避（E2E_API_PORT / VITE_DEV_API_TARGET）
+
+- 判断: Playwright E2E の dev server は API 8787・Web 5173 を固定していたが、本開発機では別プロジェクト（Open BIM 情報基盤等）が同ポートを使用しており E2E が誤サーバへ接続して失敗した。`playwright.config.ts` を `E2E_API_PORT` / `E2E_WEB_PORT` で上書き可能にし、Vite dev proxy のターゲットも `VITE_DEV_API_TARGET` で指定できるようにした（node.ts の `PORT` 対応・DL-025 と整合）。あわせて、検証用 `apps/web/.env.local`（`VITE_API_BASE_URL` が LAN URL の残骸）が dev バンドルへ混入する事故（DL-014 の再発パターン）を確認し、E2E 実行時は当該ファイルを一時退避して検証した。当該ファイルはユーザー状態として保護し、削除・コミットはしない。
+- 影響: 設定ファイルのみ。CI（GitHub Actions）は既定ポートを使用するため影響なし。
+- Rollback: 該当コミット revert（E2E ポート変数と vite proxy の既定値は従来どおり）。

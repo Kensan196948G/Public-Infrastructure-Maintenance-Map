@@ -1,8 +1,21 @@
 # 📒 改善台帳（Improvement Ledger）
 
 > ラウンド: 2026-08-12 総合評価・改善（評価日基準: origin/main `45686dc`）
+> 追記: 2026-08-15 監査イベント基盤＋フィードバック受付（Issue #48/#54、作業ブランチ `feature/audit-feedback-mvp`）
 
-## ✅ 実装済み（本ラウンド）
+## ✅ 実装済み（2026-08-15 ラウンド）
+
+| ID | 分類 | 改善 | 状態 | 検証証跡 | 影響範囲 |
+| --- | --- | --- | --- | --- | --- |
+| IMP-023 | 監査 | append-only 監査イベントテーブル（`audit_events`）＋ UPDATE/DELETE 禁止トリガー | ✅ 実装・テスト済み | migration 0003、PostGIS integration で append-only と契約を検証 | DB・管理API・監査ログ画面 |
+| IMP-024 | 監査 | SHA-256 ハッシュチェーン（Web Crypto・キーソート正規化・ウィンドウ内整合性検証） | ✅ 実装・テスト済み | contracts 46/46（チェーン改ざん・欠落検知 5 件）、repository contract（InMemory/Postgres 共通） | contracts・database |
+| IMP-025 | 監査 | `GET /api/v1/admin/audit-events`（最新N件＋整合性フラグ）と監査ログ画面の監査イベント表示 | ✅ 実装・テスト済み | api 93/93・web 130/130・E2E 7/7 | API・Web UI |
+| IMP-026 | フィードバック | `POST /api/v1/feedback`（レート制限・1000字上限）で一般利用者の報告を受付 | ✅ 実装・テスト済み | api 93/93（正常 202・不正 400）・E2E で送信→受付表示 | 公開API・FeedbackDialog |
+| IMP-027 | フィードバック | `feedback_reports` テーブル＋`/admin/feedback-reports`（一覧・品質issue化/却下） | ✅ 実装・テスト済み | migration 0004、repository contract、api 93/93、監査ログ画面のフィードバック管理 | DB・管理API・Web UI |
+| IMP-028 | ダミーデータ | サンプルモードへ監査イベント（正しいハッシュチェーン）とフィードバック報告（open/converted/dismissed）をシード | ✅ 実装・テスト済み | seed 44/44（チェーン整合・3ステータス検証） | source-adapters seed |
+| IMP-029 | CI/E2E | Playwright dev server のポートを `E2E_API_PORT`/`E2E_WEB_PORT` で上書き可能にし、Vite proxy ターゲットを `VITE_DEV_API_TARGET` で指定可能に | ✅ 実装・E2E 7/7 PASS | ローカル E2E（別ポート）で全 PASS。CI は既定ポートのため影響なし | playwright.config・vite.config |
+
+## ✅ 実装済み（2026-08-12 ラウンド）
 
 | ID | 分類 | 改善 | 状態 | 検証証跡 | 影響範囲 |
 | --- | --- | --- | --- | --- | --- |

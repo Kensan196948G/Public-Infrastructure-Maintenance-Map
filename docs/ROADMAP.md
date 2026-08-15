@@ -14,9 +14,9 @@
 
 - [ ] Cloudflare Access 実認証での管理 E2E（Issue #38 close）
 - [ ] W05 残 44 県投入（47 県完了・件数突合）
-- [ ] 監査ハッシュチェーン・append-only 監査（Issue #48）
+- [x] 監査ハッシュチェーン・append-only 監査（Issue #48 基盤実装済み・2026-08-15）
 - [ ] 運用コンソール完成（Issue #52: dry-run→承認→publish フロー）
-- [ ] フィードバック品質 issue 化（Issue #54）
+- [x] フィードバック品質 issue 化（Issue #54 基盤実装済み・2026-08-15。Turnstile 等スパム対策は将来バックログ）
 - [ ] アダプター追加基盤（Issue #55）
 
 ## Phase 2 — 競合 80% 代替（6〜12 か月）
