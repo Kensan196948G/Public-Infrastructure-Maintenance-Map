@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AttributionControl, Map as MapLibreMap, NavigationControl } from 'maplibre-gl';
 import type { GeoJSONSource, MapMouseEvent, StyleSpecification } from 'maplibre-gl';
 import type { AssetSummary, AssetType, BBox } from '@pimm/contracts';
@@ -102,6 +102,10 @@ export function MapView({
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  // WebGL 非対応環境（GPU なし・ヘッドレス・ブラウザ設定）では maplibre-gl の
+  // コンストラクタが例外を投げる。捕捉しないと React ツリー全体がアンマウント
+  // され、検索・一覧・フィルタまで白画面になるため、地図だけフォールバック表示する。
+  const [initFailed, setInitFailed] = useState(false);
   const itemsRef = useRef<readonly AssetSummary[]>(items);
   const selectedIdRef = useRef<string | null>(selectedId);
   const onViewportChangeRef = useRef(onViewportChange);
@@ -117,13 +121,21 @@ export function MapView({
   // Create the map once.
   useEffect(() => {
     if (!containerRef.current) return;
-    const map = new MapLibreMap({
-      container: containerRef.current,
-      style: BASE_STYLE,
-      center,
-      zoom,
-      attributionControl: false,
-    });
+    let map: MapLibreMap;
+    try {
+      map = new MapLibreMap({
+        container: containerRef.current,
+        style: BASE_STYLE,
+        center,
+        zoom,
+        attributionControl: false,
+      });
+    } catch (error) {
+      // WebGL を利用できない環境。地図機能のみ無効化し、他機能は維持する。
+      console.warn('地図の初期化に失敗しました（WebGL 非対応環境の可能性）', error);
+      setInitFailed(true);
+      return;
+    }
     mapRef.current = map;
 
     map.addControl(new NavigationControl({ visualizePitch: false }), 'top-left');
@@ -348,6 +360,17 @@ export function MapView({
     resetSeenRef.current = resetNonce;
     map.easeTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, duration: 700 });
   }, [resetNonce]);
+
+  if (initFailed) {
+    return (
+      <div className="map-canvas map-fallback" role="region" aria-label="地図">
+        <p className="map-fallback-message">
+          🗺️ この環境では地図を表示できません（WebGL
+          が無効です）。検索・一覧・絞り込みは引き続き利用できます。
+        </p>
+      </div>
+    );
+  }
 
   return <div ref={containerRef} className="map-canvas" aria-label="地図" role="application" />;
 }

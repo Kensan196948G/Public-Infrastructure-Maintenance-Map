@@ -75,7 +75,11 @@ function csvEmails(value: string | undefined): string[] {
 export function configFromEnv(env: EnvBindings): ApiConfig {
   const parsedLimit = Number(env.RATE_LIMIT_PER_MINUTE ?? '120');
   const config: ApiConfig = {
-    allowedOrigin: env.ALLOWED_ORIGIN ?? 'http://localhost:5173',
+    // Empty-string ALLOWED_ORIGIN must not disable CORS: hono/cors with
+    // origin:'' omits Access-Control-Allow-Origin, silently breaking every
+    // cross-origin web client. Fall back to the local-dev default so a blank
+    // env value fails safe instead of dropping the header (DL-033 follow-up).
+    allowedOrigin: (env.ALLOWED_ORIGIN ?? '').trim() || 'http://localhost:5173',
     rateLimitPerMinute: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 120,
     version: '0.1.0',
     requireDatabaseUrl: envFlag(env.REQUIRE_DATABASE_URL),
