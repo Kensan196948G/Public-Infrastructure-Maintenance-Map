@@ -1,0 +1,30 @@
+[Unit]
+Description=Public Infrastructure Maintenance Map API (local Postgres+PostGIS backend)
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=kensan
+Group=kensan
+WorkingDirectory=/home/kensan/Projects/Mirai-DX-Project/Public-Infrastructure-Maintenance-Map/apps/api
+EnvironmentFile=/home/kensan/Projects/Mirai-DX-Project/Public-Infrastructure-Maintenance-Map/apps/api/.env
+Environment=PORT=18802
+Environment=PATH=/home/kensan/.npm-global/bin:/home/kensan/.nvm/versions/node/v22.22.3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/kensan/Projects/Mirai-DX-Project/Public-Infrastructure-Maintenance-Map/apps/api/node_modules/.bin/tsx src/node.ts
+Restart=on-failure
+RestartSec=5
+
+# geocode（GSI ジオコーダ）と Cron 取込は外部 HTTPS 通信が必須のため、
+# 2026-08-31 DL-032 で IPAddressDeny=any（外部全遮断）を撤去。
+# 外部からの侵入防御はシステムファイアウォール（ufw active）と
+# cloudflared トンネル（受信経路）が担う。
+# NoNewPrivileges / PrivateTmp / ProtectSystem は維持。
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/kensan/Projects/Mirai-DX-Project/Public-Infrastructure-Maintenance-Map/apps/api
+
+[Install]
+WantedBy=multi-user.target

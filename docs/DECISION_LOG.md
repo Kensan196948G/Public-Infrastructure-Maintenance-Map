@@ -275,3 +275,14 @@ secret、credential、connection string、PII は記載しない。
 - 影響: 本番データの一部喪失（完全復旧不可）。公開 URL・API は復旧後も 200 で稼働。監査証跡（audit_events）は失われたため、監査ログの継続性は新規起点となる。
 - 検証: ガード単体テスト（pimm 拒否 / pimm_test 許可 / undefined 許可）を実行し動作確認。統合テスト・単体テスト・E2E はガード追加後も全て成功。
 - Rollback: 該当テストのガード削除は不可（安全性のため恒久適用）。データ復旧は pg_dump スナップショットから。
+
+### DL-033: 2026-08-31 本番 API の geocode 502（systemd IPAddressDeny=any による外部通信遮断）
+
+- 判断: 本番 API（pimm-api.service / pimm-api-mvp.service）が `GET /api/v1/geocode` で 502（SOURCE_UNAVAILABLE）を返す問題を調査した結果、systemd ユニットに `IPAddressAllow=127.0.0.1/8 ::1/128` と `IPAddressDeny=any` が設定されており、**ローカルホスト宛以外の全送信（GSI ジオコーダへの HTTPS 等）が BPF で遮断**されていることが根本原因と判明。同一設定は他プロジェクト（pwsm-api・cci-api 等）にも存在する「ローカル DB 専用 API」テンプレートだが、本プロジェクトの API は設計上 GSI ジオコーダ（住所検索）と Cron 取込（外部データソース取得）に外部通信が必要なため、この制限は設計仕様（README「geocode 本番修正」・ACCESS_INVENTORY「GSI ジオコーダ稼働」）と矛盾する回帰である。
+- 再現条件: 本番 API に `GET /api/v1/geocode?q=<住所>` を送る（常に 502、5 秒タイムアウト）。Node 単体・CI 環境では GSI へ 200 で到達可能なことを確認済み（systemd のネットワーク名前空間制限が原因）。
+- 証拠: `curl http://localhost:18802/api/v1/geocode?q=東京` → 502。`curl https://msearch.gsi.go.jp/...`（直接）→ 200。`systemctl show pimm-api -p IPAddressDeny` → `IPAddressDeny=any`。
+- 修正: `/etc/systemd/system/pimm-api.service`・`pimm-api-mvp.service` の `IPAddressAllow` / `IPAddressDeny` 行を撤去し、`systemctl daemon-reload && systemctl restart pimm-api pimm-api-mvp` を実行する。NoNewPrivileges / PrivateTmp / ProtectSystem は維持（外部からの侵入防御はシステムファイアウォール ufw と cloudflared トンネルが担う）。修正後ユニットは `infra/systemd/` に管理化済み。
+- 制約: **本実行環境では `/etc` が read-only マウントのため systemd ユニットを直接変更できない**。本番設定変更（セキュリティ境界の緩和）は人の承認を要するため、修正はユーザー／管理者権限のある環境で実施する（手順は上記）。実施後、`pnpm smoke:cloudflare`（geocode はスモーク対象外のため、`curl /api/v1/geocode` で直接確認）と Cron 取込の疎通を検証する。
+- 影響: geocode（住所検索）が本番で利用不可（P2）。Cron 取込も外部データソースへ到達できないため、毎時スケジュール取込が実質停止している可能性がある（CLI 取込・GitHub Actions 週次は影響なし）。
+- 検証: 修正前の状態を記録済み。修正後は本ファイルへ追記。
+- Rollback: 撤去した 2 行を戻して `daemon-reload && restart`（バックアップ: `.backup/pimm-api.service.bak-20260831` / `pimm-api-mvp.service.bak-20260831`）。

@@ -1,0 +1,25 @@
+[Unit]
+Description=Public Infrastructure Maintenance Map API MVP (fixture mode, no DB)
+After=network.target
+
+[Service]
+Type=simple
+User=kensan
+Group=kensan
+WorkingDirectory=/home/kensan/Projects/Mirai-DX-Project/Public-Infrastructure-Maintenance-Map/apps/api
+EnvironmentFile=/home/kensan/Projects/Mirai-DX-Project/Public-Infrastructure-Maintenance-Map/apps/api/.env.mvp
+Environment=PORT=18807
+Environment=PATH=/home/kensan/.npm-global/bin:/home/kensan/.nvm/versions/node/v22.22.3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/kensan/Projects/Mirai-DX-Project/Public-Infrastructure-Maintenance-Map/apps/api/node_modules/.bin/tsx src/node.ts
+Restart=on-failure
+RestartSec=5
+
+# 本番 API と同様、geocode（GSI）が外部 HTTPS 通信を必要とするため
+# IPAddressDeny=any は撤去（2026-08-31 DL-032）。
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/kensan/Projects/Mirai-DX-Project/Public-Infrastructure-Maintenance-Map/apps/api
+
+[Install]
+WantedBy=multi-user.target
