@@ -264,3 +264,14 @@ secret、credential、connection string、PII は記載しない。
 - 影響: 管理APIに読み取り専用エンドポイント1本追加（admin/reviewer）。DB スキーマ変更なし。OpenAPI に diff エンドポイントとスキーマを追加。
 - 検証: typecheck 全 PASS・database 51/51＋PostGIS 75/75・api 89/89（新規3件）・E2E 7/7・lint 0・build 成功。
 - Rollback: 該当 PR を revert（API・contracts・テストのみ・migration なし）。
+
+### DL-032: 2026-08-31 統合テストによる本番DBデータ破壊と復旧・再発防止
+
+- 判断: Deep Debug Round 1 で PostGIS 統合テスト（`packages/database/test/postgres.integration.test.ts` / `publisher.integration.test.ts`）を実行する際、`PIMM_TEST_DATABASE_URL` に誤って本番の `$DATABASE_URL`（ローカル Postgres 16.14 / pimm）を指定した。両テストは冒頭で `TRUNCATE ... CASCADE` を実行するため、本番データ（infrastructure_assets 8,011件・data_sources 8件・quality_issues 4,428件 等）が破壊された。
+- 再現条件: `PIMM_TEST_DATABASE_URL=<本番URL>` の状態で `pnpm --filter @pimm/database test`（統合フラグ有効）を実行すると、TRUNCATE により本番 DB が消える。
+- 原因: テストが「接続先 DB がテスト用である」ことを検証していなかった。CI では `pimm_test`（専用 PostGIS サービス）を指定するため発症しないが、ローカル実行時にユーザー/エージェントが誤って本番 URL を渡すと即時破壊される。
+- 復旧: 破壊後、本番 DB を TRUNCATE でクリーンにし、登録済み 8 ソース（sample-bridges / sample-rivers / sample-facilities / facility-osaka-park / facility-osaka-toilet / bridge-kumamoto / road-n13 / port-c02）を `ingest --publish` で再取り込みして復旧。復旧後: assets 6,989・sources 8・quality_issues 3,396・migrations 4（0003/0004 は今回適用）。**破壊前 8,011 件との差分（約1,022件）は元データのソース別内訳が不明のため、完全一致は保証できない**（監査イベント・フィードバックは append-only のため復旧不能）。復旧後スナップショットを `.backup/pimm-restored-20260831-000043.dump` に保存。
+- 再発防止: `packages/database/test/test-db-guard.ts` を新設し、統合テスト2本の冒頭で `assertTestDatabaseName()` を実行。DB 名に `test` を含まない URL（例: `pimm`）を拒否し、`pimm_test` 等のみ許可する。これにより本番 DB への誤 TRUNCATE を構造的に防ぐ。加えて、本番 DB のバックアップを定期取得する仕組みを追加（後述の運用改善）。
+- 影響: 本番データの一部喪失（完全復旧不可）。公開 URL・API は復旧後も 200 で稼働。監査証跡（audit_events）は失われたため、監査ログの継続性は新規起点となる。
+- 検証: ガード単体テスト（pimm 拒否 / pimm_test 許可 / undefined 許可）を実行し動作確認。統合テスト・単体テスト・E2E はガード追加後も全て成功。
+- Rollback: 該当テストのガード削除は不可（安全性のため恒久適用）。データ復旧は pg_dump スナップショットから。

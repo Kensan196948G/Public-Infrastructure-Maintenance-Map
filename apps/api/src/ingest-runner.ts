@@ -53,13 +53,19 @@ export interface PublishIngestionInput<Raw> {
   databaseUrl: string;
   triggeredBy: string;
   correlationId: string;
+  /**
+   * Node-only escape hatch (CLI): a postgres.js sql tag for non-Neon hosts.
+   * Never set from the Workers scheduler — the Worker bundle cannot use the
+   * TCP driver, so scheduled publish keeps Neon's HTTP driver.
+   */
+  sqlOverride?: unknown;
 }
 
 export async function publishIngestion<Raw>(input: PublishIngestionInput<Raw>): Promise<{
   summary: Awaited<ReturnType<PostgresAssetPublisher['publish']>>;
   droppedCount: number;
 }> {
-  const publisher = new PostgresAssetPublisher(input.databaseUrl);
+  const publisher = new PostgresAssetPublisher(input.databaseUrl, input.sqlOverride as never);
   const sourceId = await publisher.ensureDataSource(input.adapter.descriptor);
   const [accepted, quarantined] = await Promise.all([
     toPublishableAssets(input.result.accepted),

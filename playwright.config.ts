@@ -42,12 +42,17 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: `pnpm --dir apps/web exec vite --host 127.0.0.1 --port ${webPort} --strictPort`,
+      command: `pnpm --dir apps/web exec vite --mode test --host 127.0.0.1 --port ${webPort} --strictPort`,
       url: `http://127.0.0.1:${webPort}`,
       env: {
         ...process.env,
         // Point the dev proxy at the E2E API port (vite.config reads this).
         VITE_DEV_API_TARGET: `http://127.0.0.1:${apiPort}`,
+        // Vite loads .env.local (local overrides) in every mode, so a stale
+        // local VITE_API_BASE_URL would silently send E2E traffic to a dead
+        // host. Explicitly pin the base to the dev proxy, which vite.config
+        // points at VITE_DEV_API_TARGET above (DL-014 lesson).
+        VITE_API_BASE_URL: '/api/v1',
       },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

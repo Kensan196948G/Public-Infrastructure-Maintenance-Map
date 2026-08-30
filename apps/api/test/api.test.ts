@@ -665,7 +665,10 @@ describe('demo admin mode (pimm-mvp, env-gated)', () => {
 
   it('ignores the demo header when demo mode is disabled', async () => {
     const seed = await buildSampleSeed();
-    const normalApp = createApp(new InMemoryAssetRepository(seed), CONFIG) as unknown as Hono<never>;
+    const normalApp = createApp(
+      new InMemoryAssetRepository(seed),
+      CONFIG,
+    ) as unknown as Hono<never>;
     const res = await normalApp.request('http://localhost/api/v1/admin/operations', {
       headers: { 'X-Demo-Admin-Email': 'admin@example.com' },
     });

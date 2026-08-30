@@ -7,6 +7,7 @@
  * the run to Neon: data_sources / dataset_versions / infrastructure_assets /
  * asset_attributes / quality_issues / ingestion_runs (Issue #5).
  */
+import postgres from 'postgres';
 import { getAdapterBySlug, listAdapters } from '@pimm/source-adapters/registry';
 import { ingestSource, publishIngestion } from './ingest-runner.js';
 
@@ -14,7 +15,6 @@ const args = process.argv.slice(2);
 const sourceIndex = args.indexOf('--source');
 const slug = sourceIndex >= 0 ? args[sourceIndex + 1] : undefined;
 const shouldPublish = args.includes('--publish');
-
 if (!slug) {
   console.error('Usage: pnpm ingest --source <slug> [--publish]');
   console.error(
@@ -36,6 +36,14 @@ const databaseUrl = process.env['DATABASE_URL'];
 if (shouldPublish && !databaseUrl) {
   console.error('❌ --publish には DATABASE_URL 環境変数が必要です');
   process.exit(1);
+}
+
+// Node-only: non-Neon hosts (local Postgres) use the postgres.js TCP driver.
+// The CLI runs on Node, so it may inject a sql tag; the Workers scheduler
+// must not (no raw TCP sockets in Workers).
+let sqlOverride: unknown;
+if (databaseUrl && !/neon\.tech(:\d+)?$/.test(new URL(databaseUrl).host)) {
+  sqlOverride = postgres(databaseUrl, { max: 5 });
 }
 
 async function main(): Promise<void> {
@@ -60,6 +68,7 @@ async function main(): Promise<void> {
         databaseUrl,
         triggeredBy: 'cli',
         correlationId: crypto.randomUUID(),
+        sqlOverride,
       });
     }
     process.exit(2);
@@ -83,6 +92,7 @@ async function main(): Promise<void> {
       databaseUrl,
       triggeredBy: 'cli',
       correlationId: crypto.randomUUID(),
+      sqlOverride,
     });
 
     console.log(

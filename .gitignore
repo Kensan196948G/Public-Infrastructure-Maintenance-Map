@@ -35,3 +35,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# Local DB restore snapshots (never commit)
+.backup/
