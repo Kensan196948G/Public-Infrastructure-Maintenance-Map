@@ -3,7 +3,9 @@ import { spawnSync } from 'node:child_process';
 import { resolve, resolveNs } from 'node:dns/promises';
 
 const WEB_HOST = 'pimm.mirai-dx-platform.com';
-const API_HOST = 'api.pimm.mirai-dx-platform.com';
+// 本番 API は cloudflared トンネル経由の pimm-api.* で公開されている
+// （Workers 用の旧ホスト api.pimm.* は DNS に存在しないため監視対象を更新）。
+const API_HOST = 'pimm-api.mirai-dx-platform.com';
 const WEB_URL = `https://${WEB_HOST}`;
 const API_BASE_URL = `https://${API_HOST}/api/v1`;
 const ADMIN_PROBE_URL = `${API_BASE_URL}/admin/ingestions?limit=1`;

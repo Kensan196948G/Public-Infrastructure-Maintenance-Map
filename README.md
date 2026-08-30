@@ -212,7 +212,7 @@ REVIEWER_EMAILS=reviewer@example.com
 ```
 
 - `VITE_API_BASE_URL`: Web と API を別オリジン（別ドメインの Cloudflare Pages／Workers 等）で配信する場合に、API のベース URL を指定します。同一オリジン配信なら未設定でよく、既定の `/api/v1` が使われます。ビルド時（`vite build`）に値がバンドルへ焼き込まれるため、デプロイ環境ごとに設定します。
-- 本番 Cloudflare では WebUI を `https://pimm.mirai-dx-platform.com`、API を `https://api.pimm.mirai-dx-platform.com/api/v1` として扱います。DNS / custom domain / route 変更は [Cloudflare Domain Approval PR](docs/CLOUDFLARE_DOMAIN_APPROVAL.md) の承認範囲内で実行します。
+- 本番では WebUI を `https://pimm.mirai-dx-platform.com`（Cloudflare Pages）、API を `https://pimm-api.mirai-dx-platform.com/api/v1`（cloudflared トンネル → ローカル Node API）として配信しています。※旧 Workers 用ホスト `api.pimm.mirai-dx-platform.com` は DNS に存在しないため使用しない（2026-08-31 DL-032 で監視・Web を実ホストへ修正）。DNS / custom domain / route 変更は [Cloudflare Domain Approval PR](docs/CLOUDFLARE_DOMAIN_APPROVAL.md) の承認範囲内で実行します。
 - `ADMIN_EMAILS` / `REVIEWER_EMAILS`: 認証済みメールアドレスに対する管理APIのサーバ側許可リストです。ロールはリクエストヘッダではなく、この設定からのみ解決します。
 - 🔐 `CLOUDFLARE_ACCESS_AUD` / `CLOUDFLARE_ACCESS_TEAM_DOMAIN`: **いずれかを設定すると管理APIのJWT検証が有効化**され、Worker が `Cf-Access-Jwt-Assertion` の署名・`aud`・`iss`・有効期限を自前で検証します。この状態では利用者IDは**署名済みクレームからのみ**取得し、詐称可能な `CF-Access-Authenticated-User-Email` ヘッダは無視します。両方未設定のローカル開発時のみ、ヘッダによる簡易識別へフォールバックします。
 - 🛡️ `REQUIRE_ACCESS_JWT=true`: AUD / team domain が未設定でも強制を有効にし、設定不備時は管理APIを 500 で**フェイルクローズ**させます。`wrangler.toml` の既定 `[vars]` と `[env.production.vars]` の両方で宣言済みです。
@@ -273,7 +273,7 @@ flowchart LR
 
 > 📌 **2026-08-12 実測（承認後フォローアップ）**: Worker `pimm-api-production`（version `047bfd6a`）が custom domain で稼働。`/health`・`/health/ready`（DB readiness）・`/assets/summary`・管理API未認証拒否（302）を確認。Pages `pimm-web` の再配信は API トークンの Pages:Edit 権限不足で待機中（Issue #77）。 |
 
-> ⚠️ **未解決の運用ギャップ（ユーザー対応事項・Issue #77）**: ① Cloudflare API トークンに Pages: Edit 権限がなく Web 再配信不可、② GitHub Actions Secrets に `DATABASE_URL` 未設定で W05 週次取込未実行、③ Neon 復元試験・Access ブラウザ E2E 未実施。※ main ブランチ保護（必須 CI・レビュー）と 15 分間隔死活監視は 2026-08-12 に有効化済み。 |
+> ⚠️ **未解決の運用ギャップ（ユーザー対応事項・Issue #77）**: ① GitHub Actions Secrets に `DATABASE_URL` 未設定で W05 週次取込未実行、② Neon 復元試験・Access ブラウザ E2E 未実施。※ main ブランチ保護（必須 CI・レビュー）と 15 分間隔死活監視は 2026-08-12 に有効化済み。※ Pages 再配信は 2026-08-31 に権限確認のうえ実施済み（pimm-web 再デプロイ完了・スモーク 10/10）。 |
 
 本番デプロイ前の機械確認は `pnpm smoke:cloudflare` で行います。Cloudflare認証またはサブドメインDNS反映前の事前確認だけなら `pnpm smoke:cloudflare:preflight` を使用します。
 
