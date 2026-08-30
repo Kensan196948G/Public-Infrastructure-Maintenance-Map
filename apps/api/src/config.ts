@@ -36,6 +36,15 @@ export interface ApiConfig {
    * trusting the spoofable CF-Access-Authenticated-User-Email header.
    */
   requireAccessJwt: boolean;
+  /**
+   * Demo/MVP mode (env-gated). When true, admin identity is taken from the
+   * X-Demo-Admin-Email header instead of Cloudflare Access. The header is
+   * spoofable, so this must ONLY be enabled for sandbox / dummy-data
+   * deployments (e.g. the pimm-mvp sample-mode demo), never for anything
+   * holding real data. Cloudflare strips client-set CF-Access-* headers at
+   * the edge, so the demo needs its own header name.
+   */
+  demoAdminEnabled?: boolean;
 }
 
 export interface EnvBindings {
@@ -48,6 +57,7 @@ export interface EnvBindings {
   CLOUDFLARE_ACCESS_AUD?: string;
   CLOUDFLARE_ACCESS_TEAM_DOMAIN?: string;
   REQUIRE_ACCESS_JWT?: string;
+  DEMO_ADMIN_ENABLED?: string;
 }
 
 /** Truthy env-string parse: 'true'/'1' (case-insensitive) enable the flag. */
@@ -65,7 +75,11 @@ function csvEmails(value: string | undefined): string[] {
 export function configFromEnv(env: EnvBindings): ApiConfig {
   const parsedLimit = Number(env.RATE_LIMIT_PER_MINUTE ?? '120');
   const config: ApiConfig = {
-    allowedOrigin: env.ALLOWED_ORIGIN ?? 'http://localhost:5173',
+    // Empty-string ALLOWED_ORIGIN must not disable CORS: hono/cors with
+    // origin:'' omits Access-Control-Allow-Origin, silently breaking every
+    // cross-origin web client. Fall back to the local-dev default so a blank
+    // env value fails safe instead of dropping the header (DL-033 follow-up).
+    allowedOrigin: (env.ALLOWED_ORIGIN ?? '').trim() || 'http://localhost:5173',
     rateLimitPerMinute: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 120,
     version: '0.1.0',
     requireDatabaseUrl: envFlag(env.REQUIRE_DATABASE_URL),
@@ -77,6 +91,7 @@ export function configFromEnv(env: EnvBindings): ApiConfig {
       envFlag(env.REQUIRE_ACCESS_JWT) ||
       Boolean(env.CLOUDFLARE_ACCESS_AUD) ||
       Boolean(env.CLOUDFLARE_ACCESS_TEAM_DOMAIN),
+    demoAdminEnabled: envFlag(env.DEMO_ADMIN_ENABLED),
   };
   if (env.DATABASE_URL) config.databaseUrl = env.DATABASE_URL;
   if (env.CLOUDFLARE_ACCESS_AUD) config.accessAud = env.CLOUDFLARE_ACCESS_AUD;

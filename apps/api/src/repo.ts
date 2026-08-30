@@ -15,10 +15,15 @@ let sampleModeWarned = false;
  * that detectable, config.requireDatabaseUrl (REQUIRE_DATABASE_URL) turns the
  * fallback into a hard error, and otherwise the fallback emits a one-time
  * structured warning (visible in Workers observability / node logs).
+ *
+ * `sqlOverride` is a Node-only escape hatch for local development against a
+ * non-Neon Postgres (postgres.js TCP driver). It is never used by the Workers
+ * bundle — Cloudflare Workers cannot open raw TCP sockets, so the Worker entry
+ * must keep the Neon HTTP driver. Callers outside node.ts must not pass it.
  */
-export function getRepository(config: ApiConfig): Promise<AssetRepository> {
+export function getRepository(config: ApiConfig, sqlOverride?: unknown): Promise<AssetRepository> {
   if (config.databaseUrl) {
-    return Promise.resolve(new PostgresAssetRepository(config.databaseUrl));
+    return Promise.resolve(new PostgresAssetRepository(config.databaseUrl, sqlOverride as never));
   }
   if (config.requireDatabaseUrl) {
     return Promise.reject(

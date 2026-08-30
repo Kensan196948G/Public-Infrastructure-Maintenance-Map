@@ -6,8 +6,12 @@ import type {
   PublishableSourceDescriptor,
   PublishInput,
 } from '../src/publisher.js';
+import { assertTestDatabaseName } from './test-db-guard.js';
 
 const databaseUrl = process.env['PIMM_TEST_DATABASE_URL'];
+// Safety: this suite TRUNCATEs the connected database. Never run it against
+// anything whose name does not contain "test" (guards production).
+assertTestDatabaseName(databaseUrl);
 const runIntegration = process.env['PIMM_RUN_POSTGRES_PUBLISH_INTEGRATION'] === '1' && databaseUrl;
 const describeIf = runIntegration ? describe : describe.skip;
 

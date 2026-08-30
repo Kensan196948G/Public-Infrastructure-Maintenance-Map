@@ -264,3 +264,25 @@ secret、credential、connection string、PII は記載しない。
 - 影響: 管理APIに読み取り専用エンドポイント1本追加（admin/reviewer）。DB スキーマ変更なし。OpenAPI に diff エンドポイントとスキーマを追加。
 - 検証: typecheck 全 PASS・database 51/51＋PostGIS 75/75・api 89/89（新規3件）・E2E 7/7・lint 0・build 成功。
 - Rollback: 該当 PR を revert（API・contracts・テストのみ・migration なし）。
+
+### DL-032: 2026-08-31 統合テストによる本番DBデータ破壊と復旧・再発防止
+
+- 判断: Deep Debug Round 1 で PostGIS 統合テスト（`packages/database/test/postgres.integration.test.ts` / `publisher.integration.test.ts`）を実行する際、`PIMM_TEST_DATABASE_URL` に誤って本番の `$DATABASE_URL`（ローカル Postgres 16.14 / pimm）を指定した。両テストは冒頭で `TRUNCATE ... CASCADE` を実行するため、本番データ（infrastructure_assets 8,011件・data_sources 8件・quality_issues 4,428件 等）が破壊された。
+- 再現条件: `PIMM_TEST_DATABASE_URL=<本番URL>` の状態で `pnpm --filter @pimm/database test`（統合フラグ有効）を実行すると、TRUNCATE により本番 DB が消える。
+- 原因: テストが「接続先 DB がテスト用である」ことを検証していなかった。CI では `pimm_test`（専用 PostGIS サービス）を指定するため発症しないが、ローカル実行時にユーザー/エージェントが誤って本番 URL を渡すと即時破壊される。
+- 復旧: 破壊後、本番 DB を TRUNCATE でクリーンにし、登録済み 8 ソース（sample-bridges / sample-rivers / sample-facilities / facility-osaka-park / facility-osaka-toilet / bridge-kumamoto / road-n13 / port-c02）を `ingest --publish` で再取り込みして復旧。復旧後: assets 6,989・sources 8・quality_issues 3,396・migrations 4（0003/0004 は今回適用）。**破壊前 8,011 件との差分（約1,022件）は元データのソース別内訳が不明のため、完全一致は保証できない**（監査イベント・フィードバックは append-only のため復旧不能）。復旧後スナップショットを `.backup/pimm-restored-20260831-000043.dump` に保存。
+- 再発防止: `packages/database/test/test-db-guard.ts` を新設し、統合テスト2本の冒頭で `assertTestDatabaseName()` を実行。DB 名に `test` を含まない URL（例: `pimm`）を拒否し、`pimm_test` 等のみ許可する。これにより本番 DB への誤 TRUNCATE を構造的に防ぐ。加えて、本番 DB のバックアップを定期取得する仕組みを追加（後述の運用改善）。
+- 影響: 本番データの一部喪失（完全復旧不可）。公開 URL・API は復旧後も 200 で稼働。監査証跡（audit_events）は失われたため、監査ログの継続性は新規起点となる。
+- 検証: ガード単体テスト（pimm 拒否 / pimm_test 許可 / undefined 許可）を実行し動作確認。統合テスト・単体テスト・E2E はガード追加後も全て成功。
+- Rollback: 該当テストのガード削除は不可（安全性のため恒久適用）。データ復旧は pg_dump スナップショットから。
+
+### DL-033: 2026-08-31 本番 API の geocode 502（systemd IPAddressDeny=any による外部通信遮断）
+
+- 判断: 本番 API（pimm-api.service / pimm-api-mvp.service）が `GET /api/v1/geocode` で 502（SOURCE_UNAVAILABLE）を返す問題を調査した結果、systemd ユニットに `IPAddressAllow=127.0.0.1/8 ::1/128` と `IPAddressDeny=any` が設定されており、**ローカルホスト宛以外の全送信（GSI ジオコーダへの HTTPS 等）が BPF で遮断**されていることが根本原因と判明。同一設定は他プロジェクト（pwsm-api・cci-api 等）にも存在する「ローカル DB 専用 API」テンプレートだが、本プロジェクトの API は設計上 GSI ジオコーダ（住所検索）と Cron 取込（外部データソース取得）に外部通信が必要なため、この制限は設計仕様（README「geocode 本番修正」・ACCESS_INVENTORY「GSI ジオコーダ稼働」）と矛盾する回帰である。
+- 再現条件: 本番 API に `GET /api/v1/geocode?q=<住所>` を送る（常に 502、5 秒タイムアウト）。Node 単体・CI 環境では GSI へ 200 で到達可能なことを確認済み（systemd のネットワーク名前空間制限が原因）。
+- 証拠: `curl http://localhost:18802/api/v1/geocode?q=東京` → 502。`curl https://msearch.gsi.go.jp/...`（直接）→ 200。`systemctl show pimm-api -p IPAddressDeny` → `IPAddressDeny=any`。
+- 修正: `/etc/systemd/system/pimm-api.service`・`pimm-api-mvp.service` の `IPAddressAllow` / `IPAddressDeny` 行を撤去し、`systemctl daemon-reload && systemctl restart pimm-api pimm-api-mvp` を実行する。NoNewPrivileges / PrivateTmp / ProtectSystem は維持（外部からの侵入防御はシステムファイアウォール ufw と cloudflared トンネルが担う）。修正後ユニットは `infra/systemd/` に管理化済み。
+- 制約: **本実行環境では `/etc` が read-only マウントのため systemd ユニットを直接変更できない**。本番設定変更（セキュリティ境界の緩和）は人の承認を要するため、修正はユーザー／管理者権限のある環境で実施する（手順は上記）。実施後、`pnpm smoke:cloudflare`（geocode はスモーク対象外のため、`curl /api/v1/geocode` で直接確認）と Cron 取込の疎通を検証する。
+- 影響: geocode（住所検索）が本番で利用不可（P2）。Cron 取込も外部データソースへ到達できないため、毎時スケジュール取込が実質停止している可能性がある（CLI 取込・GitHub Actions 週次は影響なし）。
+- 検証: 修正前の状態を記録済み。修正後は本ファイルへ追記。
+- Rollback: 撤去した 2 行を戻して `daemon-reload && restart`（バックアップ: `.backup/pimm-api.service.bak-20260831` / `pimm-api-mvp.service.bak-20260831`）。

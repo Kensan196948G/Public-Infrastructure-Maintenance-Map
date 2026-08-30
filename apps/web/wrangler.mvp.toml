@@ -1,0 +1,14 @@
+# pimm-mvp: ダミーデータ入り MVP 用 Web Worker 設定
+# - 静的アセット（Vite ビルド成果物）を Worker から配信（SPA フォールバック）
+# - API は pimm-mvp-api.mirai-dx-platform.com を直接参照（ビルド時固定）
+name = "pimm-mvp-web"
+compatibility_date = "2026-07-01"
+workers_dev = false
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+
+[[routes]]
+pattern = "pimm-mvp.mirai-dx-platform.com"
+custom_domain = true

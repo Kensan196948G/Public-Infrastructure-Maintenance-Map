@@ -98,5 +98,12 @@ describe('FeedbackDialog', () => {
     expect(submit).toBeEnabled();
     await user.click(submit);
     expect(screen.getByRole('button', { name: '送信中…' })).toBeDisabled();
+
+    // 50ms の setTimeout がテスト終了後に resolve して破棄済みツリーへ state 更新を
+    // 行い、vitest が Unhandled Rejection（window is not defined）を報告するのを防ぐ。
+    // 成功表示まで待って非同期処理の完了を確定させる。
+    await waitFor(() => {
+      expect(screen.getByText(/受け付けました/)).toBeVisible();
+    });
   });
 });
