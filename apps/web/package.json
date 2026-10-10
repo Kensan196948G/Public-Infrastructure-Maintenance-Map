@@ -14,7 +14,7 @@
   "dependencies": {
     "@pimm/contracts": "workspace:*",
     "@tanstack/react-query": "^5.81.0",
-    "maplibre-gl": "^5.6.0",
+    "maplibre-gl": "^6.4.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
@@ -28,6 +28,6 @@
     "jsdom": "^26.1.0",
     "typescript": "^5.8.3",
     "vite": "^7.0.0",
-    "vitest": "^3.2.0"
+    "vitest": "^4.1.11"
   }
 }
